@@ -9,4 +9,5 @@ export enum HttpStatus {
     CONFLICT = 409,
     TOO_MANY_REQUESTS = 429,
     INTERNAL_ERROR = 500,
+    BAD_GATEWAY = 502,
 }
