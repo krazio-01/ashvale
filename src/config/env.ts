@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "server-only";
 
 function requireEnv(key: string, fallback?: string): string {
     const value = process.env[key] ?? fallback;
