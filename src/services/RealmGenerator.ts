@@ -1,3 +1,4 @@
+import "server-only";
 import { IChapterBoss, IRealmChapter, MIN_CHAPTER_COUNT, RealmLayout } from "../types/realm";
 import {
     fetchChangesBetweenCommits,
