@@ -1,3 +1,4 @@
+import "server-only";
 import { env } from "../config/env";
 import { HttpStatus } from "../constants/strings";
 import { ErrorWrapper } from "../lib/ResponseWrapper";
