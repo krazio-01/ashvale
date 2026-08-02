@@ -1,3 +1,4 @@
+import "server-only";
 import axios from "axios";
 import { HttpStatus } from "../constants/strings";
 import { ErrorWrapper } from "../lib/ResponseWrapper";

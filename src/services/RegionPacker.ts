@@ -1,3 +1,4 @@
+import "server-only";
 import { IChapterRegion, IRegionPathway } from "../types/realm";
 
 const FOOTPRINT_MIN = 14;
