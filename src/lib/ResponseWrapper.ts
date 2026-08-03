@@ -1,4 +1,4 @@
-import { HttpStatus } from "../constants/strings";
+import { HttpStatus } from "@/constants/strings";
 
 export class ResponseWrapper {
     static success<T>(
