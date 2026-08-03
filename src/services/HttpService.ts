@@ -1,7 +1,7 @@
 import "server-only";
 import axios from "axios";
-import { HttpStatus } from "../constants/strings";
-import { ErrorWrapper } from "../lib/ResponseWrapper";
+import { HttpStatus } from "@/constants/strings";
+import { ErrorWrapper } from "@/lib/ResponseWrapper";
 
 const DEFAULT_TIMEOUT_MS = 15000;
 

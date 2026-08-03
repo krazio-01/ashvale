@@ -1,5 +1,5 @@
 import "server-only";
-import { IChapterRegion, IRegionPathway } from "../types/realm";
+import { IChapterRegion, IRegionPathway } from "@/types/realm";
 
 const FOOTPRINT_MIN = 14;
 const FOOTPRINT_MAX = 46;
