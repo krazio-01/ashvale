@@ -1,12 +1,15 @@
 {
-    "name": "game",
+    "name": "ashvale",
     "version": "0.1.0",
     "private": true,
+    "description": "A procedurally generated action-adventure realm built from any public GitHub repository.",
     "scripts": {
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
-        "lint": "eslint"
+        "lint": "eslint",
+        "typecheck": "tsc --noEmit",
+        "format": "prettier --write src"
     },
     "dependencies": {
         "@react-three/drei": "^10.7.7",
