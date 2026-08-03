@@ -1,8 +1,8 @@
 import "server-only";
-import { env } from "../config/env";
-import { HttpStatus } from "../constants/strings";
-import { ErrorWrapper } from "../lib/ResponseWrapper";
-import { httpGet } from "./HttpService";
+import { env } from "@/config/env";
+import { HttpStatus } from "@/constants/strings";
+import { ErrorWrapper } from "@/lib/ResponseWrapper";
+import { httpGet } from "@/services/HttpService";
 
 const LAST_PAGE_PATTERN = /[?&]page=(\d+)>;\s*rel="last"/;
 const COMPARE_FILES_PER_PAGE = 300;

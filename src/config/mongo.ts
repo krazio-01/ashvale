@@ -1,10 +1,27 @@
-import mongoose from "mongoose";
-import { env } from "./env";
+import "server-only";
+import mongoose, { Mongoose } from "mongoose";
+import { env } from "@/config/env";
 
-export async function connectMongo(): Promise<void> {
-    mongoose.connection.on("error", (error) => console.error("database error:", error.message));
-    mongoose.connection.on("disconnected", () => console.warn("database disconnected"));
+declare global {
+    var databaseConnectionPromise: Promise<Mongoose> | undefined;
+}
 
-    await mongoose.connect(env.mongoUri);
-    console.log(`database connected: ${mongoose.connection.name}`);
+async function openDatabaseConnection(): Promise<Mongoose> {
+    try {
+        return await mongoose.connect(env.mongoUri, {
+            bufferCommands: false,
+            maxPoolSize: 5,
+            serverSelectionTimeoutMS: 10_000,
+        });
+    } catch (error) {
+        globalThis.databaseConnectionPromise = undefined;
+        throw error;
+    }
+}
+
+export async function connectToDatabase(): Promise<Mongoose> {
+    if (!globalThis.databaseConnectionPromise)
+        globalThis.databaseConnectionPromise = openDatabaseConnection();
+
+    return globalThis.databaseConnectionPromise;
 }

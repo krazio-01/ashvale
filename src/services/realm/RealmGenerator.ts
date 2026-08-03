@@ -1,5 +1,5 @@
 import "server-only";
-import { IChapterBoss, IRealmChapter, MIN_CHAPTER_COUNT, RealmLayout } from "../types/realm";
+import { IChapterBoss, IRealmChapter, MIN_CHAPTER_COUNT, RealmLayout } from "@/types/realm";
 import {
     fetchChangesBetweenCommits,
     fetchCommitAtPosition,
@@ -10,7 +10,7 @@ import {
     IGithubCommit,
     IGithubContributor,
     IGithubTree,
-} from "./GithubService";
+} from "@/services/github/GithubService";
 import { packChapterRegions } from "./RegionPacker";
 
 const REGION_BUDGET_PER_REALM = 30;
