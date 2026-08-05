@@ -1,191 +1,203 @@
 import "server-only";
+import { CHAPTER_DESIGN, CORRIDOR_DESIGN, REGION_DESIGN, ROOT_REGION } from "@/constants/realm";
 import { IChapterRegion, IRegionPathway } from "@/types/realm";
 
-const FOOTPRINT_MIN = 14;
-const FOOTPRINT_MAX = 46;
-const FOOTPRINT_PER_FILE = 4;
-const FOOTPRINT_ASPECT_JITTER = 0.3;
-const WALL_HEIGHT_MIN = 5;
-const WALL_HEIGHT_MAX = 16;
-const WALL_HEIGHT_PER_FILE = 2.2;
-const REGION_GAP = 14;
-const RING_RADIUS_JITTER_RATIO = 0.25;
-const CORRIDOR_WIDTH_MIN = 4;
-const CORRIDOR_WIDTH_MAX = 11;
-const CORRIDOR_WIDTH_RATIO = 0.4;
-const ROOT_REGION_ID = ".";
-const ROOT_REGION_NAME = "root";
-
-const GENERATED_FILE_PATTERN =
-    /^(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|Gemfile\.lock|poetry\.lock|Cargo\.lock|go\.sum|Podfile\.lock)$|\.(min\.js|min\.css|map|snap)$/;
-
-const LANGUAGE_BY_FILE_EXTENSION = new Map([
-    ["ts", "TypeScript"],
-    ["tsx", "TypeScript"],
-    ["js", "JavaScript"],
-    ["jsx", "JavaScript"],
-    ["mjs", "JavaScript"],
-    ["cjs", "JavaScript"],
-    ["py", "Python"],
-    ["go", "Go"],
-    ["rs", "Rust"],
-    ["java", "Java"],
-    ["kt", "Kotlin"],
-    ["swift", "Swift"],
-    ["c", "C"],
-    ["h", "C"],
-    ["cc", "C++"],
-    ["cpp", "C++"],
-    ["cs", "C#"],
-    ["rb", "Ruby"],
-    ["php", "PHP"],
-    ["css", "CSS"],
-    ["scss", "CSS"],
-    ["html", "HTML"],
-    ["ejs", "Templates"],
-    ["hbs", "Templates"],
-    ["pug", "Templates"],
-    ["erb", "Templates"],
-    ["twig", "Templates"],
-    ["md", "Markdown"],
-    ["json", "JSON"],
-    ["yml", "YAML"],
-    ["yaml", "YAML"],
-    ["toml", "Config"],
-    ["env", "Config"],
-    ["sh", "Shell"],
-    ["sql", "SQL"],
-    ["svg", "Assets"],
-    ["png", "Assets"],
-    ["jpg", "Assets"],
-    ["webp", "Assets"],
-    ["glb", "Assets"],
-    ["ico", "Assets"],
-]);
+const DEFAULT_SIZE_RATIO = 0.5;
 
 export function packChapterRegions(
     directoryPaths: string[],
     filePaths: string[],
-    changedLineCountByFilePath: Map<string, number>,
-    regionBudget: number,
-    seed: number
+    chapterSeed: number
 ): IChapterGeometry {
-    const candidates = collectRegionCandidates(
-        directoryPaths,
-        filePaths,
-        changedLineCountByFilePath
+    const candidates = selectRegionCandidates(directoryPaths, filePaths);
+    const sizeRatioByPath = resolveSizeRatioByPath(candidates);
+    const nextRandom = createSeededRandom(chapterSeed);
+
+    const regions = candidates.map((candidate) =>
+        buildRegion(
+            candidate,
+            sizeRatioByPath.get(candidate.path) ?? DEFAULT_SIZE_RATIO,
+            nextRandom
+        )
     );
 
-    candidates.sort((first, second) => {
-        if (first.nestingDepth !== second.nestingDepth)
-            return first.nestingDepth - second.nestingDepth;
-        return second.changedLineCount - first.changedLineCount;
-    });
-
-    const nextRandom = createSeededRandom(seed);
-    const regions = candidates
-        .slice(0, regionBudget)
-        .map((candidate) => buildRegionFromCandidate(candidate, nextRandom));
-
-    const spawnRegion = regions[0];
+    const [spawnRegion, ...regionsToPlace] = regions;
     if (!spawnRegion) throw new Error("tree produced no directories containing files");
 
-    positionRegionsInRings(spawnRegion, regions.slice(1), nextRandom);
+    positionRegionsInRings(spawnRegion, regionsToPlace, nextRandom);
+
+    const pathways = connectEachRegionToNearestNeighbour(regions);
+    assignClearanceTiers(regions, pathways, spawnRegion);
+    addLoopPathways(regions, pathways);
 
     return {
         regions,
-        pathways: connectRegionsToNearestNeighbour(regions),
+        pathways,
         spawnRegionId: spawnRegion.regionId,
-        objectiveRegionId: resolveFarthestRegionId(regions, spawnRegion),
+        objectiveRegionId: resolveObjectiveRegionId(regions, spawnRegion),
     };
 }
 
-function collectRegionCandidates(
-    directoryPaths: string[],
-    filePaths: string[],
-    changedLineCountByFilePath: Map<string, number>
-): IRegionCandidate[] {
+function selectRegionCandidates(directoryPaths: string[], filePaths: string[]): IRegionCandidate[] {
+    const candidateByPath = mapCandidatesByPath(directoryPaths);
+    countFilesIntoAncestors(filePaths, candidateByPath);
+
+    return selectDisjointCandidates(candidateByPath, mapChildPathsByParent(directoryPaths));
+}
+
+function mapCandidatesByPath(directoryPaths: string[]): Map<string, IRegionCandidate> {
     const candidateByPath = new Map<string, IRegionCandidate>([
-        [ROOT_REGION_ID, createCandidate(ROOT_REGION_ID, ROOT_REGION_NAME, 0)],
+        [
+            ROOT_REGION.id,
+            {
+                path: ROOT_REGION.id,
+                displayName: ROOT_REGION.displayName,
+                nestingDepth: 0,
+                fileCount: 0,
+            },
+        ],
     ]);
 
     for (const directoryPath of directoryPaths) {
-        const nestingDepth = countCharacter(directoryPath, "/") + 1;
-        candidateByPath.set(
-            directoryPath,
-            createCandidate(directoryPath, extractBaseName(directoryPath), nestingDepth)
-        );
+        candidateByPath.set(directoryPath, {
+            path: directoryPath,
+            displayName: extractBaseName(directoryPath),
+            nestingDepth: directoryPath.split("/").length,
+            fileCount: 0,
+        });
     }
+
+    return candidateByPath;
+}
+
+function countFilesIntoAncestors(
+    filePaths: string[],
+    candidateByPath: Map<string, IRegionCandidate>
+): void {
+    const rootCandidate = candidateByPath.get(ROOT_REGION.id);
+    if (rootCandidate) rootCandidate.fileCount = filePaths.length;
 
     for (const filePath of filePaths) {
-        const separatorIndex = filePath.lastIndexOf("/");
-        const parentPath =
-            separatorIndex === -1 ? ROOT_REGION_ID : filePath.slice(0, separatorIndex);
+        let separatorIndex = filePath.indexOf("/");
 
-        const candidate = candidateByPath.get(parentPath);
-        if (!candidate) continue;
+        while (separatorIndex !== -1) {
+            const ancestor = candidateByPath.get(filePath.slice(0, separatorIndex));
+            if (ancestor) ancestor.fileCount++;
 
-        candidate.fileCount++;
-
-        const fileName = extractBaseName(filePath);
-        if (!GENERATED_FILE_PATTERN.test(fileName))
-            candidate.changedLineCount += changedLineCountByFilePath.get(filePath) ?? 0;
-
-        const language = LANGUAGE_BY_FILE_EXTENSION.get(
-            fileName.slice(fileName.lastIndexOf(".") + 1).toLowerCase()
-        );
-        if (language) {
-            candidate.fileCountByLanguage.set(
-                language,
-                (candidate.fileCountByLanguage.get(language) ?? 0) + 1
-            );
+            separatorIndex = filePath.indexOf("/", separatorIndex + 1);
         }
     }
-
-    return [...candidateByPath.values()].filter((candidate) => candidate.fileCount > 0);
 }
 
-function createCandidate(
-    path: string,
-    displayName: string,
-    nestingDepth: number
-): IRegionCandidate {
-    return {
-        path,
-        displayName,
-        nestingDepth,
-        fileCount: 0,
-        changedLineCount: 0,
-        fileCountByLanguage: new Map(),
-    };
+function mapChildPathsByParent(directoryPaths: string[]): Map<string, string[]> {
+    const childPathsByParent = new Map<string, string[]>();
+
+    for (const directoryPath of directoryPaths) {
+        const separatorIndex = directoryPath.lastIndexOf("/");
+        const parentPath =
+            separatorIndex === -1 ? ROOT_REGION.id : directoryPath.slice(0, separatorIndex);
+
+        const siblings = childPathsByParent.get(parentPath);
+
+        if (siblings) siblings.push(directoryPath);
+        else childPathsByParent.set(parentPath, [directoryPath]);
+    }
+
+    return childPathsByParent;
 }
 
-function buildRegionFromCandidate(
+function selectDisjointCandidates(
+    candidateByPath: Map<string, IRegionCandidate>,
+    childPathsByParent: Map<string, string[]>
+): IRegionCandidate[] {
+    const rootCandidate = candidateByPath.get(ROOT_REGION.id);
+    if (!rootCandidate) return [];
+
+    const resolveChildrenHoldingFiles = (parentPath: string): IRegionCandidate[] =>
+        sortByFileCount(
+            (childPathsByParent.get(parentPath) ?? [])
+                .map((childPath) => candidateByPath.get(childPath))
+                .filter(
+                    (child): child is IRegionCandidate => child !== undefined && child.fileCount > 0
+                )
+        );
+
+    const budgetBesideRoot = CHAPTER_DESIGN.regionsPerChapter - 1;
+
+    let selected = resolveChildrenHoldingFiles(ROOT_REGION.id).slice(0, budgetBesideRoot);
+
+    while (selected.length < budgetBesideRoot) {
+        const slotsForChildren = budgetBesideRoot - selected.length + 1;
+
+        const candidateToSplit = sortByFileCount(selected).find(
+            (candidate) => resolveChildrenHoldingFiles(candidate.path).length > 1
+        );
+
+        if (!candidateToSplit) break;
+
+        selected = selected
+            .filter((candidate) => candidate !== candidateToSplit)
+            .concat(resolveChildrenHoldingFiles(candidateToSplit.path).slice(0, slotsForChildren));
+    }
+
+    return [rootCandidate, ...sortByFileCount(selected)];
+}
+
+function sortByFileCount(candidates: IRegionCandidate[]): IRegionCandidate[] {
+    return [...candidates].sort((first, second) =>
+        first.fileCount === second.fileCount
+            ? first.path.localeCompare(second.path)
+            : second.fileCount - first.fileCount
+    );
+}
+
+function resolveSizeRatioByPath(candidates: IRegionCandidate[]): Map<string, number> {
+    const logScaled = candidates
+        .filter((candidate) => candidate.path !== ROOT_REGION.id)
+        .map((candidate) => ({
+            path: candidate.path,
+            logFileCount: Math.log(candidate.fileCount + 1),
+        }));
+
+    const logFileCounts = logScaled.map((entry) => entry.logFileCount);
+    const smallestLog = Math.min(...logFileCounts);
+    const logRange = Math.max(...logFileCounts) - smallestLog;
+
+    return new Map([
+        [ROOT_REGION.id, 1],
+        ...logScaled.map(({ path, logFileCount }): [string, number] => [
+            path,
+            logRange === 0 ? 1 : (logFileCount - smallestLog) / logRange,
+        ]),
+    ]);
+}
+
+function buildRegion(
     candidate: IRegionCandidate,
+    sizeRatio: number,
     nextRandom: () => number
 ): IChapterRegion {
-    const fileCountScale = Math.sqrt(candidate.fileCount);
-    const footprint = clamp(
-        FOOTPRINT_MIN + fileCountScale * FOOTPRINT_PER_FILE,
-        FOOTPRINT_MIN,
-        FOOTPRINT_MAX
+    const footprint = scaleBetween(
+        REGION_DESIGN.minFootprint,
+        REGION_DESIGN.maxFootprint,
+        sizeRatio
     );
-    const aspectRatio = 1 + (nextRandom() - 0.5) * FOOTPRINT_ASPECT_JITTER;
+
+    const aspectRatio = 1 + (nextRandom() - 0.5) * REGION_DESIGN.aspectJitter;
 
     return {
         regionId: candidate.path,
         displayName: candidate.displayName,
         worldPosition: [0, 0, 0],
         floorSize: [footprint * aspectRatio, footprint / aspectRatio],
-        wallHeight: clamp(
-            WALL_HEIGHT_MIN + fileCountScale * WALL_HEIGHT_PER_FILE,
-            WALL_HEIGHT_MIN,
-            WALL_HEIGHT_MAX
+        wallHeight: scaleBetween(
+            REGION_DESIGN.minWallHeight,
+            REGION_DESIGN.maxWallHeight,
+            sizeRatio
         ),
         nestingDepth: candidate.nestingDepth,
-        commitActivity: candidate.changedLineCount,
+        clearanceTier: 0,
         fileCount: candidate.fileCount,
-        primaryLanguage: resolveDominantLanguage(candidate.fileCountByLanguage),
     };
 }
 
@@ -194,124 +206,252 @@ function positionRegionsInRings(
     regionsToPlace: IChapterRegion[],
     nextRandom: () => number
 ): void {
-    spawnRegion.worldPosition = [0, 0, 0];
     if (regionsToPlace.length === 0) return;
 
-    let largestHalfExtent = 0;
-    for (const region of regionsToPlace)
-        largestHalfExtent = Math.max(largestHalfExtent, resolveHalfExtent(region));
+    shuffleInPlace(regionsToPlace, nextRandom);
 
-    const minimumSpacing = largestHalfExtent * 2 + REGION_GAP;
-    const radiusJitter = REGION_GAP * RING_RADIUS_JITTER_RATIO;
+    const largestHalfExtent = Math.max(...regionsToPlace.map(resolveHalfExtent));
+    const minimumSpacing = largestHalfExtent * 2 + REGION_DESIGN.ringGap;
+    const radiusJitter = REGION_DESIGN.ringGap * REGION_DESIGN.ringJitterRatio;
 
-    let ringRadius = resolveHalfExtent(spawnRegion) + REGION_GAP + largestHalfExtent;
-    let placementIndex = 0;
+    let ringRadius = resolveHalfExtent(spawnRegion) + REGION_DESIGN.ringGap + largestHalfExtent;
+    let unplacedRegions = regionsToPlace;
 
-    while (placementIndex < regionsToPlace.length) {
-        const remainingCount = regionsToPlace.length - placementIndex;
-        const requiredAngularStep = resolveRequiredAngularStep(ringRadius, minimumSpacing);
-        const ringCapacity = Math.max(1, Math.floor((Math.PI * 2) / requiredAngularStep));
+    while (unplacedRegions.length > 0) {
+        const minimumAngularStep = 2 * Math.asin(Math.min(1, minimumSpacing / (2 * ringRadius)));
+        const ringCapacity = Math.max(1, Math.floor((Math.PI * 2) / minimumAngularStep));
 
-        let countOnRing = Math.min(ringCapacity, remainingCount);
-        if (remainingCount - countOnRing === 1 && countOnRing > 1) countOnRing--;
+        let countOnRing = Math.min(ringCapacity, unplacedRegions.length);
+        if (unplacedRegions.length - countOnRing === 1 && countOnRing > 1) countOnRing--;
 
         const angularStep = (Math.PI * 2) / countOnRing;
-        const angularSlack = Math.max(0, angularStep - requiredAngularStep);
+        const angularSlack = Math.max(0, angularStep - minimumAngularStep);
         const ringRotation = nextRandom() * Math.PI * 2;
 
-        for (let indexOnRing = 0; indexOnRing < countOnRing; indexOnRing++) {
-            const region = regionsToPlace[placementIndex++];
-            if (!region) continue;
-
+        unplacedRegions.slice(0, countOnRing).forEach((region, indexOnRing) => {
             const angle =
                 ringRotation + indexOnRing * angularStep + (nextRandom() - 0.5) * angularSlack;
             const radius = ringRadius + (nextRandom() - 0.5) * radiusJitter * 2;
 
             region.worldPosition = [Math.cos(angle) * radius, 0, Math.sin(angle) * radius];
-        }
+        });
 
+        unplacedRegions = unplacedRegions.slice(countOnRing);
         ringRadius += minimumSpacing;
     }
 }
 
-function resolveRequiredAngularStep(ringRadius: number, minimumSpacing: number): number {
-    return 2 * Math.asin(Math.min(1, minimumSpacing / (2 * ringRadius)));
-}
-
-function connectRegionsToNearestNeighbour(regions: IChapterRegion[]): IRegionPathway[] {
+function connectEachRegionToNearestNeighbour(regions: IChapterRegion[]): IRegionPathway[] {
     const pathways: IRegionPathway[] = [];
+    const placedRegions: IChapterRegion[] = [];
 
-    for (let index = 1; index < regions.length; index++) {
-        const region = regions[index];
-        if (!region) continue;
+    for (const region of regions) {
+        const nearestRegion =
+            resolveNearestRegion(region, placedRegions, (neighbour) =>
+                isCorridorClear(region, neighbour, regions)
+            ) ?? resolveNearestRegion(region, placedRegions, () => true);
 
-        const nearestRegion = resolveNearestRegion(region, regions.slice(0, index));
-        if (!nearestRegion) continue;
+        if (nearestRegion) pathways.push(buildPathway(nearestRegion, region));
 
-        pathways.push({
-            fromRegionId: nearestRegion.regionId,
-            toRegionId: region.regionId,
-            corridorWidth: clamp(
-                Math.min(nearestRegion.floorSize[0], region.floorSize[0]) * CORRIDOR_WIDTH_RATIO,
-                CORRIDOR_WIDTH_MIN,
-                CORRIDOR_WIDTH_MAX
-            ),
-        });
+        placedRegions.push(region);
     }
 
     return pathways;
 }
 
+function assignClearanceTiers(
+    regions: IChapterRegion[],
+    pathways: IRegionPathway[],
+    spawnRegion: IChapterRegion
+): void {
+    const regionById = new Map(regions.map((region) => [region.regionId, region]));
+    const neighbourIdsById = new Map<string, string[]>(
+        regions.map((region) => [region.regionId, []])
+    );
+
+    for (const { fromRegionId, toRegionId } of pathways) {
+        neighbourIdsById.get(fromRegionId)?.push(toRegionId);
+        neighbourIdsById.get(toRegionId)?.push(fromRegionId);
+    }
+
+    const visitedIds = new Set([spawnRegion.regionId]);
+    let currentTierRegions = [spawnRegion];
+
+    for (let tier = 0; currentTierRegions.length > 0; tier++) {
+        const nextTierRegions: IChapterRegion[] = [];
+
+        for (const region of currentTierRegions) {
+            region.clearanceTier = tier;
+
+            for (const neighbourId of neighbourIdsById.get(region.regionId) ?? []) {
+                if (visitedIds.has(neighbourId)) continue;
+
+                const neighbour = regionById.get(neighbourId);
+                if (!neighbour) continue;
+
+                visitedIds.add(neighbourId);
+                nextTierRegions.push(neighbour);
+            }
+        }
+
+        currentTierRegions = nextTierRegions;
+    }
+}
+
+function addLoopPathways(regions: IChapterRegion[], pathways: IRegionPathway[]): void {
+    const connectedPairKeys = new Set(
+        pathways.map((pathway) => buildPairKey(pathway.fromRegionId, pathway.toRegionId))
+    );
+
+    const unconnectedPairs: IRegionPair[] = [];
+
+    for (const [firstIndex, first] of regions.entries()) {
+        for (const second of regions.slice(firstIndex + 1)) {
+            if (connectedPairKeys.has(buildPairKey(first.regionId, second.regionId))) continue;
+            if (Math.abs(first.clearanceTier - second.clearanceTier) > 1) continue;
+
+            unconnectedPairs.push({
+                first,
+                second,
+                distance: horizontalDistanceBetween(first, second),
+            });
+        }
+    }
+
+    unconnectedPairs.sort((firstPair, secondPair) =>
+        firstPair.distance === secondPair.distance
+            ? firstPair.first.regionId.localeCompare(secondPair.first.regionId)
+            : firstPair.distance - secondPair.distance
+    );
+
+    let loopsAdded = 0;
+
+    for (const pair of unconnectedPairs) {
+        if (loopsAdded === CORRIDOR_DESIGN.loopPathwayCount) break;
+        if (!isCorridorClear(pair.first, pair.second, regions)) continue;
+
+        pathways.push(buildPathway(pair.first, pair.second));
+        loopsAdded++;
+    }
+}
+
 function resolveNearestRegion(
-    target: IChapterRegion,
-    placedRegions: IChapterRegion[]
+    region: IChapterRegion,
+    neighbours: IChapterRegion[],
+    isAcceptable: (neighbour: IChapterRegion) => boolean
 ): IChapterRegion | null {
     let nearestRegion: IChapterRegion | null = null;
     let nearestDistance = Number.POSITIVE_INFINITY;
 
-    for (const region of placedRegions) {
-        const distance = horizontalDistanceBetween(target, region);
-        if (distance < nearestDistance) {
-            nearestDistance = distance;
-            nearestRegion = region;
-        }
+    for (const neighbour of neighbours) {
+        const distance = horizontalDistanceBetween(region, neighbour);
+
+        if (distance >= nearestDistance) continue;
+        if (!isAcceptable(neighbour)) continue;
+
+        nearestDistance = distance;
+        nearestRegion = neighbour;
     }
 
     return nearestRegion;
 }
 
-function resolveFarthestRegionId(regions: IChapterRegion[], spawnRegion: IChapterRegion): string {
-    let farthestRegion = spawnRegion;
-    let farthestDistance = -1;
-
+function isCorridorClear(
+    from: IChapterRegion,
+    to: IChapterRegion,
+    regions: IChapterRegion[]
+): boolean {
     for (const region of regions) {
-        const distance = horizontalDistanceBetween(region, spawnRegion);
-        if (distance > farthestDistance) {
-            farthestDistance = distance;
-            farthestRegion = region;
-        }
+        if (region === from || region === to) continue;
+
+        const clearance = resolveHalfExtent(region) + CORRIDOR_DESIGN.maxWidth / 2;
+
+        if (distanceFromRegionToCorridor(region, from, to) < clearance) return false;
     }
 
-    return farthestRegion.regionId;
+    return true;
 }
 
-function resolveDominantLanguage(fileCountByLanguage: Map<string, number>): string | null {
-    let dominantLanguage: string | null = null;
-    let highestFileCount = 0;
+function distanceFromRegionToCorridor(
+    region: IChapterRegion,
+    from: IChapterRegion,
+    to: IChapterRegion
+): number {
+    const [regionX, , regionZ] = region.worldPosition;
+    const [fromX, , fromZ] = from.worldPosition;
+    const [toX, , toZ] = to.worldPosition;
 
-    for (const [language, fileCount] of fileCountByLanguage) {
-        if (fileCount > highestFileCount) {
-            highestFileCount = fileCount;
-            dominantLanguage = language;
-        }
+    const spanX = toX - fromX;
+    const spanZ = toZ - fromZ;
+    const spanLengthSquared = spanX * spanX + spanZ * spanZ;
+
+    if (spanLengthSquared === 0) return Math.hypot(regionX - fromX, regionZ - fromZ);
+
+    const projection = clamp(
+        ((regionX - fromX) * spanX + (regionZ - fromZ) * spanZ) / spanLengthSquared,
+        0,
+        1
+    );
+
+    return Math.hypot(
+        regionX - (fromX + projection * spanX),
+        regionZ - (fromZ + projection * spanZ)
+    );
+}
+
+function buildPathway(from: IChapterRegion, to: IChapterRegion): IRegionPathway {
+    return {
+        fromRegionId: from.regionId,
+        toRegionId: to.regionId,
+        corridorWidth: clamp(
+            Math.min(from.floorSize[0], to.floorSize[0]) * CORRIDOR_DESIGN.widthRatio,
+            CORRIDOR_DESIGN.minWidth,
+            CORRIDOR_DESIGN.maxWidth
+        ),
+    };
+}
+
+function buildPairKey(firstRegionId: string, secondRegionId: string): string {
+    return firstRegionId < secondRegionId
+        ? `${firstRegionId}|${secondRegionId}`
+        : `${secondRegionId}|${firstRegionId}`;
+}
+
+function resolveObjectiveRegionId(regions: IChapterRegion[], spawnRegion: IChapterRegion): string {
+    const contenders = regions.filter((region) => region !== spawnRegion);
+    if (contenders.length === 0) return spawnRegion.regionId;
+
+    const minimumFootprint = scaleBetween(
+        REGION_DESIGN.minFootprint,
+        REGION_DESIGN.maxFootprint,
+        REGION_DESIGN.objectiveFootprintRatio
+    );
+
+    const spacious = contenders.filter(
+        (region) => resolveHalfExtent(region) * 2 >= minimumFootprint
+    );
+
+    const eligible = spacious.length > 0 ? spacious : contenders;
+    const deepestTier = Math.max(...eligible.map((region) => region.clearanceTier));
+
+    let objectiveRegion = spawnRegion;
+    let farthestDistance = -1;
+
+    for (const region of eligible) {
+        if (region.clearanceTier !== deepestTier) continue;
+        const distance = horizontalDistanceBetween(region, spawnRegion);
+        if (distance <= farthestDistance) continue;
+        farthestDistance = distance;
+        objectiveRegion = region;
     }
 
-    return dominantLanguage;
+    return objectiveRegion.regionId;
 }
 
 function horizontalDistanceBetween(first: IChapterRegion, second: IChapterRegion): number {
     const deltaX = first.worldPosition[0] - second.worldPosition[0];
     const deltaZ = first.worldPosition[2] - second.worldPosition[2];
+
     return Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
 }
 
@@ -323,16 +463,25 @@ function extractBaseName(path: string): string {
     return path.slice(path.lastIndexOf("/") + 1);
 }
 
-function countCharacter(text: string, character: string): number {
-    let count = 0;
-    for (const current of text) {
-        if (current === character) count++;
-    }
-    return count;
+function scaleBetween(minimum: number, maximum: number, ratio: number): number {
+    return minimum + ratio * (maximum - minimum);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
     return Math.min(maximum, Math.max(minimum, value));
+}
+
+function shuffleInPlace<T>(items: T[], nextRandom: () => number): void {
+    for (let index = items.length - 1; index > 0; index--) {
+        const swapIndex = Math.floor(nextRandom() * (index + 1));
+
+        const current = items[index];
+        const target = items[swapIndex];
+        if (current === undefined || target === undefined) continue;
+
+        items[index] = target;
+        items[swapIndex] = current;
+    }
 }
 
 function createSeededRandom(seed: number): () => number {
@@ -342,6 +491,7 @@ function createSeededRandom(seed: number): () => number {
         state = (state + 0x6d2b79f5) >>> 0;
         let value = Math.imul(state ^ (state >>> 15), 1 | state);
         value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
+
         return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
     };
 }
@@ -358,6 +508,10 @@ interface IRegionCandidate {
     displayName: string;
     nestingDepth: number;
     fileCount: number;
-    changedLineCount: number;
-    fileCountByLanguage: Map<string, number>;
+}
+
+interface IRegionPair {
+    first: IChapterRegion;
+    second: IChapterRegion;
+    distance: number;
 }

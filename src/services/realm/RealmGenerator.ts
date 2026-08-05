@@ -1,41 +1,33 @@
 import "server-only";
-import { IChapterBoss, IRealmChapter, MIN_CHAPTER_COUNT, RealmLayout } from "@/types/realm";
 import {
-    fetchChangesBetweenCommits,
+    CHAPTER_ARC,
+    CHAPTER_DESIGN,
+    CHAPTER_TIERS_BY_COMMIT_COUNT,
+    CHAPTER_TIERS_BY_DIRECTORY_COUNT,
+    FALLBACK_CHAPTER_ARC,
+    IChapterArcEntry,
+    IChapterTier,
+    ROOT_REGION,
+    SMALL_REPOSITORY_FILE_LIMIT,
+} from "@/constants/realm";
+import { HttpStatus } from "@/constants/strings";
+import { ErrorWrapper } from "@/lib/ResponseWrapper";
+import {
     fetchCommitAtPosition,
+    fetchContributorsBetweenDates,
     fetchRepository,
     fetchTotalCommitCount,
     fetchTreeAtCommit,
-    IGithubChangeSummary,
     IGithubCommit,
     IGithubContributor,
     IGithubTree,
+    isCommitDescendedFrom,
 } from "@/services/github/GithubService";
-import { packChapterRegions } from "./RegionPacker";
+import { packChapterRegions } from "@/services/realm/RegionPacker";
+import { IChapterBoss, IChapterRegion, IRealmChapter, IResolvedRealm } from "@/types/realm";
 
-const REGION_BUDGET_PER_REALM = 30;
-const MIN_REGIONS_PER_CHAPTER = 3;
-const CHAPTER_SEED_STRIDE = 7919;
-
-const CHAPTER_TITLES = [
-    "The Founding",
-    "The First Expansion",
-    "The Long Climb",
-    "The Reckoning",
-    "The Great Refactor",
-    "The Widening",
-    "The Present Day",
-];
-
-const ARTIFACT_NAMES = [
-    "Ember of Origin",
-    "Shard of Ascent",
-    "Sigil of Endurance",
-    "Crown of Reckoning",
-    "Kernel of Renewal",
-    "Lens of Expanse",
-    "Heart of the Living Repo",
-];
+const NEWEST_COMMIT_POSITION = 0;
+const SEED_HASH_MULTIPLIER = 31;
 
 export async function generateRealm(
     repositoryOwner: string,
@@ -46,216 +38,360 @@ export async function generateRealm(
         fetchTotalCommitCount(repositoryOwner, repositoryName),
     ]);
 
-    if (totalCommitCount < MIN_CHAPTER_COUNT) {
-        throw new Error(
-            `repository has ${totalCommitCount} commits, needs at least ${MIN_CHAPTER_COUNT}`
+    if (totalCommitCount < CHAPTER_DESIGN.minChapters) {
+        throw new ErrorWrapper(
+            `repository has ${totalCommitCount} commits, needs at least ${CHAPTER_DESIGN.minChapters}`,
+            HttpStatus.BAD_REQUEST
         );
     }
 
-    const headCommitTree = await fetchTreeAtCommit(
-        repositoryOwner,
-        repositoryName,
-        repository.defaultBranch
-    );
-    const chapterCount = RealmLayout.resolveChapterCount(
+    const [headCommitTree, foundingCommit] = await Promise.all([
+        fetchTreeAtCommit(repositoryOwner, repositoryName, repository.defaultBranch),
+        fetchCommitAtPosition(repositoryOwner, repositoryName, totalCommitCount - 1),
+    ]);
+
+    const chapterCount = resolveChapterCount(
         totalCommitCount,
         headCommitTree.directoryPaths.length
     );
-    const regionBudgetPerChapter = Math.max(
-        MIN_REGIONS_PER_CHAPTER,
-        Math.round(REGION_BUDGET_PER_REALM / chapterCount)
-    );
 
-    const chapterBoundaryPositions = resolveChapterBoundaryPositions(
+    const boundaries = await resolveChapterBoundaries(
+        repositoryOwner,
+        repositoryName,
+        foundingCommit,
         totalCommitCount,
         chapterCount
     );
-    const chapterBoundaryCommits = await Promise.all(
-        chapterBoundaryPositions.map((position) =>
-            fetchCommitAtPosition(repositoryOwner, repositoryName, position)
-        )
+
+    const chapterSpans = buildChapterSpans(boundaries);
+    const finalSpan = chapterSpans[chapterSpans.length - 1];
+
+    if (!finalSpan)
+        throw new ErrorWrapper("failed to resolve chapter boundaries", HttpStatus.INTERNAL_ERROR);
+
+    const context: IRealmContext = {
+        repositoryOwner,
+        repositoryName,
+        repositoryFullName: repository.fullName,
+        chapterCount,
+        headCommitTree,
+        generationSeed: deriveSeed(repositoryOwner, repositoryName),
+    };
+
+    const chapters = await Promise.all(
+        chapterSpans.map((span, chapterIndex) => buildChapter(context, chapterIndex, span))
     );
-
-    const headCommit = chapterBoundaryCommits[chapterCount];
-    if (!headCommit) throw new Error("failed to resolve head commit for realm");
-
-    const chapterSourceData = await Promise.all(
-        Array.from({ length: chapterCount }, (unusedValue, chapterIndex) =>
-            fetchChapterSourceData(
-                repositoryOwner,
-                repositoryName,
-                chapterBoundaryCommits,
-                chapterIndex,
-                chapterCount,
-                headCommitTree
-            )
-        )
-    );
-
-    const realmSeed = RealmLayout.deriveSeed(repositoryOwner, repositoryName);
-    const chapters: IRealmChapter[] = [];
-
-    for (let chapterIndex = 0; chapterIndex < chapterCount; chapterIndex++) {
-        const sourceData = chapterSourceData[chapterIndex];
-        if (!sourceData) throw new Error(`missing source data for chapter ${chapterIndex}`);
-
-        const leadContributorLogin = sourceData.changes.contributors[0]?.login ?? null;
-        const chapterGeometry = packChapterRegions(
-            sourceData.tree.directoryPaths,
-            sourceData.tree.filePaths,
-            sourceData.changes.changedLineCountByFilePath,
-            regionBudgetPerChapter,
-            realmSeed + chapterIndex * CHAPTER_SEED_STRIDE
-        );
-
-        chapters.push({
-            chapterIndex,
-            title: CHAPTER_TITLES[chapterIndex] ?? `Chapter ${chapterIndex + 1}`,
-            commitSha: sourceData.endCommit.sha,
-            startedAt: sourceData.startCommit.committedAt,
-            endedAt: sourceData.endCommit.committedAt,
-            commitCount: sourceData.changes.commitCount,
-            artifactName: ARTIFACT_NAMES[chapterIndex] ?? "Fragment of the Deep Log",
-            interludeParagraphs: composeInterludeParagraphs(
-                repository.fullName,
-                chapterIndex,
-                chapterCount,
-                sourceData.startCommit.committedAt,
-                sourceData.endCommit.committedAt,
-                sourceData.changes.commitCount,
-                leadContributorLogin,
-                chapterGeometry.objectiveRegionId
-            ),
-            spawnRegionId: chapterGeometry.spawnRegionId,
-            objectiveRegionId: chapterGeometry.objectiveRegionId,
-            regions: chapterGeometry.regions,
-            pathways: chapterGeometry.pathways,
-            boss: buildChapterBoss(
-                sourceData.changes.contributors,
-                chapterGeometry.objectiveRegionId
-            ),
-        });
-    }
 
     return {
-        layout: new RealmLayout(
-            repositoryOwner,
-            repositoryName,
-            repository.starCount,
-            repository.primaryLanguage,
+        realm: {
+            repositoryFullName: repository.fullName,
+            starCount: repository.starCount,
+            primaryLanguage: repository.primaryLanguage,
             totalCommitCount,
-            chapters
-        ),
-        repositoryFullName: repository.fullName,
-        headCommitSha: headCommit.sha,
+            generationSeed: context.generationSeed,
+            chapters,
+        },
+        headCommitSha: finalSpan.endCommit.sha,
     };
 }
 
-function resolveChapterBoundaryPositions(totalCommitCount: number, chapterCount: number): number[] {
-    const commitsPerChapter = Math.floor(totalCommitCount / chapterCount);
-    const positions: number[] = [];
-
-    for (let boundaryIndex = 0; boundaryIndex < chapterCount; boundaryIndex++) {
-        positions.push(Math.max(0, totalCommitCount - 1 - boundaryIndex * commitsPerChapter));
-    }
-    positions.push(0);
-
-    return positions;
-}
-
-async function fetchChapterSourceData(
+async function resolveChapterBoundaries(
     repositoryOwner: string,
     repositoryName: string,
-    chapterBoundaryCommits: IGithubCommit[],
-    chapterIndex: number,
-    chapterCount: number,
-    headCommitTree: IGithubTree
-): Promise<IChapterSourceData> {
-    const startCommit = chapterBoundaryCommits[chapterIndex];
-    const endCommit = chapterBoundaryCommits[chapterIndex + 1];
-    if (!startCommit || !endCommit)
-        throw new Error(`missing boundary commit for chapter ${chapterIndex}`);
+    foundingCommit: IGithubCommit,
+    totalCommitCount: number,
+    chapterCount: number
+): Promise<IChapterBoundary[]> {
+    const commitsPerChapter = Math.floor(totalCommitCount / chapterCount);
+    const foundingPosition = totalCommitCount - 1;
 
-    const isFinalChapter = chapterIndex === chapterCount - 1;
+    const plannedPositions = [
+        ...Array.from({ length: chapterCount }, (_, boundaryIndex) =>
+            Math.max(NEWEST_COMMIT_POSITION, foundingPosition - boundaryIndex * commitsPerChapter)
+        ),
+        NEWEST_COMMIT_POSITION,
+    ];
 
-    const [tree, changes] = await Promise.all([
-        isFinalChapter
-            ? Promise.resolve(headCommitTree)
-            : fetchTreeAtCommit(repositoryOwner, repositoryName, endCommit.sha),
-        fetchChangesBetweenCommits(repositoryOwner, repositoryName, startCommit.sha, endCommit.sha),
-    ]);
+    const maxPositionsToSkip = Math.floor(commitsPerChapter / 2);
 
-    return { startCommit, endCommit, tree, changes };
+    return Promise.all(
+        plannedPositions.map((plannedPosition, boundaryIndex) =>
+            boundaryIndex === 0
+                ? { commit: foundingCommit, position: plannedPosition }
+                : resolveBoundaryOnFoundingHistory(
+                    repositoryOwner,
+                    repositoryName,
+                    plannedPosition,
+                    foundingCommit.sha,
+                    maxPositionsToSkip
+                )
+        )
+    );
 }
 
-function buildChapterBoss(
+async function resolveBoundaryOnFoundingHistory(
+    repositoryOwner: string,
+    repositoryName: string,
+    plannedPosition: number,
+    foundingCommitSha: string,
+    maxPositionsToSkip: number
+): Promise<IChapterBoundary> {
+    for (let positionsSkipped = 0; positionsSkipped <= maxPositionsToSkip; positionsSkipped++) {
+        const position = Math.max(NEWEST_COMMIT_POSITION, plannedPosition - positionsSkipped);
+        const commit = await fetchCommitAtPosition(repositoryOwner, repositoryName, position);
+
+        const isOnFoundingHistory = await isCommitDescendedFrom(
+            repositoryOwner,
+            repositoryName,
+            foundingCommitSha,
+            commit.sha
+        );
+
+        if (isOnFoundingHistory) return { commit, position };
+        if (position === NEWEST_COMMIT_POSITION) break;
+    }
+
+    throw new ErrorWrapper(
+        `no commit on the founding history within ${maxPositionsToSkip} of position ${plannedPosition}`,
+        HttpStatus.BAD_GATEWAY
+    );
+}
+
+function buildChapterSpans(boundaries: IChapterBoundary[]): IChapterSpan[] {
+    const [foundingBoundary, ...laterBoundaries] = boundaries;
+    if (!foundingBoundary) return [];
+
+    const spans: IChapterSpan[] = [];
+    let startBoundary = foundingBoundary;
+
+    for (const endBoundary of laterBoundaries) {
+        const isFoundingChapter = startBoundary === foundingBoundary;
+
+        spans.push({
+            startCommit: startBoundary.commit,
+            endCommit: endBoundary.commit,
+            commitCount:
+                startBoundary.position - endBoundary.position + (isFoundingChapter ? 1 : 0),
+        });
+
+        startBoundary = endBoundary;
+    }
+
+    return spans;
+}
+
+async function buildChapter(
+    context: IRealmContext,
+    chapterIndex: number,
+    span: IChapterSpan
+): Promise<IRealmChapter> {
+    const chapterPosition = resolveChapterPosition(chapterIndex, context.chapterCount);
+
+    const [tree, contributors] = await Promise.all([
+        resolveChapterTree(context, span, chapterPosition),
+        resolveChapterContributors(context, span),
+    ]);
+
+    const geometry = packChapterRegions(
+        tree.directoryPaths,
+        tree.filePaths,
+        context.generationSeed + chapterIndex * CHAPTER_DESIGN.seedOffsetPerChapter
+    );
+
+    const boss = resolveChapterBoss(contributors, geometry.objectiveRegionId);
+    const arc = resolveChapterArc(chapterIndex, context.chapterCount);
+
+    return {
+        chapterIndex,
+        title: arc.title,
+        startedAt: span.startCommit.committedAt,
+        endedAt: span.endCommit.committedAt,
+        commitCount: span.commitCount,
+        artifactName: arc.artifactName,
+        interludeParagraphs: composeInterludeParagraphs({
+            repositoryFullName: context.repositoryFullName,
+            chapterPosition,
+            span,
+            repositoryFileCount: resolveRepositoryFileCount(geometry.regions),
+            boss,
+        }),
+        spawnRegionId: geometry.spawnRegionId,
+        objectiveRegionId: geometry.objectiveRegionId,
+        regions: geometry.regions,
+        pathways: geometry.pathways,
+        boss,
+    };
+}
+
+async function resolveChapterTree(
+    context: IRealmContext,
+    span: IChapterSpan,
+    chapterPosition: ChapterPosition
+): Promise<IGithubTree> {
+    if (chapterPosition === "present") return context.headCommitTree;
+
+    return fetchTreeAtCommit(context.repositoryOwner, context.repositoryName, span.endCommit.sha);
+}
+
+async function resolveChapterContributors(
+    context: IRealmContext,
+    span: IChapterSpan
+): Promise<IGithubContributor[]> {
+    try {
+        const sampledContributors = await fetchContributorsBetweenDates(
+            context.repositoryOwner,
+            context.repositoryName,
+            span.startCommit.committedAt,
+            span.endCommit.committedAt
+        );
+
+        const humans = sampledContributors.filter((contributor) => !contributor.isAutomated);
+
+        return humans.length > 0 ? humans : sampledContributors;
+    } catch (error) {
+        console.warn(`contributors unavailable for chapter ending ${span.endCommit.sha}:`, error);
+
+        return [];
+    }
+}
+
+function resolveChapterBoss(
     contributors: IGithubContributor[],
     objectiveRegionId: string
 ): IChapterBoss | null {
-    const leadContributor = contributors[0];
+    const [leadContributor] = contributors;
     if (!leadContributor) return null;
+
+    const sampledCommitTotal = contributors.reduce(
+        (total, contributor) => total + contributor.sampledCommitCount,
+        0
+    );
 
     return {
         contributorLogin: leadContributor.login,
         avatarUrl: leadContributor.avatarUrl,
-        commitCount: leadContributor.commitCount,
+        sampledCommitShare: leadContributor.sampledCommitCount / sampledCommitTotal,
         regionId: objectiveRegionId,
     };
 }
 
-function composeInterludeParagraphs(
-    repositoryFullName: string,
-    chapterIndex: number,
-    chapterCount: number,
-    startedAt: Date,
-    endedAt: Date,
-    commitCount: number,
-    leadContributorLogin: string | null,
-    objectiveRegionId: string
-): string[] {
-    const paragraphs: string[] = [];
-    const timespanDescription = describeTimespan(startedAt, endedAt);
+function composeInterludeParagraphs(interlude: IInterludeFacts): string[] {
+    const paragraphs = [
+        describeChapterOpening(interlude),
+        `${interlude.span.commitCount} commits reshaped the land in this chapter.`,
+    ];
 
-    if (chapterIndex === 0) {
+    if (interlude.boss) {
         paragraphs.push(
-            `In the beginning ${repositoryFullName} was small enough to hold in one hand. ${timespanDescription}.`
-        );
-    } else if (chapterIndex === chapterCount - 1) {
-        paragraphs.push(
-            `This is where the realm stands now. ${timespanDescription}, and it has not stopped.`
-        );
-    } else {
-        paragraphs.push(`The realm had grown, and grown uneasy. ${timespanDescription}.`);
-    }
-
-    paragraphs.push(`${commitCount} commits reshaped the land in this chapter.`);
-
-    if (leadContributorLogin) {
-        paragraphs.push(
-            `Its will belonged to ${leadContributorLogin}, who waits at ${objectiveRegionId}.`
+            `As it closed, its will belonged to ${interlude.boss.contributorLogin}, who waits at ${interlude.boss.regionId}.`
         );
     }
 
     return paragraphs;
 }
 
-function describeTimespan(startedAt: Date, endedAt: Date): string {
-    const startYear = startedAt.getUTCFullYear();
-    const endYear = endedAt.getUTCFullYear();
+function describeChapterOpening(interlude: IInterludeFacts): string {
+    const timespan = describeTimespan(interlude.span);
 
-    if (startYear === endYear) return `It lasted through ${startYear}`;
-    return `It stretched from ${startYear} to ${endYear}`;
+    switch (interlude.chapterPosition) {
+        case "founding":
+            return interlude.repositoryFileCount < SMALL_REPOSITORY_FILE_LIMIT
+                ? `In the beginning ${interlude.repositoryFullName} was small enough to hold in one hand. ${timespan}.`
+                : `${interlude.repositoryFullName} was already vast when this era opened. ${timespan}.`;
+
+        case "middle":
+            return `The realm had grown, and grown uneasy. ${timespan}.`;
+
+        case "present":
+            return `This is where the realm stands now. ${timespan}, and it has not stopped.`;
+    }
 }
 
+function describeTimespan(span: IChapterSpan): string {
+    const startYear = span.startCommit.committedAt.getUTCFullYear();
+    const endYear = span.endCommit.committedAt.getUTCFullYear();
+
+    return startYear === endYear
+        ? `It lasted through ${startYear}`
+        : `It stretched from ${startYear} to ${endYear}`;
+}
+
+function resolveRepositoryFileCount(regions: IChapterRegion[]): number {
+    return regions.find((region) => region.regionId === ROOT_REGION.id)?.fileCount ?? 0;
+}
+
+function resolveChapterPosition(chapterIndex: number, chapterCount: number): ChapterPosition {
+    if (chapterIndex === 0) return "founding";
+    if (chapterIndex === chapterCount - 1) return "present";
+
+    return "middle";
+}
+
+function resolveChapterArc(chapterIndex: number, chapterCount: number): IChapterArcEntry {
+    if (chapterCount <= 1) return CHAPTER_ARC[0] ?? FALLBACK_CHAPTER_ARC;
+
+    const arcIndex = Math.round((chapterIndex * (CHAPTER_ARC.length - 1)) / (chapterCount - 1));
+
+    return CHAPTER_ARC[arcIndex] ?? FALLBACK_CHAPTER_ARC;
+}
+
+function resolveChapterCount(totalCommitCount: number, directoryCount: number): number {
+    return Math.max(
+        CHAPTER_DESIGN.minChapters,
+        Math.min(
+            resolveTieredChapterCount(CHAPTER_TIERS_BY_COMMIT_COUNT, totalCommitCount),
+            resolveTieredChapterCount(CHAPTER_TIERS_BY_DIRECTORY_COUNT, directoryCount)
+        )
+    );
+}
+
+function resolveTieredChapterCount(tiers: IChapterTier[], measurement: number): number {
+    for (const tier of tiers) if (measurement < tier.upperBound) return tier.chapterCount;
+
+    return CHAPTER_DESIGN.maxChapters;
+}
+
+function deriveSeed(repositoryOwner: string, repositoryName: string): number {
+    const repositoryIdentifier = `${repositoryOwner}/${repositoryName}`;
+    let seed = 0;
+
+    for (let index = 0; index < repositoryIdentifier.length; index++)
+        seed = (seed * SEED_HASH_MULTIPLIER + repositoryIdentifier.charCodeAt(index)) | 0;
+
+    return Math.abs(seed);
+}
+
+type ChapterPosition = "founding" | "middle" | "present";
+
 export interface IGeneratedRealm {
-    layout: RealmLayout;
-    repositoryFullName: string;
+    realm: IResolvedRealm;
     headCommitSha: string;
 }
 
-export interface IChapterSourceData {
+interface IRealmContext {
+    repositoryOwner: string;
+    repositoryName: string;
+    repositoryFullName: string;
+    chapterCount: number;
+    headCommitTree: IGithubTree;
+    generationSeed: number;
+}
+
+interface IChapterBoundary {
+    commit: IGithubCommit;
+    position: number;
+}
+
+interface IChapterSpan {
     startCommit: IGithubCommit;
     endCommit: IGithubCommit;
-    tree: IGithubTree;
-    changes: IGithubChangeSummary;
+    commitCount: number;
+}
+
+interface IInterludeFacts {
+    repositoryFullName: string;
+    chapterPosition: ChapterPosition;
+    span: IChapterSpan;
+    repositoryFileCount: number;
+    boss: IChapterBoss | null;
 }
