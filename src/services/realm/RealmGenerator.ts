@@ -198,7 +198,7 @@ async function buildChapter(
         context.generationSeed + chapterIndex * CHAPTER_DESIGN.seedOffsetPerChapter
     );
 
-    const boss = resolveChapterBoss(contributors, geometry.objectiveRegionId);
+    const boss = resolveChapterBoss(contributors);
     const arc = resolveChapterArc(chapterIndex, context.chapterCount);
 
     return {
@@ -213,10 +213,11 @@ async function buildChapter(
             chapterPosition,
             span,
             repositoryFileCount: resolveRepositoryFileCount(geometry.regions),
+            bossRegionId: geometry.bossRegionId,
             boss,
         }),
         spawnRegionId: geometry.spawnRegionId,
-        objectiveRegionId: geometry.objectiveRegionId,
+        bossRegionId: geometry.bossRegionId,
         regions: geometry.regions,
         pathways: geometry.pathways,
         boss,
@@ -255,10 +256,7 @@ async function resolveChapterContributors(
     }
 }
 
-function resolveChapterBoss(
-    contributors: IGithubContributor[],
-    objectiveRegionId: string
-): IChapterBoss | null {
+function resolveChapterBoss(contributors: IGithubContributor[]): IChapterBoss | null {
     const [leadContributor] = contributors;
     if (!leadContributor) return null;
 
@@ -270,8 +268,7 @@ function resolveChapterBoss(
     return {
         contributorLogin: leadContributor.login,
         avatarUrl: leadContributor.avatarUrl,
-        sampledCommitShare: leadContributor.sampledCommitCount / sampledCommitTotal,
-        regionId: objectiveRegionId,
+        commitShare: leadContributor.sampledCommitCount / sampledCommitTotal,
     };
 }
 
@@ -283,7 +280,7 @@ function composeInterludeParagraphs(interlude: IInterludeFacts): string[] {
 
     if (interlude.boss) {
         paragraphs.push(
-            `As it closed, its will belonged to ${interlude.boss.contributorLogin}, who waits at ${interlude.boss.regionId}.`
+            `As it closed, its will belonged to ${interlude.boss.contributorLogin}, who waits at ${interlude.bossRegionId}.`
         );
     }
 
@@ -393,5 +390,6 @@ interface IInterludeFacts {
     chapterPosition: ChapterPosition;
     span: IChapterSpan;
     repositoryFileCount: number;
+    bossRegionId: string;
     boss: IChapterBoss | null;
 }

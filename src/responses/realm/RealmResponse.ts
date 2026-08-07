@@ -39,7 +39,7 @@ export class ChapterResponse {
     artifactName: string;
     interludeParagraphs: string[];
     spawnRegionId: string;
-    objectiveRegionId: string;
+    bossRegionId: string;
     regions: IChapterRegion[];
     pathways: IRegionPathway[];
     boss: IChapterBoss | null;
@@ -53,7 +53,7 @@ export class ChapterResponse {
         this.artifactName = chapter.artifactName;
         this.interludeParagraphs = chapter.interludeParagraphs;
         this.spawnRegionId = chapter.spawnRegionId;
-        this.objectiveRegionId = chapter.objectiveRegionId;
+        this.bossRegionId = chapter.bossRegionId;
         this.regions = chapter.regions.map(roundRegion);
         this.pathways = chapter.pathways.map(roundPathway);
         this.boss = chapter.boss === null ? null : roundBoss(chapter.boss);
@@ -75,7 +75,7 @@ function roundRegion(region: IChapterRegion): IChapterRegion {
         floorSize: [round(width, WORLD_UNIT_PRECISION), round(depth, WORLD_UNIT_PRECISION)],
         wallHeight: round(region.wallHeight, WORLD_UNIT_PRECISION),
         nestingDepth: region.nestingDepth,
-        clearanceTier: region.clearanceTier,
+        spawnDistance: region.spawnDistance,
         fileCount: region.fileCount,
     };
 }
@@ -92,8 +92,7 @@ function roundBoss(boss: IChapterBoss): IChapterBoss {
     return {
         contributorLogin: boss.contributorLogin,
         avatarUrl: boss.avatarUrl,
-        sampledCommitShare: round(boss.sampledCommitShare, RATIO_PRECISION),
-        regionId: boss.regionId,
+        commitShare: round(boss.commitShare, RATIO_PRECISION),
     };
 }
 

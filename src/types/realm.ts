@@ -16,7 +16,7 @@ export interface IRealmChapter {
     artifactName: string;
     interludeParagraphs: string[];
     spawnRegionId: string;
-    objectiveRegionId: string;
+    bossRegionId: string;
     regions: IChapterRegion[];
     pathways: IRegionPathway[];
     boss: IChapterBoss | null;
@@ -29,7 +29,7 @@ export interface IChapterRegion {
     floorSize: [number, number];
     wallHeight: number;
     nestingDepth: number;
-    clearanceTier: number;
+    spawnDistance: number;
     fileCount: number;
 }
 
@@ -42,6 +42,5 @@ export interface IRegionPathway {
 export interface IChapterBoss {
     contributorLogin: string;
     avatarUrl: string;
-    sampledCommitShare: number;
-    regionId: string;
+    commitShare: number;
 }

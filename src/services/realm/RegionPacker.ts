@@ -27,14 +27,14 @@ export function packChapterRegions(
     positionRegionsInRings(spawnRegion, regionsToPlace, nextRandom);
 
     const pathways = connectEachRegionToNearestNeighbour(regions);
-    assignClearanceTiers(regions, pathways, spawnRegion);
+    assignSpawnDistances(regions, pathways, spawnRegion);
     addLoopPathways(regions, pathways);
 
     return {
         regions,
         pathways,
         spawnRegionId: spawnRegion.regionId,
-        objectiveRegionId: resolveObjectiveRegionId(regions, spawnRegion),
+        bossRegionId: resolveBossRegionId(regions, spawnRegion),
     };
 }
 
@@ -196,7 +196,7 @@ function buildRegion(
             sizeRatio
         ),
         nestingDepth: candidate.nestingDepth,
-        clearanceTier: 0,
+        spawnDistance: 0,
         fileCount: candidate.fileCount,
     };
 }
@@ -259,7 +259,7 @@ function connectEachRegionToNearestNeighbour(regions: IChapterRegion[]): IRegion
     return pathways;
 }
 
-function assignClearanceTiers(
+function assignSpawnDistances(
     regions: IChapterRegion[],
     pathways: IRegionPathway[],
     spawnRegion: IChapterRegion
@@ -277,11 +277,11 @@ function assignClearanceTiers(
     const visitedIds = new Set([spawnRegion.regionId]);
     let currentTierRegions = [spawnRegion];
 
-    for (let tier = 0; currentTierRegions.length > 0; tier++) {
+    for (let distance = 0; currentTierRegions.length > 0; distance++) {
         const nextTierRegions: IChapterRegion[] = [];
 
         for (const region of currentTierRegions) {
-            region.clearanceTier = tier;
+            region.spawnDistance = distance;
 
             for (const neighbourId of neighbourIdsById.get(region.regionId) ?? []) {
                 if (visitedIds.has(neighbourId)) continue;
@@ -308,7 +308,7 @@ function addLoopPathways(regions: IChapterRegion[], pathways: IRegionPathway[]):
     for (const [firstIndex, first] of regions.entries()) {
         for (const second of regions.slice(firstIndex + 1)) {
             if (connectedPairKeys.has(buildPairKey(first.regionId, second.regionId))) continue;
-            if (Math.abs(first.clearanceTier - second.clearanceTier) > 1) continue;
+            if (Math.abs(first.spawnDistance - second.spawnDistance) > 1) continue;
 
             unconnectedPairs.push({
                 first,
@@ -417,7 +417,7 @@ function buildPairKey(firstRegionId: string, secondRegionId: string): string {
         : `${secondRegionId}|${firstRegionId}`;
 }
 
-function resolveObjectiveRegionId(regions: IChapterRegion[], spawnRegion: IChapterRegion): string {
+function resolveBossRegionId(regions: IChapterRegion[], spawnRegion: IChapterRegion): string {
     const contenders = regions.filter((region) => region !== spawnRegion);
     if (contenders.length === 0) return spawnRegion.regionId;
 
@@ -432,20 +432,20 @@ function resolveObjectiveRegionId(regions: IChapterRegion[], spawnRegion: IChapt
     );
 
     const eligible = spacious.length > 0 ? spacious : contenders;
-    const deepestTier = Math.max(...eligible.map((region) => region.clearanceTier));
+    const deepestDistance = Math.max(...eligible.map((region) => region.spawnDistance));
 
-    let objectiveRegion = spawnRegion;
+    let bossRegion = spawnRegion;
     let farthestDistance = -1;
 
     for (const region of eligible) {
-        if (region.clearanceTier !== deepestTier) continue;
+        if (region.spawnDistance !== deepestDistance) continue;
         const distance = horizontalDistanceBetween(region, spawnRegion);
         if (distance <= farthestDistance) continue;
         farthestDistance = distance;
-        objectiveRegion = region;
+        bossRegion = region;
     }
 
-    return objectiveRegion.regionId;
+    return bossRegion.regionId;
 }
 
 function horizontalDistanceBetween(first: IChapterRegion, second: IChapterRegion): number {
@@ -500,7 +500,7 @@ export interface IChapterGeometry {
     regions: IChapterRegion[];
     pathways: IRegionPathway[];
     spawnRegionId: string;
-    objectiveRegionId: string;
+    bossRegionId: string;
 }
 
 interface IRegionCandidate {
