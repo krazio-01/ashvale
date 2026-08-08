@@ -93,6 +93,8 @@ function roundBoss(boss: IChapterBoss): IChapterBoss {
         contributorLogin: boss.contributorLogin,
         avatarUrl: boss.avatarUrl,
         commitShare: round(boss.commitShare, RATIO_PRECISION),
+        commitGapVariation: round(boss.commitGapVariation, RATIO_PRECISION),
+        chapterAppearanceCount: boss.chapterAppearanceCount,
     };
 }
 

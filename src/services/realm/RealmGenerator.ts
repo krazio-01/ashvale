@@ -82,6 +82,8 @@ export async function generateRealm(
         chapterSpans.map((span, chapterIndex) => buildChapter(context, chapterIndex, span))
     );
 
+    assignBossAppearanceCounts(chapters);
+
     return {
         realm: {
             repositoryFullName: repository.fullName,
@@ -246,13 +248,31 @@ async function resolveChapterContributors(
             span.endCommit.committedAt
         );
 
-        const humans = sampledContributors.filter((contributor) => !contributor.isAutomated);
+        const humans = sampledContributors.filter((contributor) => !contributor.isBotAccount);
 
         return humans.length > 0 ? humans : sampledContributors;
     } catch (error) {
         console.warn(`contributors unavailable for chapter ending ${span.endCommit.sha}:`, error);
 
         return [];
+    }
+}
+
+function assignBossAppearanceCounts(chapters: IRealmChapter[]): void {
+    const appearanceCountByLogin = new Map<string, number>();
+
+    for (const chapter of chapters) {
+        if (!chapter.boss) continue;
+
+        const count = (appearanceCountByLogin.get(chapter.boss.contributorLogin) ?? 0) + 1;
+        appearanceCountByLogin.set(chapter.boss.contributorLogin, count);
+    }
+
+    for (const chapter of chapters) {
+        if (!chapter.boss) continue;
+
+        chapter.boss.chapterAppearanceCount =
+            appearanceCountByLogin.get(chapter.boss.contributorLogin) ?? 1;
     }
 }
 
@@ -269,6 +289,8 @@ function resolveChapterBoss(contributors: IGithubContributor[]): IChapterBoss | 
         contributorLogin: leadContributor.login,
         avatarUrl: leadContributor.avatarUrl,
         commitShare: leadContributor.sampledCommitCount / sampledCommitTotal,
+        commitGapVariation: leadContributor.commitGapVariation,
+        chapterAppearanceCount: 0,
     };
 }
 
