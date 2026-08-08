@@ -7,13 +7,14 @@ import { httpGet } from "@/services/HttpService";
 const LAST_PAGE_PATTERN = /[?&]page=(\d+)>;\s*rel="last"/;
 const NEXT_PAGE_PATTERN = /[?&]page=(\d+)>;\s*rel="next"/;
 
-const AUTOMATED_LOGIN_SUFFIX_PATTERN = /(\[bot\]|[-_]bot)$/i;
-const AUTOMATED_ACCOUNT_TYPE = "Bot";
+const BOT_LOGIN_SUFFIX_PATTERN = /(\[bot\]|[-_]bot)$/i;
+const BOT_ACCOUNT_TYPE = "Bot";
 
 const DIRECTORY_ENTRY_TYPE = "tree";
 const FILE_ENTRY_TYPE = "blob";
 
 const CONTRIBUTOR_SAMPLE_SIZE = 100;
+const MINIMUM_COMMIT_GAP_COUNT = 2;
 
 const GITHUB_HEADERS = {
     accept: "application/vnd.github+json",
@@ -86,29 +87,62 @@ export async function fetchContributorsBetweenDates(
     });
 
     const { data } = await requestGithub<ICommitPayload[]>(owner, name, `/commits?${query}`);
-    const contributorByLogin = new Map<string, IGithubContributor>();
+    const trackedByLogin = new Map<string, ITrackedContributor>();
 
-    for (const { author } of data) {
+    for (const { author, commit } of data) {
         if (!author) continue;
 
-        const existing = contributorByLogin.get(author.login);
+        const committedAt = new Date(commit.committer.date).getTime();
+        const tracked = trackedByLogin.get(author.login);
 
-        if (existing) {
-            existing.sampledCommitCount++;
+        if (!tracked) {
+            trackedByLogin.set(author.login, {
+                login: author.login,
+                avatarUrl: author.avatar_url ?? "",
+                sampledCommitCount: 1,
+                commitGapVariation: 0,
+                isBotAccount: isBotAccount(author),
+                lastCommitAt: committedAt,
+                gapCount: 0,
+                gapSum: 0,
+                gapSumOfSquares: 0,
+            });
             continue;
         }
 
-        contributorByLogin.set(author.login, {
-            login: author.login,
-            avatarUrl: author.avatar_url ?? "",
-            sampledCommitCount: 1,
-            isAutomated: isAutomatedAccount(author),
-        });
+        const gap = tracked.lastCommitAt - committedAt;
+
+        tracked.sampledCommitCount++;
+        tracked.gapCount++;
+        tracked.gapSum += gap;
+        tracked.gapSumOfSquares += gap * gap;
+        tracked.lastCommitAt = committedAt;
     }
 
-    return [...contributorByLogin.values()].sort(
-        (first, second) => second.sampledCommitCount - first.sampledCommitCount
-    );
+    return [...trackedByLogin.values()]
+        .map(toContributor)
+        .sort((first, second) => second.sampledCommitCount - first.sampledCommitCount);
+}
+
+function toContributor(tracked: ITrackedContributor): IGithubContributor {
+    return {
+        login: tracked.login,
+        avatarUrl: tracked.avatarUrl,
+        sampledCommitCount: tracked.sampledCommitCount,
+        commitGapVariation: resolveGapVariation(tracked),
+        isBotAccount: tracked.isBotAccount,
+    };
+}
+
+function resolveGapVariation(tracked: ITrackedContributor): number {
+    if (tracked.gapCount < MINIMUM_COMMIT_GAP_COUNT) return 0;
+
+    const meanGap = tracked.gapSum / tracked.gapCount;
+    if (meanGap === 0) return 0;
+
+    const variance = tracked.gapSumOfSquares / tracked.gapCount - meanGap * meanGap;
+
+    return Math.sqrt(Math.max(0, variance)) / meanGap;
 }
 
 export async function isCommitDescendedFrom(
@@ -203,10 +237,8 @@ function mergeTrees(trees: IGithubTree[]): IGithubTree {
     };
 }
 
-function isAutomatedAccount(author: ICommitAuthorPayload): boolean {
-    return (
-        author.type === AUTOMATED_ACCOUNT_TYPE || AUTOMATED_LOGIN_SUFFIX_PATTERN.test(author.login)
-    );
+function isBotAccount(author: ICommitAuthorPayload): boolean {
+    return author.type === BOT_ACCOUNT_TYPE || BOT_LOGIN_SUFFIX_PATTERN.test(author.login);
 }
 
 async function requestGithub<T>(
@@ -279,7 +311,15 @@ export interface IGithubContributor {
     login: string;
     avatarUrl: string;
     sampledCommitCount: number;
-    isAutomated: boolean;
+    commitGapVariation: number;
+    isBotAccount: boolean;
+}
+
+interface ITrackedContributor extends IGithubContributor {
+    lastCommitAt: number;
+    gapCount: number;
+    gapSum: number;
+    gapSumOfSquares: number;
 }
 
 interface IGithubResponse<T> {
