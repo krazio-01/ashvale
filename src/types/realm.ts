@@ -43,4 +43,6 @@ export interface IChapterBoss {
     contributorLogin: string;
     avatarUrl: string;
     commitShare: number;
+    commitGapVariation: number;
+    chapterAppearanceCount: number;
 }
