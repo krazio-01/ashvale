@@ -30,3 +30,17 @@ export const PALETTE = {
     groundWarm: "#5a463a",
     keyLight: "#e8ecf5",
 };
+
+export enum EnemyAction {
+    Idle = "idle",
+    Chase = "chase",
+    Attack = "attack",
+    Retreat = "retreat",
+}
+
+export enum EnemyArchetype {
+    Sentinel = "sentinel",
+    Wraith = "wraith",
+    Golem = "golem",
+    Gremlin = "gremlin",
+}
