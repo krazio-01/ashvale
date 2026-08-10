@@ -12,3 +12,11 @@ export enum HttpStatus {
     INTERNAL_ERROR = 500,
     BAD_GATEWAY = 502,
 }
+
+export enum HttpMethod {
+    Get = 'GET',
+    Post = 'POST',
+    Put = 'PUT',
+    Patch = 'PATCH',
+    Delete = 'DELETE',
+}
