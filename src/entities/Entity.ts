@@ -1,9 +1,14 @@
-export abstract class Entity {
+import type { Object3D } from "three";
+import type { IWorldEntity } from "@/types/world";
+export abstract class Entity implements IWorldEntity {
     readonly id: string;
-    position: [number, number, number];
 
-    constructor(id: string, position: [number, number, number] = [0, 0, 0]) {
+    abstract readonly sceneObject: Object3D;
+
+    constructor(id: string) {
         this.id = id;
-        this.position = position;
     }
+
+    abstract update(deltaSeconds: number): void;
+    abstract dispose(): void;
 }
