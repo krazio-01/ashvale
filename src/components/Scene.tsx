@@ -1,16 +1,14 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { EffectComposer } from "@react-three/postprocessing";
 import { ACESFilmicToneMapping } from "three";
 import { World } from "@/world/World";
-import RenderPipeline from "@/world/RenderPipeline";
+import SceneLighting from "@/components/SceneLighting";
 import OutlinePass from "@/components/OutlinePass";
 import { spawnTestRealm } from "@/factories/RealmSpawner";
 import { CAMERA, RENDER } from "@/constants/game";
 
-// Lives inside Canvas so the world can be built against the real camera
 function WorldRuntime() {
     const camera = useThree((state) => state.camera);
     const [world, setWorld] = useState<World | null>(null);
@@ -42,7 +40,7 @@ function WorldRuntime() {
     return world ? <primitive object={world.root} /> : null;
 }
 
-export default function Scene() {
+const Scene = () => {
     return (
         <Canvas
             shadows="percentage"
@@ -59,11 +57,13 @@ export default function Scene() {
                 toneMappingExposure: RENDER.toneMappingExposure,
             }}
         >
-            <RenderPipeline />
+            <SceneLighting />
             <WorldRuntime />
             <EffectComposer enableNormalPass>
                 <OutlinePass />
             </EffectComposer>
         </Canvas>
     );
-}
+};
+
+export default Scene;

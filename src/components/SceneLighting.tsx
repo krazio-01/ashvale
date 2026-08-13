@@ -1,6 +1,6 @@
 import { LIGHT, PALETTE, WORLD } from "@/constants/game";
 
-export default function RenderPipeline() {
+const RenderPipeline = () => {
     return (
         <>
             <color attach="background" args={[PALETTE.void]} />
@@ -32,4 +32,6 @@ export default function RenderPipeline() {
             />
         </>
     );
-}
+};
+
+export default RenderPipeline;
