@@ -4,7 +4,7 @@ import { CapsuleGeometry, Camera, Mesh, Vector3 } from "three";
 import { Character } from "@/entities/characters/Character";
 import { InputManager } from "@/input/InputManager";
 import type { IWeapon } from "@/types/entities";
-import type { IWorldContext } from "@/types/world";
+import type { IWorldContext, IWorldEntity } from "@/types/world";
 import { CAMERA, PALETTE, PLAYER } from "@/constants/game";
 
 const WORLD_UP = new Vector3(0, 1, 0);
@@ -16,7 +16,7 @@ const bodyPosition = new Vector3();
 const desiredCameraPosition = new Vector3();
 const cameraTarget = new Vector3();
 
-export class Player extends Character {
+export class Player extends Character implements IWorldEntity {
     readonly sceneObject: Mesh;
 
     equippedWeapon: IWeapon | null = null;

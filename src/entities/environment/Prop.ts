@@ -2,10 +2,10 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import type { Collider, ColliderDesc, RigidBody } from "@dimforge/rapier3d-compat";
 import { BoxGeometry, BufferGeometry, CylinderGeometry, IcosahedronGeometry, Mesh } from "three";
 import { Entity } from "@/entities/Entity";
-import type { IPropPlacement, IWorldContext } from "@/types/world";
+import type { IPropPlacement, IWorldContext, IWorldEntity } from "@/types/world";
 import { PROP, PropShape } from "@/constants/game";
 
-export class Prop extends Entity {
+export class Prop extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;
 
     private readonly context: IWorldContext;
