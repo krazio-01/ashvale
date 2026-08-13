@@ -2,12 +2,12 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import type { Collider, RigidBody } from "@dimforge/rapier3d-compat";
 import { Mesh, PlaneGeometry } from "three";
 import { Entity } from "@/entities/Entity";
-import type { IWorldContext } from "@/types/world";
+import type { IWorldContext, IWorldEntity } from "@/types/world";
 import { GROUND, PALETTE } from "@/constants/game";
 
 const QUARTER_TURN = -Math.PI / 2;
 
-export class Ground extends Entity {
+export class Ground extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;
 
     private readonly context: IWorldContext;

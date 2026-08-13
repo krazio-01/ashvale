@@ -1,5 +1,5 @@
 import type { Group, Object3D, Vector3Tuple } from "three";
-import type { World as PhysicsWorld } from "@dimforge/rapier3d-compat";
+import type { World as PhysicsWorld, ColliderDesc } from "@dimforge/rapier3d-compat";
 import type { MaterialLibrary } from "@/world/MaterialLibrary";
 import type { PropShape } from "@/constants/game";
 
@@ -21,4 +21,10 @@ export interface IPropPlacement {
     rotationY: number;
     scale: number;
     color: string;
+}
+
+export interface ICharacterModel {
+    build(materialLibrary: MaterialLibrary): Object3D;
+    colliderDesc(): ColliderDesc;
+    dispose(): void;
 }
