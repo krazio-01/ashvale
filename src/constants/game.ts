@@ -1,3 +1,5 @@
+import { vec3, pair } from "@/lib/helpers";
+
 export const PLAYER = {
     speed: 5,
     sprintSpeed: 9,
@@ -8,14 +10,14 @@ export const PLAYER = {
     unarmedDamage: 5,
     turnSmoothing: 12,
     groundedVelocityThreshold: 0.05,
-    spawnPosition: [0, 2, 6],
+    spawnPosition: vec3(0, 2, 6),
 };
 
 export const CAMERA = {
     fov: 55,
     near: 0.1,
     far: 200,
-    startPosition: [0, 8, 18],
+    startPosition: vec3(0, 8, 18),
     followDistance: 7,
     followHeight: 3.2,
     lookAtHeight: 1.2,
@@ -70,9 +72,9 @@ export const SHADING = {
 export const LIGHT = {
     hemisphereIntensity: 0.7,
     keyIntensity: 2.0,
-    keyPosition: [18, 22, 14],
+    keyPosition: vec3(18, 22, 14),
     rimIntensity: 1.4,
-    rimPosition: [-16, 10, -18],
+    rimPosition: vec3(-16, 10, -18),
     shadowMapSize: 2048,
     shadowBias: -0.0006,
     shadowExtent: 40,
@@ -80,7 +82,7 @@ export const LIGHT = {
 };
 
 export const RENDER = {
-    pixelRatioRange: [1, 1.5],
+    pixelRatioRange: pair(1, 1.5),
     toneMappingExposure: 1.35,
 };
 
@@ -110,3 +112,13 @@ export enum EnemyArchetype {
     Golem = "golem",
     Gremlin = "gremlin",
 }
+
+export const ENEMY = {
+    radius: 0.5,
+    height: 1.8,
+};
+
+export const BOSS = {
+    radius: 0.9,
+    height: 3.2,
+};
