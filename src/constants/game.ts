@@ -1,3 +1,27 @@
+export const PLAYER = {
+    speed: 5,
+    sprintSpeed: 9,
+    jumpForce: 6,
+    height: 1.7,
+    radius: 0.4,
+    maxHealth: 100,
+    unarmedDamage: 5,
+    turnSmoothing: 12,
+    groundedVelocityThreshold: 0.05,
+    spawnPosition: [0, 2, 6],
+};
+
+export const CAMERA = {
+    fov: 55,
+    near: 0.1,
+    far: 200,
+    startPosition: [0, 8, 18],
+    followDistance: 7,
+    followHeight: 3.2,
+    lookAtHeight: 1.2,
+    followSmoothing: 6,
+};
+
 export const WORLD = {
     gravity: -22,
     fogNear: 22,
@@ -32,6 +56,7 @@ export const PALETTE = {
     stoneLight: "#c2ad91",
     moss: "#6f7d55",
     ember: "#ff7a3c",
+    playerBody: "#c1503c",
     keyLight: "#ffe8cc",
     skyFill: "#6f8fd0",
     bounceFill: "#4a3b2e",
