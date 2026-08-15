@@ -1,8 +1,10 @@
 "use client";
 import dynamic from "next/dynamic";
 
-const Scene = dynamic(() => import("./Scene"), { ssr: false });
+const Scene = dynamic(() => import("./Scene/Scene"), { ssr: false });
 
-export default function GameCanvas() {
-    return <Scene />;
-}
+const GameCanvas = ({ owner, name }: { owner: string; name: string }) => (
+    <Scene owner={owner} name={name} />
+);
+
+export default GameCanvas;
