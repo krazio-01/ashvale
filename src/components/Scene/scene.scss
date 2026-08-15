@@ -1,0 +1,17 @@
+@use "../../styles/variable" as *;
+
+.scene-status {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    gap: 1rem;
+
+    p {
+        max-width: min(90%, 800px);
+        color: $color-primary;
+        font-size: 1.5rem;
+        text-align: center;
+    }
+}
