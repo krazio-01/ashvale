@@ -2,7 +2,7 @@ import { vec3, pair } from "@/lib/helpers";
 
 export const PLAYER = {
     speed: 5,
-    sprintSpeed: 9,
+    sprintSpeed: 10,
     jumpForce: 6,
     height: 1.7,
     radius: 0.4,
@@ -26,8 +26,8 @@ export const CAMERA = {
 
 export const WORLD = {
     gravity: -22,
-    fogNear: 22,
-    fogFar: 70,
+    fogNear: 35,
+    fogFar: 100,
     fixedTimestep: 1 / 60,
     maximumStepsPerFrame: 5,
     maximumFrameDelta: 0.25,
@@ -60,7 +60,7 @@ export const PALETTE = {
     ember: "#ff7a3c",
     playerBody: "#c1503c",
     keyLight: "#ffe8cc",
-    skyFill: "#6f8fd0",
+    skyFill: "#8a95b8",
     bounceFill: "#4a3b2e",
     rimLight: "#9cb8d8",
 };
@@ -93,20 +93,21 @@ export const SHADING = {
 };
 
 export const LIGHT = {
-    hemisphereIntensity: 0.7,
-    keyIntensity: 2.0,
+    hemisphereIntensity: 0.35,
+    keyIntensity: 1.7,
     keyPosition: vec3(18, 22, 14),
-    rimIntensity: 1.4,
+    rimIntensity: 0.8,
     rimPosition: vec3(-16, 10, -18),
     shadowMapSize: 2048,
     shadowBias: -0.0006,
-    shadowExtent: 40,
-    shadowFar: 80,
+    shadowExtent: 60,
+    shadowFar: 120,
 };
 
 export const RENDER = {
-    pixelRatioRange: pair(1, 1.5),
-    toneMappingExposure: 1.35,
+    pixelRatioRange: pair(1, 2),
+    multisampling: 8,
+    toneMappingExposure: 1.1,
 };
 
 export const OUTLINE = {

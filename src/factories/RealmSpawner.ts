@@ -1,97 +1,79 @@
-import type { Camera } from "three";
-import { Ground } from "@/entities/environment/Ground";
-import { Prop } from "@/entities/environment/Prop";
+import type { Camera, Vector3Tuple } from "three";
+import { Region } from "@/entities/environment/Region";
+import { Corridor } from "@/entities/environment/Corridor";
 import { Player } from "@/entities/characters/Player";
+import { CharacterBody } from "@/entities/characters/CharacterBody";
+import { bossModel } from "@/entities/characters/BossModel";
+import { spawnEnemyBody } from "@/factories/EnemySpawner";
 import type { World } from "@/world/World";
-import type { IPropPlacement } from "@/types/world";
-import { PALETTE, PropShape } from "@/constants/game";
+import type { ChapterResponse } from "@/responses/realm/RealmResponse";
+import type { IChapterRegion } from "@/types/realm";
+import { SPAWNING } from "@/constants/game";
 
-const placements: IPropPlacement[] = [
-    {
-        shape: PropShape.Pillar,
-        position: [-8, 3, -6],
-        rotationY: 0.2,
-        scale: 1,
-        color: PALETTE.stoneLight,
-    },
-    {
-        shape: PropShape.Pillar,
-        position: [8, 2.4, -9],
-        rotationY: -0.4,
-        scale: 0.8,
-        color: PALETTE.stone,
-    },
-    {
-        shape: PropShape.Pillar,
-        position: [-14, 3.6, -14],
-        rotationY: 0.7,
-        scale: 1.2,
-        color: PALETTE.stoneLight,
-    },
-    {
-        shape: PropShape.Pillar,
-        position: [13, 3, -18],
-        rotationY: -0.9,
-        scale: 1,
-        color: PALETTE.stoneDark,
-    },
-    {
-        shape: PropShape.Boulder,
-        position: [-4, 1.1, 2],
-        rotationY: 0.5,
-        scale: 0.9,
-        color: PALETTE.moss,
-    },
-    {
-        shape: PropShape.Boulder,
-        position: [5, 1.4, -2],
-        rotationY: -1.1,
-        scale: 1.2,
-        color: PALETTE.stone,
-    },
-    {
-        shape: PropShape.Boulder,
-        position: [-11, 0.9, -20],
-        rotationY: 2.2,
-        scale: 0.75,
-        color: PALETTE.moss,
-    },
-    {
-        shape: PropShape.Boulder,
-        position: [17, 1.8, -6],
-        rotationY: 1.4,
-        scale: 1.5,
-        color: PALETTE.stoneDark,
-    },
-    {
-        shape: PropShape.Slab,
-        position: [0, 0.45, -12],
-        rotationY: 0.1,
-        scale: 1.4,
-        color: PALETTE.stone,
-    },
-    {
-        shape: PropShape.Slab,
-        position: [-6, 0.4, -16],
-        rotationY: -0.6,
-        scale: 1,
-        color: PALETTE.stoneLight,
-    },
-    {
-        shape: PropShape.Slab,
-        position: [9, 0.5, 4],
-        rotationY: 1.2,
-        scale: 1.1,
-        color: PALETTE.moss,
-    },
-];
+export function spawnChapter(world: World, camera: Camera, chapter: ChapterResponse): void {
+    const positionsByRegionId = new Map<string, Vector3Tuple>();
 
-export function spawnTestRealm(world: World, camera: Camera): void {
-    world.addEntity(new Ground("ground", world.context));
+    for (const region of chapter.regions) {
+        world.addEntity(new Region(world.context, region));
+        positionsByRegionId.set(region.regionId, region.worldPosition);
+    }
 
-    placements.forEach((placement, index) => {
-        world.addEntity(new Prop(`prop-${index}`, world.context, placement));
-    });
+    for (const pathway of chapter.pathways) {
+        const fromPosition = positionsByRegionId.get(pathway.fromRegionId);
+        const toPosition = positionsByRegionId.get(pathway.toRegionId);
 
-    world.addEntity(new Player("player", world.context, camera));
+        if (!fromPosition || !toPosition) continue;
+
+        world.addEntity(new Corridor(world.context, pathway, fromPosition, toPosition));
+    }
+
+    const spawnPosition = positionsByRegionId.get(chapter.spawnRegionId);
+    if (spawnPosition) {
+        world.addEntity(
+            new Player("player", world.context, camera, [
+                spawnPosition[0],
+                spawnPosition[1] + SPAWNING.playerSpawnHeight,
+                spawnPosition[2],
+            ])
+        );
+    }
+
+    for (const region of chapter.regions) {
+        if (region.regionId === chapter.bossRegionId) continue;
+
+        const enemyCount = Math.min(
+            Math.max(Math.floor(region.fileCount / SPAWNING.filesPerEnemy), 1),
+            SPAWNING.maximumEnemiesPerRegion
+        );
+
+        for (let index = 0; index < enemyCount; index += 1) {
+            world.addEntity(
+                spawnEnemyBody(region, world.context, enemyPosition(region, index, enemyCount))
+            );
+        }
+    }
+
+    const bossPosition = positionsByRegionId.get(chapter.bossRegionId);
+    if (chapter.boss && bossPosition) {
+        world.addEntity(
+            new CharacterBody(bossModel(), world.context, [
+                bossPosition[0],
+                bossPosition[1] + SPAWNING.bossSpawnHeight,
+                bossPosition[2],
+            ])
+        );
+    }
+}
+
+function enemyPosition(region: IChapterRegion, index: number, count: number): Vector3Tuple {
+    const [width, depth] = region.floorSize;
+    const [x, y, z] = region.worldPosition;
+    const radius = Math.min(width, depth) * SPAWNING.enemyRingRadiusFactor;
+    const angle = (index / count) * Math.PI * 2;
+
+    return [
+        x + Math.cos(angle) * radius,
+        y + SPAWNING.enemySpawnHeight,
+        z + Math.sin(angle) * radius,
+    ];
 }

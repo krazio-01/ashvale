@@ -3,7 +3,7 @@ import { forwardRef, useContext, useMemo } from "react";
 import { EffectComposerContext } from "@react-three/postprocessing";
 import { OutlineEffect } from "@/world/effects/OutlineEffect";
 
-const OutlinePass = forwardRef<OutlineEffect>(function OutlinePass(_, ref) {
+const OutlinePass = forwardRef<OutlineEffect>((_, ref) => {
     const composerContext = useContext(EffectComposerContext);
     const normalBuffer = composerContext?.normalPass?.texture ?? null;
 
@@ -11,5 +11,7 @@ const OutlinePass = forwardRef<OutlineEffect>(function OutlinePass(_, ref) {
 
     return <primitive ref={ref} object={effect} dispose={null} />;
 });
+
+OutlinePass.displayName = "OutlinePass";
 
 export default OutlinePass;

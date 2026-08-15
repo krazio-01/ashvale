@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import axios, { AxiosInstance, AxiosRequestConfig, GenericAbortSignal } from "axios";
+import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
 import { IErrorResponse, ISuccessResponse } from "@/types";
 import { HttpMethod } from "@/constants/strings";
 import { ErrorWrapper } from "@/lib/ResponseWrapper";
@@ -7,6 +7,10 @@ import { ErrorWrapper } from "@/lib/ResponseWrapper";
 const axiosInstance: AxiosInstance = axios.create({ baseURL: "/api" });
 
 const UNEXPECTED_ERROR_MESSAGE = "An unexpected error occurred";
+
+export function isRequestCancellation(caughtError: unknown): boolean {
+    return axios.isCancel(caughtError);
+}
 
 function convertToErrorWrapper(caughtError: unknown): ErrorWrapper {
     if (axios.isAxiosError<IErrorResponse>(caughtError)) {
@@ -23,32 +27,14 @@ function convertToErrorWrapper(caughtError: unknown): ErrorWrapper {
     return new ErrorWrapper(UNEXPECTED_ERROR_MESSAGE);
 }
 
-function abortRequestWhenCallerAborts(
-    requestController: AbortController,
-    callerSignal?: GenericAbortSignal
-) {
-    if (!callerSignal) return;
-
-    if (callerSignal.aborted) {
-        requestController.abort();
-        return;
-    }
-
-    callerSignal.addEventListener?.("abort", () => requestController.abort(), { once: true });
-}
-
 export function useRequest() {
     const [isPending, setIsPending] = useState(false);
     const [error, setError] = useState<ErrorWrapper | null>(null);
 
-    const activeRequestsRef = useRef<Set<AbortController>>(new Set());
+    const activeControllerRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
-        const activeRequests = activeRequestsRef.current;
-        return () => {
-            for (const controller of activeRequests) controller.abort();
-            activeRequests.clear();
-        };
+        return () => activeControllerRef.current?.abort();
     }, []);
 
     const sendRequest = useCallback(
@@ -58,19 +44,16 @@ export function useRequest() {
             requestBody?: TRequestBody,
             requestConfig?: AxiosRequestConfig
         ): Promise<TResponseData> => {
-            const activeRequests = activeRequestsRef.current;
+            activeControllerRef.current?.abort();
+
             const requestController = new AbortController();
+            activeControllerRef.current = requestController;
 
-            abortRequestWhenCallerAborts(requestController, requestConfig?.signal);
-
-            activeRequests.add(requestController);
             setIsPending(true);
             setError(null);
 
             try {
-                const response = await axiosInstance.request<
-                    ISuccessResponse<TResponseData>
-                >({
+                const response = await axiosInstance.request<ISuccessResponse<TResponseData>>({
                     ...requestConfig,
                     method,
                     url,
@@ -80,14 +63,16 @@ export function useRequest() {
 
                 return response.data.data;
             } catch (caughtError) {
-                if (axios.isCancel(caughtError)) throw caughtError;
+                if (isRequestCancellation(caughtError)) throw caughtError;
 
                 const requestError = convertToErrorWrapper(caughtError);
                 setError(requestError);
                 throw requestError;
             } finally {
-                activeRequests.delete(requestController);
-                if (activeRequests.size === 0) setIsPending(false);
+                if (activeControllerRef.current === requestController) {
+                    activeControllerRef.current = null;
+                    setIsPending(false);
+                }
             }
         },
         []
