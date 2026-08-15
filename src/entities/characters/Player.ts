@@ -1,6 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { Collider, RigidBody } from "@dimforge/rapier3d-compat";
 import { CapsuleGeometry, Camera, Mesh, Vector3 } from "three";
+import type { Vector3Tuple } from "three";
 import { Character } from "@/entities/characters/Character";
 import { InputManager } from "@/input/InputManager";
 import type { IWeapon } from "@/types/entities";
@@ -29,7 +30,7 @@ export class Player extends Character implements IWorldEntity {
     private readonly collider: Collider;
     private facingYaw = 0;
 
-    constructor(id: string, context: IWorldContext, camera: Camera) {
+    constructor(id: string, context: IWorldContext, camera: Camera, spawnPosition: Vector3Tuple) {
         super(id, PLAYER.maxHealth);
 
         this.context = context;
@@ -44,7 +45,7 @@ export class Player extends Character implements IWorldEntity {
         );
         this.sceneObject.castShadow = true;
 
-        const [spawnX, spawnY, spawnZ] = PLAYER.spawnPosition;
+        const [spawnX, spawnY, spawnZ] = spawnPosition;
 
         this.rigidBody = context.physicsWorld.createRigidBody(
             RAPIER.RigidBodyDesc.dynamic()
