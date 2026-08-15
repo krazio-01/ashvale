@@ -62,7 +62,30 @@ export const PALETTE = {
     keyLight: "#ffe8cc",
     skyFill: "#6f8fd0",
     bounceFill: "#4a3b2e",
-    rimLight: "#7fb8e8",
+    rimLight: "#9cb8d8",
+};
+
+export const REGION = {
+    floorThickness: 0.4,
+    floorColorsByDepth: [PALETTE.stoneLight, PALETTE.stone, PALETTE.stoneDark, PALETTE.groundNear],
+};
+
+export const CORRIDOR = {
+    floorThickness: 0.3,
+    color: PALETTE.stone,
+};
+
+export const SPAWNING = {
+    filesPerEnemy: 8,
+    maximumEnemiesPerRegion: 4,
+    enemyRingRadiusFactor: 0.25,
+    enemySpawnHeight: 1.5,
+    playerSpawnHeight: 2,
+    bossSpawnHeight: 2.5,
+};
+
+export const BOSS = {
+    radius: 1.4,
 };
 
 export const SHADING = {
@@ -116,9 +139,4 @@ export enum EnemyArchetype {
 export const ENEMY = {
     radius: 0.5,
     height: 1.8,
-};
-
-export const BOSS = {
-    radius: 0.9,
-    height: 3.2,
 };

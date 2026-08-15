@@ -1,42 +1,42 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { Collider, RigidBody } from "@dimforge/rapier3d-compat";
-import { Mesh, PlaneGeometry } from "three";
+import { BoxGeometry, Mesh } from "three";
 import { Entity } from "@/entities/Entity";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import { GROUND, PALETTE } from "@/constants/game";
+import type { IChapterRegion } from "@/types/realm";
+import { REGION } from "@/constants/game";
 
-const QUARTER_TURN = -Math.PI / 2;
-
-export class Ground extends Entity implements IWorldEntity {
+export class Region extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;
 
     private readonly context: IWorldContext;
-    private readonly geometry: PlaneGeometry;
+    private readonly geometry: BoxGeometry;
     private readonly rigidBody: RigidBody;
     private readonly collider: Collider;
 
-    constructor(id: string, context: IWorldContext) {
-        super(id);
-
+    constructor(context: IWorldContext, region: IChapterRegion) {
+        super(region.regionId);
         this.context = context;
-        this.geometry = new PlaneGeometry(GROUND.size, GROUND.size);
 
+        const [width, depth] = region.floorSize;
+        const [x, y, z] = region.worldPosition;
+        const colorIndex = Math.min(region.nestingDepth, REGION.floorColorsByDepth.length - 1);
+
+        this.geometry = new BoxGeometry(width, REGION.floorThickness, depth);
         this.sceneObject = new Mesh(
             this.geometry,
-            context.materialLibrary.getToonMaterial(PALETTE.groundNear)
+            context.materialLibrary.getToonMaterial(REGION.floorColorsByDepth[colorIndex])
         );
-        this.sceneObject.rotation.x = QUARTER_TURN;
+        this.sceneObject.position.set(x, y, z);
+        this.sceneObject.castShadow = true;
         this.sceneObject.receiveShadow = true;
 
-        const halfSize = GROUND.size / 2;
-        const halfThickness = GROUND.thickness / 2;
-
         this.rigidBody = context.physicsWorld.createRigidBody(
-            RAPIER.RigidBodyDesc.fixed().setTranslation(0, -halfThickness, 0)
+            RAPIER.RigidBodyDesc.fixed().setTranslation(x, y, z)
         );
 
         this.collider = context.physicsWorld.createCollider(
-            RAPIER.ColliderDesc.cuboid(halfSize, halfThickness, halfSize),
+            RAPIER.ColliderDesc.cuboid(width / 2, REGION.floorThickness / 2, depth / 2),
             this.rigidBody
         );
     }
