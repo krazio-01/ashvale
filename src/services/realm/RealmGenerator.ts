@@ -78,11 +78,11 @@ export async function generateRealm(
         generationSeed: deriveSeed(repositoryOwner, repositoryName),
     };
 
-    const chapters = await Promise.all(
-        chapterSpans.map((span, chapterIndex) => buildChapter(context, chapterIndex, span))
+    const chapters = assignBossAppearanceCounts(
+        await Promise.all(
+            chapterSpans.map((span, chapterIndex) => buildChapter(context, chapterIndex, span))
+        )
     );
-
-    assignBossAppearanceCounts(chapters);
 
     return {
         realm: {
@@ -252,13 +252,22 @@ async function resolveChapterContributors(
 
         return humans.length > 0 ? humans : sampledContributors;
     } catch (error) {
+        if (isRateLimitError(error)) throw error;
+
         console.warn(`contributors unavailable for chapter ending ${span.endCommit.sha}:`, error);
 
         return [];
     }
 }
 
-function assignBossAppearanceCounts(chapters: IRealmChapter[]): void {
+function isRateLimitError(error: unknown): boolean {
+    return (
+        error instanceof ErrorWrapper &&
+        (error.statusCode === HttpStatus.FORBIDDEN || error.statusCode === HttpStatus.TOO_MANY_REQUESTS)
+    );
+}
+
+function assignBossAppearanceCounts(chapters: IRealmChapter[]): IRealmChapter[] {
     const appearanceCountByLogin = new Map<string, number>();
 
     for (const chapter of chapters) {
@@ -268,12 +277,18 @@ function assignBossAppearanceCounts(chapters: IRealmChapter[]): void {
         appearanceCountByLogin.set(chapter.boss.contributorLogin, count);
     }
 
-    for (const chapter of chapters) {
-        if (!chapter.boss) continue;
-
-        chapter.boss.chapterAppearanceCount =
-            appearanceCountByLogin.get(chapter.boss.contributorLogin) ?? 1;
-    }
+    return chapters.map((chapter) =>
+        chapter.boss === null
+            ? chapter
+            : {
+                ...chapter,
+                boss: {
+                    ...chapter.boss,
+                    chapterAppearanceCount:
+                        appearanceCountByLogin.get(chapter.boss.contributorLogin) ?? 1,
+                },
+            }
+    );
 }
 
 function resolveChapterBoss(contributors: IGithubContributor[]): IChapterBoss | null {
@@ -290,7 +305,7 @@ function resolveChapterBoss(contributors: IGithubContributor[]): IChapterBoss | 
         avatarUrl: leadContributor.avatarUrl,
         commitShare: leadContributor.sampledCommitCount / sampledCommitTotal,
         commitGapVariation: leadContributor.commitGapVariation,
-        chapterAppearanceCount: 0,
+        chapterAppearanceCount: 1,
     };
 }
 
@@ -364,8 +379,8 @@ function resolveChapterCount(totalCommitCount: number, directoryCount: number): 
     );
 }
 
-function resolveTieredChapterCount(tiers: IChapterTier[], measurement: number): number {
-    for (const tier of tiers) if (measurement < tier.upperBound) return tier.chapterCount;
+function resolveTieredChapterCount(tiers: IChapterTier[], count: number): number {
+    for (const tier of tiers) if (count < tier.upperBound) return tier.chapterCount;
 
     return CHAPTER_DESIGN.maxChapters;
 }
@@ -375,9 +390,9 @@ function deriveSeed(repositoryOwner: string, repositoryName: string): number {
     let seed = 0;
 
     for (let index = 0; index < repositoryIdentifier.length; index++)
-        seed = (seed * SEED_HASH_MULTIPLIER + repositoryIdentifier.charCodeAt(index)) | 0;
+        seed = (seed * SEED_HASH_MULTIPLIER + repositoryIdentifier.charCodeAt(index)) >>> 0;
 
-    return Math.abs(seed);
+    return seed;
 }
 
 type ChapterPosition = "founding" | "middle" | "present";

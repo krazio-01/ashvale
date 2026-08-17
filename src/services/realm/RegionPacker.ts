@@ -1,22 +1,31 @@
 import "server-only";
-import { CHAPTER_DESIGN, CORRIDOR_DESIGN, REGION_DESIGN, ROOT_REGION } from "@/constants/realm";
+import {
+    CHAPTER_DESIGN,
+    CORRIDOR_DESIGN,
+    REGION_DESIGN,
+    ROOT_REGION,
+    ROUTE_DESIGN,
+} from "@/constants/realm";
 import { IChapterRegion, IRegionPathway } from "@/types/realm";
 
 const DEFAULT_SIZE_RATIO = 0.5;
+const RIGHT_ANGLE = Math.PI / 2;
 
 export function packChapterRegions(
     directoryPaths: string[],
     filePaths: string[],
     chapterSeed: number
 ): IChapterGeometry {
-    const candidates = selectRegionCandidates(directoryPaths, filePaths);
-    const sizeRatioByPath = resolveSizeRatioByPath(candidates);
+    const selectedDirectories = selectRegionDirectories(
+        buildDirectoryTree(directoryPaths, filePaths)
+    );
+    const sizeRatioByPath = resolveSizeRatioByPath(selectedDirectories);
     const nextRandom = createSeededRandom(chapterSeed);
 
-    const regions = candidates.map((candidate) =>
+    const regions = selectedDirectories.map((directory) =>
         buildRegion(
-            candidate,
-            sizeRatioByPath.get(candidate.path) ?? DEFAULT_SIZE_RATIO,
+            directory,
+            sizeRatioByPath.get(directory.path) ?? DEFAULT_SIZE_RATIO,
             nextRandom
         )
     );
@@ -24,11 +33,8 @@ export function packChapterRegions(
     const [spawnRegion, ...regionsToPlace] = regions;
     if (!spawnRegion) throw new Error("tree produced no directories containing files");
 
-    positionRegionsInRings(spawnRegion, regionsToPlace, nextRandom);
-
-    const pathways = connectEachRegionToNearestNeighbour(regions);
+    const pathways = layoutRegionsAlongRoute(spawnRegion, regionsToPlace, nextRandom);
     assignSpawnDistances(regions, pathways, spawnRegion);
-    addLoopPathways(regions, pathways);
 
     return {
         regions,
@@ -38,134 +44,124 @@ export function packChapterRegions(
     };
 }
 
-function selectRegionCandidates(directoryPaths: string[], filePaths: string[]): IRegionCandidate[] {
-    const candidateByPath = mapCandidatesByPath(directoryPaths);
-    countFilesIntoAncestors(filePaths, candidateByPath);
+function buildDirectoryTree(directoryPaths: string[], filePaths: string[]): IDirectoryNode {
+    const rootDirectory: IDirectoryNode = {
+        path: ROOT_REGION.id,
+        displayName: ROOT_REGION.displayName,
+        nestingDepth: 0,
+        fileCount: filePaths.length,
+        children: new Map(),
+    };
 
-    return selectDisjointCandidates(candidateByPath, mapChildPathsByParent(directoryPaths));
+    for (const directoryPath of directoryPaths) insertDirectory(rootDirectory, directoryPath);
+    for (const filePath of filePaths) countFileIntoAncestors(rootDirectory, filePath);
+
+    return rootDirectory;
 }
 
-function mapCandidatesByPath(directoryPaths: string[]): Map<string, IRegionCandidate> {
-    const candidateByPath = new Map<string, IRegionCandidate>([
-        [
-            ROOT_REGION.id,
-            {
-                path: ROOT_REGION.id,
-                displayName: ROOT_REGION.displayName,
-                nestingDepth: 0,
+function insertDirectory(rootDirectory: IDirectoryNode, directoryPath: string): void {
+    let directory = rootDirectory;
+    let segmentStart = 0;
+
+    for (; ;) {
+        const separatorIndex = directoryPath.indexOf("/", segmentStart);
+        const segmentEnd = separatorIndex === -1 ? directoryPath.length : separatorIndex;
+        const segment = directoryPath.slice(segmentStart, segmentEnd);
+
+        let child = directory.children.get(segment);
+
+        if (!child) {
+            child = {
+                path: directoryPath.slice(0, segmentEnd),
+                displayName: segment,
+                nestingDepth: directory.nestingDepth + 1,
                 fileCount: 0,
-            },
-        ],
-    ]);
+                children: new Map(),
+            };
 
-    for (const directoryPath of directoryPaths) {
-        candidateByPath.set(directoryPath, {
-            path: directoryPath,
-            displayName: extractBaseName(directoryPath),
-            nestingDepth: directoryPath.split("/").length,
-            fileCount: 0,
-        });
-    }
-
-    return candidateByPath;
-}
-
-function countFilesIntoAncestors(
-    filePaths: string[],
-    candidateByPath: Map<string, IRegionCandidate>
-): void {
-    const rootCandidate = candidateByPath.get(ROOT_REGION.id);
-    if (rootCandidate) rootCandidate.fileCount = filePaths.length;
-
-    for (const filePath of filePaths) {
-        let separatorIndex = filePath.indexOf("/");
-
-        while (separatorIndex !== -1) {
-            const ancestor = candidateByPath.get(filePath.slice(0, separatorIndex));
-            if (ancestor) ancestor.fileCount++;
-
-            separatorIndex = filePath.indexOf("/", separatorIndex + 1);
+            directory.children.set(segment, child);
         }
+
+        directory = child;
+
+        if (separatorIndex === -1) return;
+        segmentStart = separatorIndex + 1;
     }
 }
 
-function mapChildPathsByParent(directoryPaths: string[]): Map<string, string[]> {
-    const childPathsByParent = new Map<string, string[]>();
+function countFileIntoAncestors(rootDirectory: IDirectoryNode, filePath: string): void {
+    let directory = rootDirectory;
+    let segmentStart = 0;
 
-    for (const directoryPath of directoryPaths) {
-        const separatorIndex = directoryPath.lastIndexOf("/");
-        const parentPath =
-            separatorIndex === -1 ? ROOT_REGION.id : directoryPath.slice(0, separatorIndex);
+    for (; ;) {
+        const separatorIndex = filePath.indexOf("/", segmentStart);
+        if (separatorIndex === -1) return;
 
-        const siblings = childPathsByParent.get(parentPath);
+        const child = directory.children.get(filePath.slice(segmentStart, separatorIndex));
+        if (!child) return;
 
-        if (siblings) siblings.push(directoryPath);
-        else childPathsByParent.set(parentPath, [directoryPath]);
+        child.fileCount++;
+        directory = child;
+        segmentStart = separatorIndex + 1;
     }
-
-    return childPathsByParent;
 }
 
-function selectDisjointCandidates(
-    candidateByPath: Map<string, IRegionCandidate>,
-    childPathsByParent: Map<string, string[]>
-): IRegionCandidate[] {
-    const rootCandidate = candidateByPath.get(ROOT_REGION.id);
-    if (!rootCandidate) return [];
-
-    const resolveChildrenHoldingFiles = (parentPath: string): IRegionCandidate[] =>
-        sortByFileCount(
-            (childPathsByParent.get(parentPath) ?? [])
-                .map((childPath) => candidateByPath.get(childPath))
-                .filter(
-                    (child): child is IRegionCandidate => child !== undefined && child.fileCount > 0
-                )
-        );
-
+function selectRegionDirectories(rootDirectory: IDirectoryNode): IDirectoryNode[] {
     const budgetBesideRoot = CHAPTER_DESIGN.regionsPerChapter - 1;
+    const directoriesWithNoSplit = new Set<IDirectoryNode>();
 
-    let selected = resolveChildrenHoldingFiles(ROOT_REGION.id).slice(0, budgetBesideRoot);
+    let selected = childrenHoldingFiles(rootDirectory).slice(0, budgetBesideRoot);
 
     while (selected.length < budgetBesideRoot) {
         const slotsForChildren = budgetBesideRoot - selected.length + 1;
 
-        const candidateToSplit = sortByFileCount(selected).find(
-            (candidate) => resolveChildrenHoldingFiles(candidate.path).length > 1
-        );
+        const directoryToSplit = sortByFileCountDescending(selected).find((directory) => {
+            if (directoriesWithNoSplit.has(directory)) return false;
+            if (childrenHoldingFiles(directory).length > 1) return true;
 
-        if (!candidateToSplit) break;
+            directoriesWithNoSplit.add(directory);
+            return false;
+        });
+
+        if (!directoryToSplit) break;
 
         selected = selected
-            .filter((candidate) => candidate !== candidateToSplit)
-            .concat(resolveChildrenHoldingFiles(candidateToSplit.path).slice(0, slotsForChildren));
+            .filter((directory) => directory !== directoryToSplit)
+            .concat(childrenHoldingFiles(directoryToSplit).slice(0, slotsForChildren));
     }
 
-    return [rootCandidate, ...sortByFileCount(selected)];
+    return [rootDirectory, ...sortByFileCountDescending(selected)];
 }
 
-function sortByFileCount(candidates: IRegionCandidate[]): IRegionCandidate[] {
-    return [...candidates].sort((first, second) =>
+function childrenHoldingFiles(directory: IDirectoryNode): IDirectoryNode[] {
+    return sortByFileCountDescending(
+        [...directory.children.values()].filter((child) => child.fileCount > 0)
+    );
+}
+
+function sortByFileCountDescending(directories: IDirectoryNode[]): IDirectoryNode[] {
+    return [...directories].sort((first, second) =>
         first.fileCount === second.fileCount
             ? first.path.localeCompare(second.path)
             : second.fileCount - first.fileCount
     );
 }
 
-function resolveSizeRatioByPath(candidates: IRegionCandidate[]): Map<string, number> {
-    const logScaled = candidates
-        .filter((candidate) => candidate.path !== ROOT_REGION.id)
-        .map((candidate) => ({
-            path: candidate.path,
-            logFileCount: Math.log(candidate.fileCount + 1),
+function resolveSizeRatioByPath(directories: IDirectoryNode[]): Map<string, number> {
+    const logFileCounts = directories
+        .filter((directory) => directory.path !== ROOT_REGION.id)
+        .map((directory) => ({
+            path: directory.path,
+            logFileCount: Math.log(directory.fileCount + 1),
         }));
 
-    const logFileCounts = logScaled.map((entry) => entry.logFileCount);
-    const smallestLog = Math.min(...logFileCounts);
-    const logRange = Math.max(...logFileCounts) - smallestLog;
+    const values = logFileCounts.map((entry) => entry.logFileCount);
+    const smallestLog = Math.min(...values);
+    const logRange = Math.max(...values) - smallestLog;
 
     return new Map([
-        [ROOT_REGION.id, 1],
-        ...logScaled.map(({ path, logFileCount }): [string, number] => [
+        [ROOT_REGION.id, REGION_DESIGN.spawnSizeRatio],
+        ...logFileCounts.map(({ path, logFileCount }): [string, number] => [
             path,
             logRange === 0 ? 1 : (logFileCount - smallestLog) / logRange,
         ]),
@@ -173,7 +169,7 @@ function resolveSizeRatioByPath(candidates: IRegionCandidate[]): Map<string, num
 }
 
 function buildRegion(
-    candidate: IRegionCandidate,
+    directory: IDirectoryNode,
     sizeRatio: number,
     nextRandom: () => number
 ): IChapterRegion {
@@ -186,8 +182,8 @@ function buildRegion(
     const aspectRatio = 1 + (nextRandom() - 0.5) * REGION_DESIGN.aspectJitter;
 
     return {
-        regionId: candidate.path,
-        displayName: candidate.displayName,
+        regionId: directory.path,
+        displayName: directory.displayName,
         worldPosition: [0, 0, 0],
         floorSize: [footprint * aspectRatio, footprint / aspectRatio],
         wallHeight: scaleBetween(
@@ -195,68 +191,234 @@ function buildRegion(
             REGION_DESIGN.maxWallHeight,
             sizeRatio
         ),
-        nestingDepth: candidate.nestingDepth,
+        nestingDepth: directory.nestingDepth,
         spawnDistance: 0,
-        fileCount: candidate.fileCount,
+        fileCount: directory.fileCount,
     };
 }
 
-function positionRegionsInRings(
+function layoutRegionsAlongRoute(
     spawnRegion: IChapterRegion,
     regionsToPlace: IChapterRegion[],
     nextRandom: () => number
-): void {
-    if (regionsToPlace.length === 0) return;
+): IRegionPathway[] {
+    if (regionsToPlace.length === 0) return [];
 
-    shuffleInPlace(regionsToPlace, nextRandom);
+    const regionsAscendingByFileCount = [...regionsToPlace].sort((first, second) =>
+        first.fileCount === second.fileCount
+            ? first.regionId.localeCompare(second.regionId)
+            : first.fileCount - second.fileCount
+    );
 
-    const largestHalfExtent = Math.max(...regionsToPlace.map(resolveHalfExtent));
-    const minimumSpacing = largestHalfExtent * 2 + REGION_DESIGN.ringGap;
-    const radiusJitter = REGION_DESIGN.ringGap * REGION_DESIGN.ringJitterRatio;
+    const sideRoomCount = Math.min(
+        ROUTE_DESIGN.sideRoomCount,
+        Math.max(0, regionsAscendingByFileCount.length - ROUTE_DESIGN.minimumRouteRegions)
+    );
 
-    let ringRadius = resolveHalfExtent(spawnRegion) + REGION_DESIGN.ringGap + largestHalfExtent;
-    let unplacedRegions = regionsToPlace;
+    const sideRooms = regionsAscendingByFileCount.slice(0, sideRoomCount);
+    const route = [spawnRegion, ...regionsAscendingByFileCount.slice(sideRoomCount)];
 
-    while (unplacedRegions.length > 0) {
-        const minimumAngularStep = 2 * Math.asin(Math.min(1, minimumSpacing / (2 * ringRadius)));
-        const ringCapacity = Math.max(1, Math.floor((Math.PI * 2) / minimumAngularStep));
+    placeRouteRegions(route, nextRandom);
 
-        let countOnRing = Math.min(ringCapacity, unplacedRegions.length);
-        if (unplacedRegions.length - countOnRing === 1 && countOnRing > 1) countOnRing--;
+    return [...connectRouteRegions(route), ...placeSideRooms(sideRooms, route, nextRandom)];
+}
 
-        const angularStep = (Math.PI * 2) / countOnRing;
-        const angularSlack = Math.max(0, angularStep - minimumAngularStep);
-        const ringRotation = nextRandom() * Math.PI * 2;
+function placeRouteRegions(route: IChapterRegion[], nextRandom: () => number): void {
+    let heading = nextRandom() * Math.PI * 2;
 
-        unplacedRegions.slice(0, countOnRing).forEach((region, indexOnRing) => {
-            const angle =
-                ringRotation + indexOnRing * angularStep + (nextRandom() - 0.5) * angularSlack;
-            const radius = ringRadius + (nextRandom() - 0.5) * radiusJitter * 2;
+    for (let index = 1; index < route.length; index++) {
+        const previousRegion = route[index - 1];
+        const currentRegion = route[index];
+        if (!previousRegion || !currentRegion) continue;
 
-            region.worldPosition = [Math.cos(angle) * radius, 0, Math.sin(angle) * radius];
-        });
-
-        unplacedRegions = unplacedRegions.slice(countOnRing);
-        ringRadius += minimumSpacing;
+        heading = placeNextRouteRegion(
+            currentRegion,
+            previousRegion,
+            heading,
+            route.slice(0, index - 1),
+            nextRandom
+        );
     }
 }
 
-function connectEachRegionToNearestNeighbour(regions: IChapterRegion[]): IRegionPathway[] {
+function placeNextRouteRegion(
+    region: IChapterRegion,
+    anchorRegion: IChapterRegion,
+    heading: number,
+    regionsToAvoid: IChapterRegion[],
+    nextRandom: () => number
+): number {
+    const spacing =
+        resolveFootprintRadius(anchorRegion) +
+        REGION_DESIGN.regionGap +
+        resolveFootprintRadius(region);
+
+    for (let attempt = 0; attempt < ROUTE_DESIGN.placementAttempts; attempt++) {
+        const candidateHeading = heading + (nextRandom() - 0.5) * 2 * ROUTE_DESIGN.maxTurnAngle;
+
+        region.worldPosition = resolveOffsetPosition(anchorRegion, candidateHeading, spacing);
+        if (isClearOfRegions(region, regionsToAvoid)) return candidateHeading;
+    }
+
+    region.worldPosition = resolveOffsetPosition(anchorRegion, heading, spacing);
+
+    return heading;
+}
+
+function connectRouteRegions(route: IChapterRegion[]): IRegionPathway[] {
     const pathways: IRegionPathway[] = [];
-    const placedRegions: IChapterRegion[] = [];
 
-    for (const region of regions) {
-        const nearestRegion =
-            resolveNearestRegion(region, placedRegions, (neighbour) =>
-                isCorridorClear(region, neighbour, regions)
-            ) ?? resolveNearestRegion(region, placedRegions, () => true);
+    for (let index = 1; index < route.length; index++) {
+        const previousRegion = route[index - 1];
+        const currentRegion = route[index];
 
-        if (nearestRegion) pathways.push(buildPathway(nearestRegion, region));
-
-        placedRegions.push(region);
+        if (previousRegion && currentRegion)
+            pathways.push(buildPathway(previousRegion, currentRegion));
     }
 
     return pathways;
+}
+
+function placeSideRooms(
+    sideRooms: IChapterRegion[],
+    route: IChapterRegion[],
+    nextRandom: () => number
+): IRegionPathway[] {
+    const pathways: IRegionPathway[] = [];
+    const placedRegions = [...route];
+    const hostRegions = route.slice(1, -2);
+
+    for (const sideRoom of sideRooms) {
+        const hostRegion = hostRegions[Math.floor(nextRandom() * hostRegions.length)];
+        if (!hostRegion) continue;
+
+        placeBesideHost(
+            sideRoom,
+            hostRegion,
+            resolveRouteHeadingAt(hostRegion, route),
+            placedRegions,
+            nextRandom
+        );
+
+        placedRegions.push(sideRoom);
+        pathways.push(buildPathway(hostRegion, sideRoom));
+    }
+
+    return pathways;
+}
+
+function placeBesideHost(
+    sideRoom: IChapterRegion,
+    hostRegion: IChapterRegion,
+    routeHeading: number,
+    placedRegions: IChapterRegion[],
+    nextRandom: () => number
+): void {
+    const baseSpacing =
+        resolveFootprintRadius(hostRegion) +
+        REGION_DESIGN.regionGap +
+        resolveFootprintRadius(sideRoom);
+    const regionsToAvoid = placedRegions.filter((region) => region !== hostRegion);
+
+    for (let attempt = 0; attempt < ROUTE_DESIGN.placementAttempts; attempt++) {
+        const turnDirection = nextRandom() < 0.5 ? 1 : -1;
+        const heading =
+            routeHeading +
+            turnDirection * RIGHT_ANGLE +
+            (nextRandom() - 0.5) * ROUTE_DESIGN.maxTurnAngle;
+        const spacing = baseSpacing * (1 + attempt * ROUTE_DESIGN.spacingGrowthPerAttempt);
+
+        sideRoom.worldPosition = resolveOffsetPosition(hostRegion, heading, spacing);
+
+        if (
+            isClearOfRegions(sideRoom, regionsToAvoid) &&
+            isCorridorClear(hostRegion, sideRoom, regionsToAvoid)
+        )
+            return;
+    }
+}
+
+function resolveRouteHeadingAt(hostRegion: IChapterRegion, route: IChapterRegion[]): number {
+    const hostIndex = route.indexOf(hostRegion);
+    const previousRegion = route[hostIndex - 1] ?? hostRegion;
+    const nextRegion = route[hostIndex + 1] ?? hostRegion;
+
+    return Math.atan2(
+        nextRegion.worldPosition[2] - previousRegion.worldPosition[2],
+        nextRegion.worldPosition[0] - previousRegion.worldPosition[0]
+    );
+}
+
+function isClearOfRegions(region: IChapterRegion, regionsToAvoid: IChapterRegion[]): boolean {
+    for (const other of regionsToAvoid) {
+        const requiredSeparation =
+            resolveFootprintRadius(region) +
+            resolveFootprintRadius(other) +
+            REGION_DESIGN.regionGap;
+
+        if (horizontalDistanceBetween(region, other) < requiredSeparation) return false;
+    }
+
+    return true;
+}
+
+function isCorridorClear(
+    fromRegion: IChapterRegion,
+    toRegion: IChapterRegion,
+    regionsToAvoid: IChapterRegion[]
+): boolean {
+    for (const region of regionsToAvoid) {
+        if (region === fromRegion || region === toRegion) continue;
+
+        const requiredSeparation =
+            resolveFootprintRadius(region) +
+            CORRIDOR_DESIGN.maxWidth / 2 +
+            ROUTE_DESIGN.corridorClearance;
+
+        if (distanceFromRegionToCorridor(region, fromRegion, toRegion) < requiredSeparation)
+            return false;
+    }
+
+    return true;
+}
+
+function distanceFromRegionToCorridor(
+    region: IChapterRegion,
+    fromRegion: IChapterRegion,
+    toRegion: IChapterRegion
+): number {
+    const [regionX, , regionZ] = region.worldPosition;
+    const [fromX, , fromZ] = fromRegion.worldPosition;
+    const [toX, , toZ] = toRegion.worldPosition;
+
+    const spanX = toX - fromX;
+    const spanZ = toZ - fromZ;
+    const spanLengthSquared = spanX * spanX + spanZ * spanZ;
+
+    if (spanLengthSquared === 0) return Math.hypot(regionX - fromX, regionZ - fromZ);
+
+    const projection = clamp(
+        ((regionX - fromX) * spanX + (regionZ - fromZ) * spanZ) / spanLengthSquared,
+        0,
+        1
+    );
+
+    return Math.hypot(
+        regionX - (fromX + projection * spanX),
+        regionZ - (fromZ + projection * spanZ)
+    );
+}
+
+function resolveOffsetPosition(
+    originRegion: IChapterRegion,
+    heading: number,
+    distance: number
+): [number, number, number] {
+    return [
+        originRegion.worldPosition[0] + Math.cos(heading) * distance,
+        0,
+        originRegion.worldPosition[2] + Math.sin(heading) * distance,
+    ];
 }
 
 function assignSpawnDistances(
@@ -298,128 +460,21 @@ function assignSpawnDistances(
     }
 }
 
-function addLoopPathways(regions: IChapterRegion[], pathways: IRegionPathway[]): void {
-    const connectedPairKeys = new Set(
-        pathways.map((pathway) => buildPairKey(pathway.fromRegionId, pathway.toRegionId))
-    );
-
-    const unconnectedPairs: IRegionPair[] = [];
-
-    for (const [firstIndex, first] of regions.entries()) {
-        for (const second of regions.slice(firstIndex + 1)) {
-            if (connectedPairKeys.has(buildPairKey(first.regionId, second.regionId))) continue;
-            if (Math.abs(first.spawnDistance - second.spawnDistance) > 1) continue;
-
-            unconnectedPairs.push({
-                first,
-                second,
-                distance: horizontalDistanceBetween(first, second),
-            });
-        }
-    }
-
-    unconnectedPairs.sort((firstPair, secondPair) =>
-        firstPair.distance === secondPair.distance
-            ? firstPair.first.regionId.localeCompare(secondPair.first.regionId)
-            : firstPair.distance - secondPair.distance
-    );
-
-    let loopsAdded = 0;
-
-    for (const pair of unconnectedPairs) {
-        if (loopsAdded === CORRIDOR_DESIGN.loopPathwayCount) break;
-        if (!isCorridorClear(pair.first, pair.second, regions)) continue;
-
-        pathways.push(buildPathway(pair.first, pair.second));
-        loopsAdded++;
-    }
-}
-
-function resolveNearestRegion(
-    region: IChapterRegion,
-    neighbours: IChapterRegion[],
-    isAcceptable: (neighbour: IChapterRegion) => boolean
-): IChapterRegion | null {
-    let nearestRegion: IChapterRegion | null = null;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-
-    for (const neighbour of neighbours) {
-        const distance = horizontalDistanceBetween(region, neighbour);
-
-        if (distance >= nearestDistance) continue;
-        if (!isAcceptable(neighbour)) continue;
-
-        nearestDistance = distance;
-        nearestRegion = neighbour;
-    }
-
-    return nearestRegion;
-}
-
-function isCorridorClear(
-    from: IChapterRegion,
-    to: IChapterRegion,
-    regions: IChapterRegion[]
-): boolean {
-    for (const region of regions) {
-        if (region === from || region === to) continue;
-
-        const clearance = resolveHalfExtent(region) + CORRIDOR_DESIGN.maxWidth / 2;
-
-        if (distanceFromRegionToCorridor(region, from, to) < clearance) return false;
-    }
-
-    return true;
-}
-
-function distanceFromRegionToCorridor(
-    region: IChapterRegion,
-    from: IChapterRegion,
-    to: IChapterRegion
-): number {
-    const [regionX, , regionZ] = region.worldPosition;
-    const [fromX, , fromZ] = from.worldPosition;
-    const [toX, , toZ] = to.worldPosition;
-
-    const spanX = toX - fromX;
-    const spanZ = toZ - fromZ;
-    const spanLengthSquared = spanX * spanX + spanZ * spanZ;
-
-    if (spanLengthSquared === 0) return Math.hypot(regionX - fromX, regionZ - fromZ);
-
-    const projection = clamp(
-        ((regionX - fromX) * spanX + (regionZ - fromZ) * spanZ) / spanLengthSquared,
-        0,
-        1
-    );
-
-    return Math.hypot(
-        regionX - (fromX + projection * spanX),
-        regionZ - (fromZ + projection * spanZ)
-    );
-}
-
-function buildPathway(from: IChapterRegion, to: IChapterRegion): IRegionPathway {
+function buildPathway(fromRegion: IChapterRegion, toRegion: IChapterRegion): IRegionPathway {
     return {
-        fromRegionId: from.regionId,
-        toRegionId: to.regionId,
+        fromRegionId: fromRegion.regionId,
+        toRegionId: toRegion.regionId,
         corridorWidth: clamp(
-            Math.min(from.floorSize[0], to.floorSize[0]) * CORRIDOR_DESIGN.widthRatio,
+            Math.min(fromRegion.floorSize[0], toRegion.floorSize[0]) * CORRIDOR_DESIGN.widthRatio,
             CORRIDOR_DESIGN.minWidth,
             CORRIDOR_DESIGN.maxWidth
         ),
     };
 }
 
-function buildPairKey(firstRegionId: string, secondRegionId: string): string {
-    return firstRegionId < secondRegionId
-        ? `${firstRegionId}|${secondRegionId}`
-        : `${secondRegionId}|${firstRegionId}`;
-}
-
 function resolveBossRegionId(regions: IChapterRegion[], spawnRegion: IChapterRegion): string {
-    const contenders = regions.filter((region) => region !== spawnRegion);
-    if (contenders.length === 0) return spawnRegion.regionId;
+    const candidateRegions = regions.filter((region) => region !== spawnRegion);
+    if (candidateRegions.length === 0) return spawnRegion.regionId;
 
     const minimumFootprint = scaleBetween(
         REGION_DESIGN.minFootprint,
@@ -427,21 +482,26 @@ function resolveBossRegionId(regions: IChapterRegion[], spawnRegion: IChapterReg
         REGION_DESIGN.objectiveFootprintRatio
     );
 
-    const spacious = contenders.filter(
-        (region) => resolveHalfExtent(region) * 2 >= minimumFootprint
+    const regionsLargeEnoughForBoss = candidateRegions.filter(
+        (region) => resolveFootprintRadius(region) * 2 >= minimumFootprint
     );
 
-    const eligible = spacious.length > 0 ? spacious : contenders;
-    const deepestDistance = Math.max(...eligible.map((region) => region.spawnDistance));
+    const eligibleRegions =
+        regionsLargeEnoughForBoss.length > 0 ? regionsLargeEnoughForBoss : candidateRegions;
+    const farthestSpawnDistance = Math.max(
+        ...eligibleRegions.map((region) => region.spawnDistance)
+    );
 
     let bossRegion = spawnRegion;
-    let farthestDistance = -1;
+    let farthestWorldDistance = -1;
 
-    for (const region of eligible) {
-        if (region.spawnDistance !== deepestDistance) continue;
-        const distance = horizontalDistanceBetween(region, spawnRegion);
-        if (distance <= farthestDistance) continue;
-        farthestDistance = distance;
+    for (const region of eligibleRegions) {
+        if (region.spawnDistance !== farthestSpawnDistance) continue;
+
+        const worldDistance = horizontalDistanceBetween(region, spawnRegion);
+        if (worldDistance <= farthestWorldDistance) continue;
+
+        farthestWorldDistance = worldDistance;
         bossRegion = region;
     }
 
@@ -455,12 +515,8 @@ function horizontalDistanceBetween(first: IChapterRegion, second: IChapterRegion
     return Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
 }
 
-function resolveHalfExtent(region: IChapterRegion): number {
+function resolveFootprintRadius(region: IChapterRegion): number {
     return Math.max(region.floorSize[0], region.floorSize[1]) / 2;
-}
-
-function extractBaseName(path: string): string {
-    return path.slice(path.lastIndexOf("/") + 1);
 }
 
 function scaleBetween(minimum: number, maximum: number, ratio: number): number {
@@ -469,19 +525,6 @@ function scaleBetween(minimum: number, maximum: number, ratio: number): number {
 
 function clamp(value: number, minimum: number, maximum: number): number {
     return Math.min(maximum, Math.max(minimum, value));
-}
-
-function shuffleInPlace<T>(items: T[], nextRandom: () => number): void {
-    for (let index = items.length - 1; index > 0; index--) {
-        const swapIndex = Math.floor(nextRandom() * (index + 1));
-
-        const current = items[index];
-        const target = items[swapIndex];
-        if (current === undefined || target === undefined) continue;
-
-        items[index] = target;
-        items[swapIndex] = current;
-    }
 }
 
 function createSeededRandom(seed: number): () => number {
@@ -503,15 +546,10 @@ export interface IChapterGeometry {
     bossRegionId: string;
 }
 
-interface IRegionCandidate {
+interface IDirectoryNode {
     path: string;
     displayName: string;
     nestingDepth: number;
     fileCount: number;
-}
-
-interface IRegionPair {
-    first: IChapterRegion;
-    second: IChapterRegion;
-    distance: number;
+    children: Map<string, IDirectoryNode>;
 }

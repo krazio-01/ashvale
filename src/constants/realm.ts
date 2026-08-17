@@ -25,16 +25,24 @@ export const REGION_DESIGN = {
     aspectJitter: 0.3,
     minWallHeight: 5,
     maxWallHeight: 16,
-    ringGap: 14,
-    ringJitterRatio: 0.25,
+    regionGap: 14,
     objectiveFootprintRatio: 0.5,
+    spawnSizeRatio: 0.35,
+};
+
+export const ROUTE_DESIGN = {
+    sideRoomCount: 2,
+    minimumRouteRegions: 3,
+    maxTurnAngle: Math.PI / 3,
+    placementAttempts: 12,
+    spacingGrowthPerAttempt: 0.25,
+    corridorClearance: 1.5,
 };
 
 export const CORRIDOR_DESIGN = {
     minWidth: 4,
     maxWidth: 11,
     widthRatio: 0.4,
-    loopPathwayCount: 2,
 };
 
 export const ROOT_REGION = {
