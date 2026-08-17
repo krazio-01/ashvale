@@ -23,7 +23,11 @@ export function packChapterRegions(
     const nextRandom = createSeededRandom(chapterSeed);
 
     const regions = selectedDirectories.map((directory) =>
-        buildRegion(directory, sizeRatioByPath.get(directory.path) ?? DEFAULT_SIZE_RATIO, nextRandom)
+        buildRegion(
+            directory,
+            sizeRatioByPath.get(directory.path) ?? DEFAULT_SIZE_RATIO,
+            nextRandom
+        )
     );
 
     const [spawnRegion, ...regionsToPlace] = regions;
@@ -156,7 +160,7 @@ function resolveSizeRatioByPath(directories: IDirectoryNode[]): Map<string, numb
     const logRange = Math.max(...values) - smallestLog;
 
     return new Map([
-        [ROOT_REGION.id, 1],
+        [ROOT_REGION.id, REGION_DESIGN.spawnSizeRatio],
         ...logFileCounts.map(({ path, logFileCount }): [string, number] => [
             path,
             logRange === 0 ? 1 : (logFileCount - smallestLog) / logRange,
@@ -268,7 +272,8 @@ function connectRouteRegions(route: IChapterRegion[]): IRegionPathway[] {
         const previousRegion = route[index - 1];
         const currentRegion = route[index];
 
-        if (previousRegion && currentRegion) pathways.push(buildPathway(previousRegion, currentRegion));
+        if (previousRegion && currentRegion)
+            pathways.push(buildPathway(previousRegion, currentRegion));
     }
 
     return pathways;
@@ -324,7 +329,12 @@ function placeBesideHost(
         const spacing = baseSpacing * (1 + attempt * ROUTE_DESIGN.spacingGrowthPerAttempt);
 
         sideRoom.worldPosition = resolveOffsetPosition(hostRegion, heading, spacing);
-        if (isClearOfRegions(sideRoom, regionsToAvoid)) return;
+
+        if (
+            isClearOfRegions(sideRoom, regionsToAvoid) &&
+            isCorridorClear(hostRegion, sideRoom, regionsToAvoid)
+        )
+            return;
     }
 }
 
@@ -350,6 +360,53 @@ function isClearOfRegions(region: IChapterRegion, regionsToAvoid: IChapterRegion
     }
 
     return true;
+}
+
+function isCorridorClear(
+    fromRegion: IChapterRegion,
+    toRegion: IChapterRegion,
+    regionsToAvoid: IChapterRegion[]
+): boolean {
+    for (const region of regionsToAvoid) {
+        if (region === fromRegion || region === toRegion) continue;
+
+        const requiredSeparation =
+            resolveFootprintRadius(region) +
+            CORRIDOR_DESIGN.maxWidth / 2 +
+            ROUTE_DESIGN.corridorClearance;
+
+        if (distanceFromRegionToCorridor(region, fromRegion, toRegion) < requiredSeparation)
+            return false;
+    }
+
+    return true;
+}
+
+function distanceFromRegionToCorridor(
+    region: IChapterRegion,
+    fromRegion: IChapterRegion,
+    toRegion: IChapterRegion
+): number {
+    const [regionX, , regionZ] = region.worldPosition;
+    const [fromX, , fromZ] = fromRegion.worldPosition;
+    const [toX, , toZ] = toRegion.worldPosition;
+
+    const spanX = toX - fromX;
+    const spanZ = toZ - fromZ;
+    const spanLengthSquared = spanX * spanX + spanZ * spanZ;
+
+    if (spanLengthSquared === 0) return Math.hypot(regionX - fromX, regionZ - fromZ);
+
+    const projection = clamp(
+        ((regionX - fromX) * spanX + (regionZ - fromZ) * spanZ) / spanLengthSquared,
+        0,
+        1
+    );
+
+    return Math.hypot(
+        regionX - (fromX + projection * spanX),
+        regionZ - (fromZ + projection * spanZ)
+    );
 }
 
 function resolveOffsetPosition(
