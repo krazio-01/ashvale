@@ -30,7 +30,7 @@ export const REGION_DESIGN = {
     spawnSizeRatio: 0.35,
 };
 
-export const PATH_DESIGN = {
+export const ROUTE_DESIGN = {
     sideRoomCount: 2,
     minimumRouteRegions: 3,
     maxTurnAngle: Math.PI / 3,
