@@ -1,8 +1,15 @@
 import "server-only";
-import { CHAPTER_DESIGN, CORRIDOR_DESIGN, REGION_DESIGN, ROOT_REGION } from "@/constants/realm";
+import {
+    CHAPTER_DESIGN,
+    CORRIDOR_DESIGN,
+    PATH_DESIGN,
+    REGION_DESIGN,
+    ROOT_REGION,
+} from "@/constants/realm";
 import { IChapterRegion, IRegionPathway } from "@/types/realm";
 
 const DEFAULT_SIZE_RATIO = 0.5;
+const RIGHT_ANGLE = Math.PI / 2;
 
 export function packChapterRegions(
     directoryPaths: string[],
@@ -24,11 +31,8 @@ export function packChapterRegions(
     const [spawnRegion, ...regionsToPlace] = regions;
     if (!spawnRegion) throw new Error("tree produced no directories containing files");
 
-    positionRegionsInRings(spawnRegion, regionsToPlace, nextRandom);
-
-    const pathways = connectEachRegionToNearestNeighbour(regions);
+    const pathways = layoutRegionsAlongSpine(spawnRegion, regionsToPlace, nextRandom);
     assignSpawnDistances(regions, pathways, spawnRegion);
-    addLoopPathways(regions, pathways);
 
     return {
         regions,
@@ -201,62 +205,166 @@ function buildRegion(
     };
 }
 
-function positionRegionsInRings(
+function layoutRegionsAlongSpine(
     spawnRegion: IChapterRegion,
     regionsToPlace: IChapterRegion[],
     nextRandom: () => number
-): void {
-    if (regionsToPlace.length === 0) return;
+): IRegionPathway[] {
+    if (regionsToPlace.length === 0) return [];
 
-    shuffleInPlace(regionsToPlace, nextRandom);
+    const ascendingBySize = [...regionsToPlace].sort((first, second) =>
+        first.fileCount === second.fileCount
+            ? first.regionId.localeCompare(second.regionId)
+            : first.fileCount - second.fileCount
+    );
 
-    const largestHalfExtent = Math.max(...regionsToPlace.map(resolveHalfExtent));
-    const minimumSpacing = largestHalfExtent * 2 + REGION_DESIGN.ringGap;
-    const radiusJitter = REGION_DESIGN.ringGap * REGION_DESIGN.ringJitterRatio;
+    const sideRoomCount = Math.min(
+        PATH_DESIGN.sideRoomCount,
+        Math.max(0, ascendingBySize.length - PATH_DESIGN.minimumSpineRegions)
+    );
 
-    let ringRadius = resolveHalfExtent(spawnRegion) + REGION_DESIGN.ringGap + largestHalfExtent;
-    let unplacedRegions = regionsToPlace;
+    const sideRooms = ascendingBySize.slice(0, sideRoomCount);
+    const spine = [spawnRegion, ...ascendingBySize.slice(sideRoomCount)];
 
-    while (unplacedRegions.length > 0) {
-        const minimumAngularStep = 2 * Math.asin(Math.min(1, minimumSpacing / (2 * ringRadius)));
-        const ringCapacity = Math.max(1, Math.floor((Math.PI * 2) / minimumAngularStep));
+    placeSpineRegions(spine, nextRandom);
 
-        let countOnRing = Math.min(ringCapacity, unplacedRegions.length);
-        if (unplacedRegions.length - countOnRing === 1 && countOnRing > 1) countOnRing--;
+    return [...buildSpinePathways(spine), ...placeSideRooms(sideRooms, spine, nextRandom)];
+}
 
-        const angularStep = (Math.PI * 2) / countOnRing;
-        const angularSlack = Math.max(0, angularStep - minimumAngularStep);
-        const ringRotation = nextRandom() * Math.PI * 2;
+function placeSpineRegions(spine: IChapterRegion[], nextRandom: () => number): void {
+    let heading = nextRandom() * Math.PI * 2;
 
-        unplacedRegions.slice(0, countOnRing).forEach((region, indexOnRing) => {
-            const angle =
-                ringRotation + indexOnRing * angularStep + (nextRandom() - 0.5) * angularSlack;
-            const radius = ringRadius + (nextRandom() - 0.5) * radiusJitter * 2;
+    for (let index = 1; index < spine.length; index++) {
+        const previous = spine[index - 1];
+        const current = spine[index];
+        if (!previous || !current) continue;
 
-            region.worldPosition = [Math.cos(angle) * radius, 0, Math.sin(angle) * radius];
-        });
-
-        unplacedRegions = unplacedRegions.slice(countOnRing);
-        ringRadius += minimumSpacing;
+        heading = placeAlongHeading(
+            current,
+            previous,
+            heading,
+            spine.slice(0, index - 1),
+            nextRandom
+        );
     }
 }
 
-function connectEachRegionToNearestNeighbour(regions: IChapterRegion[]): IRegionPathway[] {
+function placeAlongHeading(
+    region: IChapterRegion,
+    anchor: IChapterRegion,
+    heading: number,
+    obstacles: IChapterRegion[],
+    nextRandom: () => number
+): number {
+    const spacing = resolveHalfExtent(anchor) + REGION_DESIGN.regionGap + resolveHalfExtent(region);
+
+    for (let attempt = 0; attempt < PATH_DESIGN.placementAttempts; attempt++) {
+        const candidateHeading = heading + (nextRandom() - 0.5) * 2 * PATH_DESIGN.maxTurnAngle;
+
+        region.worldPosition = offsetPosition(anchor, candidateHeading, spacing);
+        if (isClearOfRegions(region, obstacles)) return candidateHeading;
+    }
+
+    region.worldPosition = offsetPosition(anchor, heading, spacing);
+
+    return heading;
+}
+
+function buildSpinePathways(spine: IChapterRegion[]): IRegionPathway[] {
     const pathways: IRegionPathway[] = [];
-    const placedRegions: IChapterRegion[] = [];
 
-    for (const region of regions) {
-        const nearestRegion =
-            resolveNearestRegion(region, placedRegions, (neighbour) =>
-                isCorridorClear(region, neighbour, regions)
-            ) ?? resolveNearestRegion(region, placedRegions, () => true);
+    for (let index = 1; index < spine.length; index++) {
+        const previous = spine[index - 1];
+        const current = spine[index];
 
-        if (nearestRegion) pathways.push(buildPathway(nearestRegion, region));
-
-        placedRegions.push(region);
+        if (previous && current) pathways.push(buildPathway(previous, current));
     }
 
     return pathways;
+}
+
+function placeSideRooms(
+    sideRooms: IChapterRegion[],
+    spine: IChapterRegion[],
+    nextRandom: () => number
+): IRegionPathway[] {
+    const pathways: IRegionPathway[] = [];
+    const placedRegions = [...spine];
+    const hosts = spine.slice(1, -2);
+
+    for (const sideRoom of sideRooms) {
+        const host = hosts[Math.floor(nextRandom() * hosts.length)];
+        if (!host) continue;
+
+        placeBesideHost(
+            sideRoom,
+            host,
+            resolveSpineHeadingAt(host, spine),
+            placedRegions,
+            nextRandom
+        );
+
+        placedRegions.push(sideRoom);
+        pathways.push(buildPathway(host, sideRoom));
+    }
+
+    return pathways;
+}
+
+function placeBesideHost(
+    sideRoom: IChapterRegion,
+    host: IChapterRegion,
+    spineHeading: number,
+    placedRegions: IChapterRegion[],
+    nextRandom: () => number
+): void {
+    const baseSpacing =
+        resolveHalfExtent(host) + REGION_DESIGN.regionGap + resolveHalfExtent(sideRoom);
+    const obstacles = placedRegions.filter((region) => region !== host);
+
+    for (let attempt = 0; attempt < PATH_DESIGN.placementAttempts; attempt++) {
+        const side = nextRandom() < 0.5 ? 1 : -1;
+        const heading =
+            spineHeading + side * RIGHT_ANGLE + (nextRandom() - 0.5) * PATH_DESIGN.maxTurnAngle;
+        const spacing = baseSpacing * (1 + attempt * PATH_DESIGN.spacingGrowthPerAttempt);
+
+        sideRoom.worldPosition = offsetPosition(host, heading, spacing);
+        if (isClearOfRegions(sideRoom, obstacles)) return;
+    }
+}
+
+function resolveSpineHeadingAt(host: IChapterRegion, spine: IChapterRegion[]): number {
+    const hostIndex = spine.indexOf(host);
+    const previous = spine[hostIndex - 1] ?? host;
+    const next = spine[hostIndex + 1] ?? host;
+
+    return Math.atan2(
+        next.worldPosition[2] - previous.worldPosition[2],
+        next.worldPosition[0] - previous.worldPosition[0]
+    );
+}
+
+function isClearOfRegions(region: IChapterRegion, obstacles: IChapterRegion[]): boolean {
+    for (const obstacle of obstacles) {
+        const requiredSeparation =
+            resolveHalfExtent(region) + resolveHalfExtent(obstacle) + REGION_DESIGN.regionGap;
+
+        if (horizontalDistanceBetween(region, obstacle) < requiredSeparation) return false;
+    }
+
+    return true;
+}
+
+function offsetPosition(
+    origin: IChapterRegion,
+    heading: number,
+    distance: number
+): [number, number, number] {
+    return [
+        origin.worldPosition[0] + Math.cos(heading) * distance,
+        0,
+        origin.worldPosition[2] + Math.sin(heading) * distance,
+    ];
 }
 
 function assignSpawnDistances(
@@ -298,107 +406,6 @@ function assignSpawnDistances(
     }
 }
 
-function addLoopPathways(regions: IChapterRegion[], pathways: IRegionPathway[]): void {
-    const connectedPairKeys = new Set(
-        pathways.map((pathway) => buildPairKey(pathway.fromRegionId, pathway.toRegionId))
-    );
-
-    const unconnectedPairs: IRegionPair[] = [];
-
-    for (const [firstIndex, first] of regions.entries()) {
-        for (const second of regions.slice(firstIndex + 1)) {
-            if (connectedPairKeys.has(buildPairKey(first.regionId, second.regionId))) continue;
-            if (Math.abs(first.spawnDistance - second.spawnDistance) > 1) continue;
-
-            unconnectedPairs.push({
-                first,
-                second,
-                distance: horizontalDistanceBetween(first, second),
-            });
-        }
-    }
-
-    unconnectedPairs.sort((firstPair, secondPair) =>
-        firstPair.distance === secondPair.distance
-            ? firstPair.first.regionId.localeCompare(secondPair.first.regionId)
-            : firstPair.distance - secondPair.distance
-    );
-
-    let loopsAdded = 0;
-
-    for (const pair of unconnectedPairs) {
-        if (loopsAdded === CORRIDOR_DESIGN.loopPathwayCount) break;
-        if (!isCorridorClear(pair.first, pair.second, regions)) continue;
-
-        pathways.push(buildPathway(pair.first, pair.second));
-        loopsAdded++;
-    }
-}
-
-function resolveNearestRegion(
-    region: IChapterRegion,
-    neighbours: IChapterRegion[],
-    isAcceptable: (neighbour: IChapterRegion) => boolean
-): IChapterRegion | null {
-    let nearestRegion: IChapterRegion | null = null;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-
-    for (const neighbour of neighbours) {
-        const distance = horizontalDistanceBetween(region, neighbour);
-
-        if (distance >= nearestDistance) continue;
-        if (!isAcceptable(neighbour)) continue;
-
-        nearestDistance = distance;
-        nearestRegion = neighbour;
-    }
-
-    return nearestRegion;
-}
-
-function isCorridorClear(
-    from: IChapterRegion,
-    to: IChapterRegion,
-    regions: IChapterRegion[]
-): boolean {
-    for (const region of regions) {
-        if (region === from || region === to) continue;
-
-        const clearance = resolveHalfExtent(region) + CORRIDOR_DESIGN.maxWidth / 2;
-
-        if (distanceFromRegionToCorridor(region, from, to) < clearance) return false;
-    }
-
-    return true;
-}
-
-function distanceFromRegionToCorridor(
-    region: IChapterRegion,
-    from: IChapterRegion,
-    to: IChapterRegion
-): number {
-    const [regionX, , regionZ] = region.worldPosition;
-    const [fromX, , fromZ] = from.worldPosition;
-    const [toX, , toZ] = to.worldPosition;
-
-    const spanX = toX - fromX;
-    const spanZ = toZ - fromZ;
-    const spanLengthSquared = spanX * spanX + spanZ * spanZ;
-
-    if (spanLengthSquared === 0) return Math.hypot(regionX - fromX, regionZ - fromZ);
-
-    const projection = clamp(
-        ((regionX - fromX) * spanX + (regionZ - fromZ) * spanZ) / spanLengthSquared,
-        0,
-        1
-    );
-
-    return Math.hypot(
-        regionX - (fromX + projection * spanX),
-        regionZ - (fromZ + projection * spanZ)
-    );
-}
-
 function buildPathway(from: IChapterRegion, to: IChapterRegion): IRegionPathway {
     return {
         fromRegionId: from.regionId,
@@ -409,12 +416,6 @@ function buildPathway(from: IChapterRegion, to: IChapterRegion): IRegionPathway 
             CORRIDOR_DESIGN.maxWidth
         ),
     };
-}
-
-function buildPairKey(firstRegionId: string, secondRegionId: string): string {
-    return firstRegionId < secondRegionId
-        ? `${firstRegionId}|${secondRegionId}`
-        : `${secondRegionId}|${firstRegionId}`;
 }
 
 function resolveBossRegionId(regions: IChapterRegion[], spawnRegion: IChapterRegion): string {
@@ -471,19 +472,6 @@ function clamp(value: number, minimum: number, maximum: number): number {
     return Math.min(maximum, Math.max(minimum, value));
 }
 
-function shuffleInPlace<T>(items: T[], nextRandom: () => number): void {
-    for (let index = items.length - 1; index > 0; index--) {
-        const swapIndex = Math.floor(nextRandom() * (index + 1));
-
-        const current = items[index];
-        const target = items[swapIndex];
-        if (current === undefined || target === undefined) continue;
-
-        items[index] = target;
-        items[swapIndex] = current;
-    }
-}
-
 function createSeededRandom(seed: number): () => number {
     let state = seed >>> 0;
 
@@ -508,10 +496,4 @@ interface IRegionCandidate {
     displayName: string;
     nestingDepth: number;
     fileCount: number;
-}
-
-interface IRegionPair {
-    first: IChapterRegion;
-    second: IChapterRegion;
-    distance: number;
 }
