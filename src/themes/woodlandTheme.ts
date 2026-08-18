@@ -1,0 +1,131 @@
+import { ChapterTheme } from "@/types/realm";
+import { PropRole, type IThemeManifest } from "@/types/theme";
+
+const MODEL_DIRECTORY = "/models/woodland";
+
+export const WOODLAND_MANIFEST: IThemeManifest = {
+    theme: ChapterTheme.Woodland,
+    scatterPropsPerFile: 0.6,
+    floorColor: "#6f7d55",
+    props: [
+        {
+            modelPath: `${MODEL_DIRECTORY}/CommonTree_1.gltf`,
+            role: PropRole.Landmark,
+            footprintRadius: 0.9,
+            scaleRange: [0.8, 1.2],
+            hasCollider: true,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Pine_3.gltf`,
+            role: PropRole.Landmark,
+            footprintRadius: 0.8,
+            scaleRange: [0.9, 1.3],
+            hasCollider: true,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/TwistedTree_2.gltf`,
+            role: PropRole.Landmark,
+            footprintRadius: 0.9,
+            scaleRange: [0.7, 1.1],
+            hasCollider: true,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/CommonTree_4.gltf`,
+            role: PropRole.Structure,
+            footprintRadius: 0.8,
+            scaleRange: [0.5, 0.8],
+            hasCollider: true,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Pine_1.gltf`,
+            role: PropRole.Structure,
+            footprintRadius: 0.7,
+            scaleRange: [0.5, 0.8],
+            hasCollider: true,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/DeadTree_3.gltf`,
+            role: PropRole.Structure,
+            footprintRadius: 0.7,
+            scaleRange: [0.5, 0.8],
+            hasCollider: true,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Rock_Medium_1.gltf`,
+            role: PropRole.Structure,
+            footprintRadius: 0.8,
+            scaleRange: [0.4, 0.7],
+            hasCollider: true,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Rock_Medium_3.gltf`,
+            role: PropRole.Structure,
+            footprintRadius: 0.9,
+            scaleRange: [0.4, 0.7],
+            hasCollider: true,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Bush_Common.gltf`,
+            role: PropRole.Structure,
+            footprintRadius: 0.6,
+            scaleRange: [0.4, 0.7],
+            hasCollider: true,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Grass_Common_Tall.gltf`,
+            role: PropRole.Scatter,
+            footprintRadius: 0.3,
+            scaleRange: [0.8, 1.4],
+            hasCollider: false,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Grass_Wispy_Short.gltf`,
+            role: PropRole.Scatter,
+            footprintRadius: 0.3,
+            scaleRange: [0.8, 1.3],
+            hasCollider: false,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Fern_1.gltf`,
+            role: PropRole.Scatter,
+            footprintRadius: 0.4,
+            scaleRange: [0.8, 1.4],
+            hasCollider: false,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Clover_1.gltf`,
+            role: PropRole.Scatter,
+            footprintRadius: 0.3,
+            scaleRange: [0.7, 1.2],
+            hasCollider: false,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Flower_3_Group.gltf`,
+            role: PropRole.Scatter,
+            footprintRadius: 0.3,
+            scaleRange: [0.8, 1.3],
+            hasCollider: false,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Mushroom_Common.gltf`,
+            role: PropRole.Scatter,
+            footprintRadius: 0.3,
+            scaleRange: [0.7, 1.2],
+            hasCollider: false,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Pebble_Round_2.gltf`,
+            role: PropRole.Scatter,
+            footprintRadius: 0.3,
+            scaleRange: [0.6, 1.2],
+            hasCollider: false,
+        },
+        {
+            modelPath: `${MODEL_DIRECTORY}/Pebble_Square_4.gltf`,
+            role: PropRole.Scatter,
+            footprintRadius: 0.3,
+            scaleRange: [0.6, 1.2],
+            hasCollider: false,
+        },
+    ],
+};

@@ -1,7 +1,7 @@
-import type { Group, Object3D, Vector3Tuple } from "three";
+import type { Group, Object3D } from "three";
 import type { World as PhysicsWorld, ColliderDesc } from "@dimforge/rapier3d-compat";
 import type { MaterialLibrary } from "@/world/MaterialLibrary";
-import type { PropShape } from "@/constants/game";
+import type { AssetLibrary } from "@/world/AssetLibrary";
 
 export interface IWorldEntity {
     readonly sceneObject: Object3D;
@@ -13,14 +13,7 @@ export interface IWorldContext {
     readonly physicsWorld: PhysicsWorld;
     readonly sceneRoot: Group;
     readonly materialLibrary: MaterialLibrary;
-}
-
-export interface IPropPlacement {
-    shape: PropShape;
-    position: Vector3Tuple;
-    rotationY: number;
-    scale: number;
-    color: string;
+    readonly assetLibrary: AssetLibrary;
 }
 
 export interface ICharacterModel {

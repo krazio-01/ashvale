@@ -1,4 +1,5 @@
 import type {
+    ChapterTheme,
     IChapterBoss,
     IChapterRegion,
     IRealmChapter,
@@ -43,6 +44,7 @@ export class ChapterResponse {
     regions: IChapterRegion[];
     pathways: IRegionPathway[];
     boss: IChapterBoss | null;
+    theme: ChapterTheme;
 
     constructor(chapter: IRealmChapter) {
         this.chapterIndex = chapter.chapterIndex;
@@ -57,6 +59,7 @@ export class ChapterResponse {
         this.regions = chapter.regions.map(roundRegion);
         this.pathways = chapter.pathways.map(roundPathway);
         this.boss = chapter.boss === null ? null : roundBoss(chapter.boss);
+        this.theme = chapter.theme;
     }
 }
 
