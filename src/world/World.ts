@@ -2,26 +2,37 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import type { World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Group } from "three";
 import { MaterialLibrary } from "@/world/MaterialLibrary";
+import { AssetLibrary } from "@/world/AssetLibrary";
+import type { IThemeManifest } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import { WORLD } from "@/constants/game";
 
 export class World {
     private readonly physicsWorld: PhysicsWorld;
     private readonly sceneRoot = new Group();
-    private readonly materialLibrary = new MaterialLibrary();
+    private readonly materialLibrary: MaterialLibrary;
+    private readonly assetLibrary: AssetLibrary;
     private readonly entities = new Set<IWorldEntity>();
     private readonly entitiesAwaitingRemoval = new Set<IWorldEntity>();
     private unsimulatedTime = 0;
     private isDisposed = false;
 
-    private constructor() {
+    private constructor(materialLibrary: MaterialLibrary, assetLibrary: AssetLibrary) {
+        this.materialLibrary = materialLibrary;
+        this.assetLibrary = assetLibrary;
         this.physicsWorld = new RAPIER.World({ x: 0, y: WORLD.gravity, z: 0 });
         this.physicsWorld.timestep = WORLD.fixedTimestep;
     }
 
-    static async create(): Promise<World> {
-        await RAPIER.init();
-        return new World();
+    static async create(manifest: IThemeManifest): Promise<World> {
+        const materialLibrary = new MaterialLibrary();
+
+        const [, assetLibrary] = await Promise.all([
+            RAPIER.init(),
+            AssetLibrary.create(manifest, materialLibrary),
+        ]);
+
+        return new World(materialLibrary, assetLibrary);
     }
 
     get root(): Group {
@@ -33,6 +44,7 @@ export class World {
             physicsWorld: this.physicsWorld,
             sceneRoot: this.sceneRoot,
             materialLibrary: this.materialLibrary,
+            assetLibrary: this.assetLibrary,
         };
     }
 
@@ -79,6 +91,7 @@ export class World {
 
         this.entities.clear();
         this.entitiesAwaitingRemoval.clear();
+        this.assetLibrary.dispose();
         this.materialLibrary.dispose();
         this.physicsWorld.free();
     }

@@ -1,26 +1,47 @@
-import { DataTexture, MeshToonMaterial, NearestFilter, RedFormat } from "three";
+import {
+    DataTexture,
+    MeshStandardMaterial,
+    MeshToonMaterial,
+    NearestFilter,
+    RedFormat,
+} from "three";
 import { SHADING } from "@/constants/game";
 
 export class MaterialLibrary {
     private readonly gradientMap: DataTexture;
-    private readonly materialsByColor = new Map<string, MeshToonMaterial>();
+    private readonly materialsByKey = new Map<string, MeshToonMaterial>();
 
     constructor() {
         this.gradientMap = this.buildGradientMap();
     }
 
     getToonMaterial(color: string): MeshToonMaterial {
-        const cachedMaterial = this.materialsByColor.get(color);
+        const cachedMaterial = this.materialsByKey.get(color);
         if (cachedMaterial) return cachedMaterial;
 
         const material = new MeshToonMaterial({ color, gradientMap: this.gradientMap });
-        this.materialsByColor.set(color, material);
+        this.materialsByKey.set(color, material);
+        return material;
+    }
+
+    getToonMaterialForSource(source: MeshStandardMaterial): MeshToonMaterial {
+        const cacheKey = `${source.map?.uuid ?? "untextured"}|${source.color.getHexString()}`;
+        const cachedMaterial = this.materialsByKey.get(cacheKey);
+        if (cachedMaterial) return cachedMaterial;
+
+        const material = new MeshToonMaterial({
+            color: source.color,
+            map: source.map,
+            gradientMap: this.gradientMap,
+        });
+
+        this.materialsByKey.set(cacheKey, material);
         return material;
     }
 
     dispose(): void {
-        for (const material of this.materialsByColor.values()) material.dispose();
-        this.materialsByColor.clear();
+        for (const material of this.materialsByKey.values()) material.dispose();
+        this.materialsByKey.clear();
         this.gradientMap.dispose();
     }
 
