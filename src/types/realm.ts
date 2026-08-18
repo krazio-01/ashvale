@@ -20,6 +20,7 @@ export interface IRealmChapter {
     regions: IChapterRegion[];
     pathways: IRegionPathway[];
     boss: IChapterBoss | null;
+    theme: ChapterTheme;
 }
 
 export interface IChapterRegion {
@@ -45,4 +46,11 @@ export interface IChapterBoss {
     commitShare: number;
     commitGapVariation: number;
     chapterAppearanceCount: number;
+}
+
+export enum ChapterTheme {
+    Woodland = "woodland",
+    Settlement = "settlement",
+    Ruins = "ruins",
+    Highlands = "highlands",
 }

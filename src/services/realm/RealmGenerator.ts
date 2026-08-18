@@ -24,7 +24,7 @@ import {
     isCommitDescendedFrom,
 } from "@/services/github/GithubService";
 import { packChapterRegions } from "@/services/realm/RegionPacker";
-import { IChapterBoss, IChapterRegion, IRealmChapter, IResolvedRealm } from "@/types/realm";
+import { ChapterTheme, IChapterBoss, IChapterRegion, IRealmChapter, IResolvedRealm } from "@/types/realm";
 
 const NEWEST_COMMIT_POSITION = 0;
 const SEED_HASH_MULTIPLIER = 31;
@@ -223,7 +223,21 @@ async function buildChapter(
         regions: geometry.regions,
         pathways: geometry.pathways,
         boss,
+        theme: resolveChapterTheme(chapterIndex, context.chapterCount, context.generationSeed),
     };
+}
+
+function resolveChapterTheme(
+    chapterIndex: number,
+    chapterCount: number,
+    generationSeed: number
+): ChapterTheme {
+    if (chapterIndex === chapterCount - 1) return ChapterTheme.Highlands;
+
+    const rotatingThemes = [ChapterTheme.Woodland, ChapterTheme.Settlement, ChapterTheme.Ruins];
+    const themeIndex = (generationSeed + chapterIndex) % rotatingThemes.length;
+
+    return rotatingThemes[themeIndex] ?? ChapterTheme.Woodland;
 }
 
 async function resolveChapterTree(
