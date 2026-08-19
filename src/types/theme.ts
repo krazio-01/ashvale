@@ -11,7 +11,7 @@ export interface IThemeProp {
     role: PropRole;
     footprintRadius: number;
     scaleRange: [number, number];
-    hasCollider: boolean
+    hasCollider: boolean;
 }
 
 export interface IThemeManifest {
@@ -21,12 +21,16 @@ export interface IThemeManifest {
     floorColor: string;
 }
 
-
 export interface IPropPlacement {
-    modelPath: string;
     position: [number, number, number];
     rotationY: number;
     scale: number;
-    footprintRadius: number;
+}
+
+export interface IPropGroup {
+    modelPath: string;
+    role: PropRole;
     hasCollider: boolean;
+    footprintRadius: number;
+    placements: IPropPlacement[];
 }

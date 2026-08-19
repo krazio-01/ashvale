@@ -33,22 +33,6 @@ export const WORLD = {
     maximumFrameDelta: 0.25,
 };
 
-export const GROUND = {
-    size: 90,
-    thickness: 0.5,
-};
-
-export const PROP = {
-    pillarRadius: 0.9,
-    pillarHeight: 6,
-    pillarTaper: 0.75,
-    pillarSides: 7,
-    boulderRadius: 1.2,
-    slabWidth: 3.4,
-    slabHeight: 0.9,
-    slabDepth: 1.6,
-};
-
 export const PALETTE = {
     void: "#1a1526",
     haze: "#4a3f63",
@@ -117,11 +101,6 @@ export const OUTLINE = {
     debugView: false,
 };
 
-export enum PropShape {
-    Pillar = "pillar",
-    Boulder = "boulder",
-    Slab = "slab",
-}
 
 export enum EnemyAction {
     Idle = "idle",
