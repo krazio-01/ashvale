@@ -1,32 +1,30 @@
-import RAPIER from "@dimforge/rapier3d-compat";
 import type { Collider, ColliderDesc, RigidBody } from "@dimforge/rapier3d-compat";
-import { BoxGeometry, BufferGeometry, CylinderGeometry, IcosahedronGeometry, Mesh } from "three";
+import RAPIER from "@dimforge/rapier3d-compat";
+import { Box3, Object3D, Vector3 } from "three";
 import { Entity } from "@/entities/Entity";
-import type { IPropPlacement, IWorldContext, IWorldEntity } from "@/types/world";
-import { PROP, PropShape } from "@/constants/game";
+import type { IWorldContext, IWorldEntity } from "@/types/world";
+import type { IPropPlacement } from "@/types/theme";
 
 export class Prop extends Entity implements IWorldEntity {
-    readonly sceneObject: Mesh;
+    readonly sceneObject: Object3D;
 
     private readonly context: IWorldContext;
-    private readonly geometry: BufferGeometry;
-    private readonly rigidBody: RigidBody;
-    private readonly collider: Collider;
+    private readonly rigidBody: RigidBody | null = null;
+    private readonly collider: Collider | null = null;
 
     constructor(id: string, context: IWorldContext, placement: IPropPlacement) {
         super(id);
-
         this.context = context;
-        this.geometry = this.buildGeometry(placement);
 
-        this.sceneObject = new Mesh(
-            this.geometry,
-            context.materialLibrary.getToonMaterial(placement.color)
-        );
-        this.sceneObject.castShadow = true;
-        this.sceneObject.receiveShadow = true;
+        const template = context.assetLibrary.cloneProp(placement.modelPath);
+        if (!template) throw new Error(`no loaded asset for prop path "${placement.modelPath}"`);
+
+        this.sceneObject = template;
         this.sceneObject.position.set(...placement.position);
         this.sceneObject.rotation.y = placement.rotationY;
+        this.sceneObject.scale.setScalar(placement.scale);
+
+        if (!placement.hasCollider) return;
 
         const [x, y, z] = placement.position;
 
@@ -43,50 +41,15 @@ export class Prop extends Entity implements IWorldEntity {
     update(): void { }
 
     dispose(): void {
-        this.context.physicsWorld.removeCollider(this.collider, false);
-        this.context.physicsWorld.removeRigidBody(this.rigidBody);
-        this.geometry.dispose();
+        if (this.collider) this.context.physicsWorld.removeCollider(this.collider, false);
+        if (this.rigidBody) this.context.physicsWorld.removeRigidBody(this.rigidBody);
     }
 
-    private buildGeometry({ shape, scale }: IPropPlacement): BufferGeometry {
-        switch (shape) {
-            case PropShape.Pillar:
-                return new CylinderGeometry(
-                    PROP.pillarRadius * PROP.pillarTaper * scale,
-                    PROP.pillarRadius * scale,
-                    PROP.pillarHeight * scale,
-                    PROP.pillarSides
-                );
+    private buildColliderDesc(placement: IPropPlacement): ColliderDesc {
+        const bounds = new Box3().setFromObject(this.sceneObject);
+        const height = bounds.getSize(new Vector3()).y;
+        const radius = placement.footprintRadius * placement.scale;
 
-            case PropShape.Boulder:
-                return new IcosahedronGeometry(PROP.boulderRadius * scale, 0);
-
-            case PropShape.Slab:
-                return new BoxGeometry(
-                    PROP.slabWidth * scale,
-                    PROP.slabHeight * scale,
-                    PROP.slabDepth * scale
-                );
-        }
-    }
-
-    private buildColliderDesc({ shape, scale }: IPropPlacement): ColliderDesc {
-        switch (shape) {
-            case PropShape.Pillar:
-                return RAPIER.ColliderDesc.cylinder(
-                    (PROP.pillarHeight * scale) / 2,
-                    PROP.pillarRadius * scale
-                );
-
-            case PropShape.Boulder:
-                return RAPIER.ColliderDesc.ball(PROP.boulderRadius * scale);
-
-            case PropShape.Slab:
-                return RAPIER.ColliderDesc.cuboid(
-                    (PROP.slabWidth * scale) / 2,
-                    (PROP.slabHeight * scale) / 2,
-                    (PROP.slabDepth * scale) / 2
-                );
-        }
+        return RAPIER.ColliderDesc.cylinder(height / 2, radius).setTranslation(0, height / 2, 0);
     }
 }
