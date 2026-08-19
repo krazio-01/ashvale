@@ -1,7 +1,7 @@
 import type { Camera, Vector3Tuple } from "three";
 import { Region } from "@/entities/environment/Region";
 import { Corridor } from "@/entities/environment/Corridor";
-import { Prop } from "@/entities/environment/Prop";
+import { RegionProps } from "@/entities/environment/RegionProps";
 import { Player } from "@/entities/characters/Player";
 import { CharacterBody } from "@/entities/characters/CharacterBody";
 import { bossModel } from "@/entities/characters/BossModel";
@@ -14,11 +14,18 @@ import type { IChapterRegion } from "@/types/realm";
 import { SPAWNING } from "@/constants/game";
 
 export function spawnChapter(world: World, camera: Camera, chapter: ChapterResponse): void {
+    const manifest = resolveThemeManifest(chapter.theme);
     const positionsByRegionId = new Map<string, Vector3Tuple>();
 
     for (const region of chapter.regions) {
         world.addEntity(new Region(world.context, region));
+        world.addEntity(
+            new RegionProps(region.regionId, world.context, placeRegionProps(region, manifest))
+        );
+
         positionsByRegionId.set(region.regionId, region.worldPosition);
+
+        if (region.regionId !== chapter.bossRegionId) spawnRegionEnemies(world, region);
     }
 
     for (const pathway of chapter.pathways) {
@@ -28,16 +35,6 @@ export function spawnChapter(world: World, camera: Camera, chapter: ChapterRespo
         if (!fromPosition || !toPosition) continue;
 
         world.addEntity(new Corridor(world.context, pathway, fromPosition, toPosition));
-    }
-
-    const manifest = resolveThemeManifest(chapter.theme);
-
-    for (const region of chapter.regions) {
-        placeRegionProps(region, manifest).forEach((placement, placementIndex) => {
-            world.addEntity(
-                new Prop(`${region.regionId}-prop-${placementIndex}`, world.context, placement)
-            );
-        });
     }
 
     const spawnPosition = positionsByRegionId.get(chapter.spawnRegionId);
@@ -51,21 +48,6 @@ export function spawnChapter(world: World, camera: Camera, chapter: ChapterRespo
         );
     }
 
-    for (const region of chapter.regions) {
-        if (region.regionId === chapter.bossRegionId) continue;
-
-        const enemyCount = Math.min(
-            Math.max(Math.floor(region.fileCount / SPAWNING.filesPerEnemy), 1),
-            SPAWNING.maximumEnemiesPerRegion
-        );
-
-        for (let index = 0; index < enemyCount; index += 1) {
-            world.addEntity(
-                spawnEnemyBody(region, world.context, enemyPosition(region, index, enemyCount))
-            );
-        }
-    }
-
     const bossPosition = positionsByRegionId.get(chapter.bossRegionId);
     if (chapter.boss && bossPosition) {
         world.addEntity(
@@ -76,6 +58,18 @@ export function spawnChapter(world: World, camera: Camera, chapter: ChapterRespo
             ])
         );
     }
+}
+
+function spawnRegionEnemies(world: World, region: IChapterRegion): void {
+    const enemyCount = Math.min(
+        Math.max(Math.floor(region.fileCount / SPAWNING.filesPerEnemy), 1),
+        SPAWNING.maximumEnemiesPerRegion
+    );
+
+    for (let index = 0; index < enemyCount; index += 1)
+        world.addEntity(
+            spawnEnemyBody(region, world.context, enemyPosition(region, index, enemyCount))
+        );
 }
 
 function enemyPosition(region: IChapterRegion, index: number, count: number): Vector3Tuple {
