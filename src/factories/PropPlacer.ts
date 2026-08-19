@@ -1,4 +1,10 @@
-import { PropRole, type IPropPlacement, type IThemeManifest, type IThemeProp } from "@/types/theme";
+import {
+    PropRole,
+    type IPropGroup,
+    type IPropPlacement,
+    type IThemeManifest,
+    type IThemeProp,
+} from "@/types/theme";
 import type { IChapterRegion } from "@/types/realm";
 import { PROP_PLACEMENT } from "@/constants/game";
 
@@ -7,10 +13,12 @@ interface IClusterCenter {
     offsetZ: number;
 }
 
-export function placeRegionProps(
-    region: IChapterRegion,
-    manifest: IThemeManifest
-): IPropPlacement[] {
+interface IPlacedProp {
+    prop: IThemeProp;
+    placement: IPropPlacement;
+}
+
+export function placeRegionProps(region: IChapterRegion, manifest: IThemeManifest): IPropGroup[] {
     const nextRandom = createSeededRandom(hashString(region.regionId));
 
     const landmarkSpecies = pickSpecies(
@@ -28,16 +36,15 @@ export function placeRegionProps(
     const scatterSpecies = manifest.props.filter((prop) => prop.role === PropRole.Scatter);
 
     const clusterCenters = buildClusterCenters(region, nextRandom);
-    const placements: IPropPlacement[] = [];
+    const placedProps: IPlacedProp[] = [];
 
     placeClustered(
-        placements,
+        placedProps,
         landmarkSpecies,
         PROP_PLACEMENT.landmarksPerRegion,
         region,
         clusterCenters,
-        nextRandom,
-        true
+        nextRandom
     );
 
     const structureCount = Math.min(
@@ -49,13 +56,12 @@ export function placeRegionProps(
     );
 
     placeClustered(
-        placements,
+        placedProps,
         structureSpecies,
         structureCount,
         region,
         clusterCenters,
-        nextRandom,
-        true
+        nextRandom
     );
 
     const scatterCount = Math.min(
@@ -63,9 +69,32 @@ export function placeRegionProps(
         Math.floor(region.fileCount * manifest.scatterPropsPerFile)
     );
 
-    placeScatter(placements, scatterSpecies, scatterCount, region, clusterCenters, nextRandom);
+    placeScatter(placedProps, scatterSpecies, scatterCount, region, clusterCenters, nextRandom);
 
-    return placements;
+    return groupByModel(placedProps);
+}
+
+function groupByModel(placedProps: IPlacedProp[]): IPropGroup[] {
+    const groupsByModelPath = new Map<string, IPropGroup>();
+
+    for (const { prop, placement } of placedProps) {
+        const existingGroup = groupsByModelPath.get(prop.modelPath);
+
+        if (existingGroup) {
+            existingGroup.placements.push(placement);
+            continue;
+        }
+
+        groupsByModelPath.set(prop.modelPath, {
+            modelPath: prop.modelPath,
+            role: prop.role,
+            hasCollider: prop.hasCollider,
+            footprintRadius: prop.footprintRadius,
+            placements: [placement],
+        });
+    }
+
+    return [...groupsByModelPath.values()];
 }
 
 function pickSpecies(props: IThemeProp[], count: number, nextRandom: () => number): IThemeProp[] {
@@ -116,13 +145,12 @@ function buildClusterCenters(region: IChapterRegion, nextRandom: () => number): 
 }
 
 function placeClustered(
-    placements: IPropPlacement[],
+    placedProps: IPlacedProp[],
     species: IThemeProp[],
     count: number,
     region: IChapterRegion,
     clusterCenters: IClusterCenter[],
-    nextRandom: () => number,
-    requireSeparation: boolean
+    nextRandom: () => number
 ): void {
     if (species.length === 0 || clusterCenters.length === 0) return;
 
@@ -147,11 +175,8 @@ function placeClustered(
             );
             if (!candidate) continue;
 
-            if (
-                !requireSeparation ||
-                isClearOfPlacements(candidate, prop.footprintRadius * scale, placements)
-            ) {
-                placements.push(candidate);
+            if (isClearOfStructures(candidate, prop.footprintRadius * scale, placedProps)) {
+                placedProps.push({ prop, placement: candidate });
                 break;
             }
         }
@@ -159,7 +184,7 @@ function placeClustered(
 }
 
 function placeScatter(
-    placements: IPropPlacement[],
+    placedProps: IPlacedProp[],
     species: IThemeProp[],
     count: number,
     region: IChapterRegion,
@@ -171,7 +196,7 @@ function placeScatter(
     const clusterRadius =
         Math.min(region.floorSize[0], region.floorSize[1]) * PROP_PLACEMENT.clusterRadiusRatio;
 
-    const structureAnchors = placements.filter((placement) => placement.hasCollider);
+    const structureAnchors = placedProps.filter(({ prop }) => prop.role !== PropRole.Scatter);
 
     for (let index = 0; index < count; index++) {
         const prop = species[Math.floor(nextRandom() * species.length)];
@@ -191,8 +216,8 @@ function placeScatter(
                     scale,
                     region,
                     {
-                        offsetX: anchor.position[0] - region.worldPosition[0],
-                        offsetZ: anchor.position[2] - region.worldPosition[2],
+                        offsetX: anchor.placement.position[0] - region.worldPosition[0],
+                        offsetZ: anchor.placement.position[2] - region.worldPosition[2],
                     },
                     PROP_PLACEMENT.structureAnchorRadius,
                     nextRandom
@@ -201,7 +226,7 @@ function placeScatter(
         } else if (clusterCenters.length > 0) {
             const center = clusterCenters[Math.floor(nextRandom() * clusterCenters.length)];
 
-            if (center) {
+            if (center)
                 candidate = buildPlacementNear(
                     prop,
                     scale,
@@ -210,10 +235,9 @@ function placeScatter(
                     clusterRadius,
                     nextRandom
                 );
-            }
         }
 
-        if (candidate) placements.push(candidate);
+        if (candidate) placedProps.push({ prop, placement: candidate });
     }
 }
 
@@ -242,29 +266,26 @@ function buildPlacementNear(
         if (Math.hypot(offsetX, offsetZ) < clearRadius) continue;
 
         return {
-            modelPath: prop.modelPath,
             position: [regionX + offsetX, regionY, regionZ + offsetZ],
             rotationY: nextRandom() * Math.PI * 2,
             scale,
-            footprintRadius: prop.footprintRadius,
-            hasCollider: prop.role !== PropRole.Scatter,
         };
     }
 
     return null;
 }
 
-function isClearOfPlacements(
+function isClearOfStructures(
     candidate: IPropPlacement,
     candidateRadius: number,
-    placements: IPropPlacement[]
+    placedProps: IPlacedProp[]
 ): boolean {
-    for (const placed of placements) {
-        if (!placed.hasCollider) continue;
+    for (const { prop, placement } of placedProps) {
+        if (prop.role === PropRole.Scatter) continue;
 
         const distance = Math.hypot(
-            candidate.position[0] - placed.position[0],
-            candidate.position[2] - placed.position[2]
+            candidate.position[0] - placement.position[0],
+            candidate.position[2] - placement.position[2]
         );
 
         if (distance < candidateRadius + PROP_PLACEMENT.separationGap) return false;
