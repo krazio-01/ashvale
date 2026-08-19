@@ -141,3 +141,22 @@ export const ENEMY = {
     radius: 0.5,
     height: 1.8,
 };
+
+export const PROP_PLACEMENT = {
+    landmarksPerRegion: 2,
+    landmarkSpeciesPerRegion: 1,
+    structureSpeciesPerRegion: 2,
+    minimumStructuresPerRegion: 3,
+    maximumStructuresPerRegion: 10,
+    filesPerStructure: 12,
+    maximumScatterPerRegion: 120,
+    filesPerCluster: 25,
+    minimumClustersPerRegion: 2,
+    maximumClustersPerRegion: 5,
+    clusterRadiusRatio: 0.22,
+    scatterAnchoredToStructureRatio: 0.4,
+    structureAnchorRadius: 3,
+    centerClearanceRatio: 0.35,
+    separationGap: 1,
+    placementAttempts: 10,
+};
