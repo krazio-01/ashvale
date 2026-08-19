@@ -13,11 +13,14 @@ import type { ChapterResponse, RealmResponse } from "@/responses/realm/RealmResp
 import { CAMERA, RENDER } from "@/constants/game";
 import { InlineLoader } from "generative-loaders";
 import "generative-loaders/styles.css";
+import { resolveThemeManifest } from "@/themes/themeManifests";
 import "./scene.scss";
 
 const ACTIVE_CHAPTER_INDEX = 0;
 
+
 const WorldRuntime = ({ chapter }: { chapter: ChapterResponse }) => {
+    console.log(chapter.theme);
     const camera = useThree((state) => state.camera);
     const [world, setWorld] = useState<World | null>(null);
 
@@ -26,7 +29,7 @@ const WorldRuntime = ({ chapter }: { chapter: ChapterResponse }) => {
         let isCancelled = false;
 
         const createWorld = async () => {
-            const createdWorld = await World.create();
+            const createdWorld = await World.create(resolveThemeManifest(chapter.theme));
 
             if (isCancelled) {
                 createdWorld.dispose();

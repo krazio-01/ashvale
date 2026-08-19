@@ -1,10 +1,13 @@
 import type { Camera, Vector3Tuple } from "three";
 import { Region } from "@/entities/environment/Region";
 import { Corridor } from "@/entities/environment/Corridor";
+import { Prop } from "@/entities/environment/Prop";
 import { Player } from "@/entities/characters/Player";
 import { CharacterBody } from "@/entities/characters/CharacterBody";
 import { bossModel } from "@/entities/characters/BossModel";
 import { spawnEnemyBody } from "@/factories/EnemySpawner";
+import { placeRegionProps } from "@/factories/PropPlacer";
+import { resolveThemeManifest } from "@/themes/themeManifests";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
 import type { IChapterRegion } from "@/types/realm";
@@ -25,6 +28,16 @@ export function spawnChapter(world: World, camera: Camera, chapter: ChapterRespo
         if (!fromPosition || !toPosition) continue;
 
         world.addEntity(new Corridor(world.context, pathway, fromPosition, toPosition));
+    }
+
+    const manifest = resolveThemeManifest(chapter.theme);
+
+    for (const region of chapter.regions) {
+        placeRegionProps(region, manifest).forEach((placement, placementIndex) => {
+            world.addEntity(
+                new Prop(`${region.regionId}-prop-${placementIndex}`, world.context, placement)
+            );
+        });
     }
 
     const spawnPosition = positionsByRegionId.get(chapter.spawnRegionId);
