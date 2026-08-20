@@ -2,25 +2,31 @@
 import { useEffect, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { EffectComposer } from "@react-three/postprocessing";
-import { ACESFilmicToneMapping } from "three";
+import { NoToneMapping } from "three";
 import { World } from "@/world/World";
+import SkyDome from "@/components/SkyDome";
 import SceneLighting from "@/components/SceneLighting";
 import OutlinePass from "@/components/OutlinePass";
 import { spawnChapter } from "@/factories/RealmSpawner";
+import { resolveThemeManifest } from "@/themes/themeManifests";
 import { isRequestCancellation, useRequest } from "@/hooks/useRequest";
 import { HttpMethod } from "@/constants/strings";
 import type { ChapterResponse, RealmResponse } from "@/responses/realm/RealmResponse";
+import type { IThemeManifest } from "@/types/theme";
 import { CAMERA, RENDER } from "@/constants/game";
 import { InlineLoader } from "generative-loaders";
 import "generative-loaders/styles.css";
-import { resolveThemeManifest } from "@/themes/themeManifests";
 import "./scene.scss";
 
-const ACTIVE_CHAPTER_INDEX = 0;
+const ACTIVE_CHAPTER_INDEX = 2;
 
-
-const WorldRuntime = ({ chapter }: { chapter: ChapterResponse }) => {
-    console.log(chapter.theme);
+const WorldRuntime = ({
+    chapter,
+    manifest,
+}: {
+    chapter: ChapterResponse;
+    manifest: IThemeManifest;
+}) => {
     const camera = useThree((state) => state.camera);
     const [world, setWorld] = useState<World | null>(null);
 
@@ -29,7 +35,7 @@ const WorldRuntime = ({ chapter }: { chapter: ChapterResponse }) => {
         let isCancelled = false;
 
         const createWorld = async () => {
-            const createdWorld = await World.create(resolveThemeManifest(chapter.theme));
+            const createdWorld = await World.create(manifest);
 
             if (isCancelled) {
                 createdWorld.dispose();
@@ -48,7 +54,7 @@ const WorldRuntime = ({ chapter }: { chapter: ChapterResponse }) => {
             activeWorld?.dispose();
             setWorld(null);
         };
-    }, [camera, chapter]);
+    }, [camera, chapter, manifest]);
 
     useFrame((_, deltaSeconds) => world?.update(deltaSeconds));
 
@@ -95,6 +101,8 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
     const chapter = realm?.chapters[ACTIVE_CHAPTER_INDEX];
     if (!chapter) return null;
 
+    const manifest = resolveThemeManifest(chapter.theme);
+
     return (
         <Canvas
             shadows="percentage"
@@ -107,14 +115,15 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
             }}
             gl={{
                 antialias: false,
-                toneMapping: ACESFilmicToneMapping,
-                toneMappingExposure: RENDER.toneMappingExposure,
+                toneMapping: NoToneMapping,
             }}
         >
-            <SceneLighting />
-            <WorldRuntime chapter={chapter} />
+            <SkyDome environment={manifest.environment} />
+            <SceneLighting environment={manifest.environment} />
+            <WorldRuntime chapter={chapter} manifest={manifest} />
+
             <EffectComposer enableNormalPass multisampling={RENDER.multisampling}>
-                <OutlinePass />
+                <OutlinePass outlineColor={manifest.environment.outlineColor} />
             </EffectComposer>
         </Canvas>
     );

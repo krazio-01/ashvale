@@ -55,11 +55,16 @@ export interface IOutlineEffectOptions {
     normalBuffer: Texture | null;
 }
 
+export interface IOutlineEffectOptions {
+    normalBuffer: Texture | null;
+    outlineColor: string;
+}
+
 export class OutlineEffect extends Effect {
-    constructor({ normalBuffer }: IOutlineEffectOptions) {
+    constructor({ normalBuffer, outlineColor }: IOutlineEffectOptions) {
         const uniforms = new Map<string, Uniform<unknown>>([
             ["normalBuffer", new Uniform(normalBuffer)],
-            ["outlineColor", new Uniform(new Color(OUTLINE.color))],
+            ["outlineColor", new Uniform(new Color(outlineColor))],
             ["normalThreshold", new Uniform(OUTLINE.normalThreshold)],
             ["depthThreshold", new Uniform(OUTLINE.depthThreshold)],
             ["texelSize", new Uniform(new Vector2())],
