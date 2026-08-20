@@ -14,13 +14,6 @@ export interface IThemeProp {
     hasCollider: boolean;
 }
 
-export interface IThemeManifest {
-    theme: ChapterTheme;
-    props: IThemeProp[];
-    scatterPropsPerFile: number;
-    floorColor: string;
-}
-
 export interface IPropPlacement {
     position: [number, number, number];
     rotationY: number;
@@ -33,4 +26,56 @@ export interface IPropGroup {
     hasCollider: boolean;
     footprintRadius: number;
     placements: IPropPlacement[];
+}
+
+export interface ISkyGradient {
+    zenith: string;
+    middle: string;
+    horizon: string;
+    abyss: string;
+    glow: string;
+    sun: string;
+    sunElevation: number;
+    sunAzimuth: number;
+    sunSize: number;
+    glowFalloff: number;
+    hazeStrength: number;
+}
+
+export interface IThemeLighting {
+    keyColor: string;
+    keyIntensity: number;
+    rimColor: string;
+    rimIntensity: number;
+    skyFill: string;
+    groundFill: string;
+    hemisphereIntensity: number;
+}
+
+export interface ITerrainProfile {
+    wildColor: string;
+    rockColor: string;
+    peakColor: string;
+    wildElevation: number;
+    wildRelief: number;
+    mountainHeight: number;
+    featureSize: number;
+    ruggedness: number;
+    slopeShade: number;
+}
+
+export interface IThemeEnvironment {
+    sky: ISkyGradient;
+    lighting: IThemeLighting;
+    fogColor: string;
+    fogDensity: number;
+    outlineColor: string;
+    terrain: ITerrainProfile;
+}
+
+export interface IThemeManifest {
+    theme: ChapterTheme;
+    props: IThemeProp[];
+    scatterPropsPerFile: number;
+    environment: IThemeEnvironment;
 }

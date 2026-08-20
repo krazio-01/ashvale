@@ -2,6 +2,7 @@ import type { BufferGeometry, Group, Material, Object3D } from "three";
 import type { World as PhysicsWorld, ColliderDesc } from "@dimforge/rapier3d-compat";
 import type { MaterialLibrary } from "@/world/MaterialLibrary";
 import type { AssetLibrary } from "@/world/AssetLibrary";
+import type { IThemeEnvironment } from "@/types/theme";
 
 export interface IWorldEntity {
     readonly sceneObject: Object3D;
@@ -14,6 +15,7 @@ export interface IWorldContext {
     readonly sceneRoot: Group;
     readonly materialLibrary: MaterialLibrary;
     readonly assetLibrary: AssetLibrary;
+    readonly environment: IThemeEnvironment;
 }
 
 export interface ICharacterModel {
