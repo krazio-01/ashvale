@@ -3,7 +3,7 @@ import type { World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Group } from "three";
 import { MaterialLibrary } from "@/world/MaterialLibrary";
 import { AssetLibrary } from "@/world/AssetLibrary";
-import type { IThemeManifest } from "@/types/theme";
+import type { IThemeEnvironment, IThemeManifest } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import { WORLD } from "@/constants/game";
 
@@ -12,14 +12,20 @@ export class World {
     private readonly sceneRoot = new Group();
     private readonly materialLibrary: MaterialLibrary;
     private readonly assetLibrary: AssetLibrary;
+    private readonly environment: IThemeEnvironment;
     private readonly entities = new Set<IWorldEntity>();
     private readonly entitiesAwaitingRemoval = new Set<IWorldEntity>();
     private unsimulatedTime = 0;
     private isDisposed = false;
 
-    private constructor(materialLibrary: MaterialLibrary, assetLibrary: AssetLibrary) {
+    private constructor(
+        materialLibrary: MaterialLibrary,
+        assetLibrary: AssetLibrary,
+        environment: IThemeEnvironment
+    ) {
         this.materialLibrary = materialLibrary;
         this.assetLibrary = assetLibrary;
+        this.environment = environment;
         this.physicsWorld = new RAPIER.World({ x: 0, y: WORLD.gravity, z: 0 });
         this.physicsWorld.timestep = WORLD.fixedTimestep;
     }
@@ -32,7 +38,7 @@ export class World {
             AssetLibrary.create(manifest, materialLibrary),
         ]);
 
-        return new World(materialLibrary, assetLibrary);
+        return new World(materialLibrary, assetLibrary, manifest.environment);
     }
 
     get root(): Group {
@@ -45,6 +51,7 @@ export class World {
             sceneRoot: this.sceneRoot,
             materialLibrary: this.materialLibrary,
             assetLibrary: this.assetLibrary,
+            environment: this.environment,
         };
     }
 
