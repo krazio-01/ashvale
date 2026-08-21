@@ -1,21 +1,25 @@
 import RAPIER from "@dimforge/rapier3d-compat";
-import type { Collider, RigidBody } from "@dimforge/rapier3d-compat";
+import type {
+    Collider,
+    KinematicCharacterController,
+    Ray,
+    RigidBody,
+} from "@dimforge/rapier3d-compat";
 import { CapsuleGeometry, Camera, Mesh, Vector3 } from "three";
 import type { Vector3Tuple } from "three";
 import { Character } from "@/entities/characters/Character";
 import { InputManager } from "@/input/InputManager";
 import type { IWeapon } from "@/types/entities";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import { CAMERA, PALETTE, PLAYER } from "@/constants/game";
+import { CAMERA, PALETTE, PLAYER, WORLD } from "@/constants/game";
+import { clamp } from "@/lib/helpers";
 
-const WORLD_UP = new Vector3(0, 1, 0);
-
-const cameraForward = new Vector3();
-const cameraRight = new Vector3();
+const forwardDirection = new Vector3();
+const rightDirection = new Vector3();
 const moveDirection = new Vector3();
-const bodyPosition = new Vector3();
-const desiredCameraPosition = new Vector3();
-const cameraTarget = new Vector3();
+const orbitDirection = new Vector3();
+const smoothedPivot = new Vector3();
+const mouseDelta = { x: 0, y: 0 };
 
 export class Player extends Character implements IWorldEntity {
     readonly sceneObject: Mesh;
@@ -28,7 +32,14 @@ export class Player extends Character implements IWorldEntity {
     private readonly geometry: CapsuleGeometry;
     private readonly rigidBody: RigidBody;
     private readonly collider: Collider;
+    private readonly controller: KinematicCharacterController;
+    private readonly cameraSightRay: Ray;
+    private verticalVelocity = 0;
     private facingYaw = 0;
+    private orbitYaw = 0;
+    private orbitPitch = CAMERA.startPitch;
+    private currentFollowDistance = CAMERA.targetFollowDistance;
+    private pivotInitialized = false;
 
     constructor(id: string, context: IWorldContext, camera: Camera, spawnPosition: Vector3Tuple) {
         super(id, PLAYER.maxHealth);
@@ -48,16 +59,23 @@ export class Player extends Character implements IWorldEntity {
         const [spawnX, spawnY, spawnZ] = spawnPosition;
 
         this.rigidBody = context.physicsWorld.createRigidBody(
-            RAPIER.RigidBodyDesc.dynamic()
-                .setTranslation(spawnX, spawnY, spawnZ)
-                .lockRotations()
-                .setCanSleep(false)
+            RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(spawnX, spawnY, spawnZ)
         );
 
         this.collider = context.physicsWorld.createCollider(
             RAPIER.ColliderDesc.capsule(cylinderLength / 2, PLAYER.radius),
             this.rigidBody
         );
+
+        this.controller = context.physicsWorld.createCharacterController(PLAYER.colliderOffset);
+        this.controller.setUp({ x: 0, y: 1, z: 0 });
+        this.controller.setMaxSlopeClimbAngle(PLAYER.maxSlopeClimbAngle);
+        this.controller.setMinSlopeSlideAngle(PLAYER.minSlopeSlideAngle);
+        this.controller.enableAutostep(PLAYER.autostepMaxHeight, PLAYER.autostepMinWidth, true);
+        this.controller.enableSnapToGround(PLAYER.snapToGroundDistance);
+        this.controller.setApplyImpulsesToDynamicBodies(true);
+
+        this.cameraSightRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
     }
 
     get attackDamage(): number {
@@ -65,50 +83,70 @@ export class Player extends Character implements IWorldEntity {
     }
 
     update(deltaSeconds: number): void {
-        this.applyMovement();
+        this.applyMouseLook();
+        this.applyMovement(deltaSeconds);
         this.syncSceneObject(deltaSeconds);
         this.followWithCamera(deltaSeconds);
     }
 
     dispose(): void {
         this.input.dispose();
+        this.context.physicsWorld.removeCharacterController(this.controller);
         this.context.physicsWorld.removeCollider(this.collider, false);
         this.context.physicsWorld.removeRigidBody(this.rigidBody);
         this.geometry.dispose();
     }
 
-    private applyMovement(): void {
-        this.camera.getWorldDirection(cameraForward);
-        cameraForward.y = 0;
-        cameraForward.normalize();
+    private applyMouseLook(): void {
+        this.input.consumeMouseDelta(mouseDelta);
 
-        cameraRight.crossVectors(cameraForward, WORLD_UP).normalize();
+        this.orbitYaw -= mouseDelta.x * CAMERA.mouseSensitivity;
+        this.orbitPitch = clamp(
+            this.orbitPitch + mouseDelta.y * CAMERA.mouseSensitivity,
+            CAMERA.pitchRange[0],
+            CAMERA.pitchRange[1]
+        );
+    }
+
+    private applyMovement(deltaSeconds: number): void {
+        forwardDirection.set(-Math.sin(this.orbitYaw), 0, -Math.cos(this.orbitYaw));
+        rightDirection.set(-forwardDirection.z, 0, forwardDirection.x);
 
         moveDirection
             .set(0, 0, 0)
-            .addScaledVector(cameraForward, this.input.axis("backward", "forward"))
-            .addScaledVector(cameraRight, this.input.axis("left", "right"));
+            .addScaledVector(forwardDirection, this.input.axis("backward", "forward"))
+            .addScaledVector(rightDirection, this.input.axis("left", "right"));
 
-        const isMoving = moveDirection.lengthSq() > 0;
-
-        if (isMoving) {
+        if (moveDirection.lengthSq() > 0) {
             const speed = this.input.isPressed("sprint") ? PLAYER.sprintSpeed : PLAYER.speed;
-            moveDirection.normalize().multiplyScalar(speed);
+            moveDirection.normalize().multiplyScalar(speed * deltaSeconds);
             this.facingYaw = Math.atan2(moveDirection.x, moveDirection.z);
         }
 
-        const velocity = this.rigidBody.linvel();
-        const isGrounded = Math.abs(velocity.y) < PLAYER.groundedVelocityThreshold;
-        const shouldJump = this.input.isPressed("jump") && isGrounded;
+        const isGrounded = this.controller.computedGrounded();
 
-        this.rigidBody.setLinvel(
-            {
-                x: moveDirection.x,
-                y: shouldJump ? PLAYER.jumpForce : velocity.y,
-                z: moveDirection.z,
-            },
-            true
+        if (isGrounded && this.verticalVelocity <= 0) this.verticalVelocity = 0;
+        if (isGrounded && this.input.consumeJump()) this.verticalVelocity = PLAYER.jumpForce;
+
+        this.verticalVelocity = Math.max(
+            this.verticalVelocity + WORLD.gravity * deltaSeconds,
+            PLAYER.terminalVelocity
         );
+
+        this.controller.computeColliderMovement(this.collider, {
+            x: moveDirection.x,
+            y: this.verticalVelocity * deltaSeconds,
+            z: moveDirection.z,
+        });
+
+        const resolvedMovement = this.controller.computedMovement();
+        const translation = this.rigidBody.translation();
+
+        this.rigidBody.setNextKinematicTranslation({
+            x: translation.x + resolvedMovement.x,
+            y: translation.y + resolvedMovement.y,
+            z: translation.z + resolvedMovement.z,
+        });
     }
 
     private syncSceneObject(deltaSeconds: number): void {
@@ -116,25 +154,68 @@ export class Player extends Character implements IWorldEntity {
         this.sceneObject.position.set(translation.x, translation.y, translation.z);
 
         const turnFactor = 1 - Math.exp(-PLAYER.turnSmoothing * deltaSeconds);
-        const yawDelta = this.shortestAngleTo(this.facingYaw);
-        this.sceneObject.rotation.y += yawDelta * turnFactor;
+        this.sceneObject.rotation.y += this.shortestAngleTo(this.facingYaw) * turnFactor;
     }
 
     private followWithCamera(deltaSeconds: number): void {
         const translation = this.rigidBody.translation();
-        bodyPosition.set(translation.x, translation.y, translation.z);
 
-        desiredCameraPosition
-            .copy(bodyPosition)
-            .addScaledVector(cameraForward, -CAMERA.followDistance);
-        desiredCameraPosition.y = bodyPosition.y + CAMERA.followHeight;
+        if (!this.pivotInitialized) {
+            smoothedPivot.set(translation.x, translation.y + CAMERA.pivotHeight, translation.z);
+            this.pivotInitialized = true;
+        } else {
+            const pivotFactor = 1 - Math.exp(-CAMERA.pivotSmoothing * deltaSeconds);
+            smoothedPivot.x += (translation.x - smoothedPivot.x) * pivotFactor;
+            smoothedPivot.y += (translation.y + CAMERA.pivotHeight - smoothedPivot.y) * pivotFactor;
+            smoothedPivot.z += (translation.z - smoothedPivot.z) * pivotFactor;
+        }
 
-        const followFactor = 1 - Math.exp(-CAMERA.followSmoothing * deltaSeconds);
-        this.camera.position.lerp(desiredCameraPosition, followFactor);
+        const pitchHorizontalScale = Math.cos(this.orbitPitch);
+        orbitDirection
+            .set(
+                Math.sin(this.orbitYaw) * pitchHorizontalScale,
+                Math.sin(this.orbitPitch),
+                Math.cos(this.orbitYaw) * pitchHorizontalScale
+            )
+            .normalize();
 
-        cameraTarget.copy(bodyPosition);
-        cameraTarget.y += CAMERA.lookAtHeight;
-        this.camera.lookAt(cameraTarget);
+        this.resolveCameraDistance(deltaSeconds);
+
+        this.camera.position
+            .copy(smoothedPivot)
+            .addScaledVector(orbitDirection, this.currentFollowDistance);
+        this.camera.lookAt(smoothedPivot);
+    }
+
+    private resolveCameraDistance(deltaSeconds: number): void {
+        this.cameraSightRay.origin.x = smoothedPivot.x;
+        this.cameraSightRay.origin.y = smoothedPivot.y;
+        this.cameraSightRay.origin.z = smoothedPivot.z;
+        this.cameraSightRay.dir.x = orbitDirection.x;
+        this.cameraSightRay.dir.y = orbitDirection.y;
+        this.cameraSightRay.dir.z = orbitDirection.z;
+
+        const hit = this.context.physicsWorld.castRay(
+            this.cameraSightRay,
+            CAMERA.targetFollowDistance,
+            true,
+            undefined,
+            undefined,
+            this.collider
+        );
+
+        const unobstructedDistance = hit
+            ? Math.max(hit.timeOfImpact - CAMERA.collisionPadding, CAMERA.minimumFollowDistance)
+            : CAMERA.targetFollowDistance;
+
+        if (unobstructedDistance <= this.currentFollowDistance) {
+            this.currentFollowDistance = unobstructedDistance;
+            return;
+        }
+
+        const easeFactor = 1 - Math.exp(-CAMERA.pullOutSmoothing * deltaSeconds);
+        this.currentFollowDistance +=
+            (unobstructedDistance - this.currentFollowDistance) * easeFactor;
     }
 
     private shortestAngleTo(targetYaw: number): number {

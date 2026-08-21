@@ -28,6 +28,7 @@ const WorldRuntime = ({
     manifest: IThemeManifest;
 }) => {
     const camera = useThree((state) => state.camera);
+    const glRenderer = useThree((state) => state.gl);
     const [world, setWorld] = useState<World | null>(null);
 
     useEffect(() => {
@@ -55,6 +56,14 @@ const WorldRuntime = ({
             setWorld(null);
         };
     }, [camera, chapter, manifest]);
+
+    useEffect(() => {
+        const canvas = glRenderer.domElement;
+        const requestLock = () => canvas.requestPointerLock();
+
+        canvas.addEventListener("click", requestLock);
+        return () => canvas.removeEventListener("click", requestLock);
+    }, [glRenderer]);
 
     useFrame((_, deltaSeconds) => world?.update(deltaSeconds));
 
