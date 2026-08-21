@@ -9,8 +9,14 @@ export const PLAYER = {
     maxHealth: 100,
     unarmedDamage: 5,
     turnSmoothing: 12,
-    groundedVelocityThreshold: 0.05,
     spawnPosition: vec3(0, 2, 6),
+    colliderOffset: 0.02,
+    maxSlopeClimbAngle: (45 * Math.PI) / 180,
+    minSlopeSlideAngle: (38 * Math.PI) / 180,
+    autostepMaxHeight: 0.45,
+    autostepMinWidth: 0.2,
+    snapToGroundDistance: 0.5,
+    terminalVelocity: -45,
 };
 
 export const CAMERA = {
@@ -18,10 +24,15 @@ export const CAMERA = {
     near: 0.1,
     far: 320,
     startPosition: vec3(0, 8, 18),
-    followDistance: 7,
-    followHeight: 3.2,
-    lookAtHeight: 1.2,
-    followSmoothing: 6,
+    targetFollowDistance: 7,
+    minimumFollowDistance: 1.7,
+    collisionPadding: 0.4,
+    pullOutSmoothing: 5,
+    pivotHeight: 1.4,
+    pivotSmoothing: 10,
+    mouseSensitivity: 0.0023,
+    pitchRange: pair(-0.5, 1.15),
+    startPitch: 0.35,
 };
 
 export const WORLD = {
@@ -165,9 +176,6 @@ export const PROP_PLACEMENT = {
     placementAttempts: 10,
 };
 
-// A single tapered card per blade, not crossed quads: crossing them makes a box, which is
-// what read as rods. Normals are faked straight up so the outline pass cannot find an edge
-// between blade and ground, and lighting is wrap-shaded so grass sits in the scene's sun.
 export const GRASS = {
     tileSize: 16,
     tilesPerFrame: 2,
