@@ -28,7 +28,6 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
     return (
         <>
             <color attach="background" args={[sky.abyss]} />
-            <fogExp2 attach="fog" args={[environment.fogColor, environment.fogDensity]} />
 
             <hemisphereLight
                 args={[lighting.skyFill, lighting.groundFill, lighting.hemisphereIntensity]}

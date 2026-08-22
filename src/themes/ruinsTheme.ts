@@ -29,7 +29,6 @@ export const RUINS_MANIFEST: IThemeManifest = {
             groundFill: "#463f33",
             hemisphereIntensity: 0.6,
         },
-        fogColor: "#a89f92",
         fogDensity: 0.0078,
         outlineColor: "#1c1a16",
         terrain: {
