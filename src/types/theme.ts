@@ -67,7 +67,6 @@ export interface ITerrainProfile {
 export interface IThemeEnvironment {
     sky: ISkyGradient;
     lighting: IThemeLighting;
-    fogColor: string;
     fogDensity: number;
     outlineColor: string;
     terrain: ITerrainProfile;

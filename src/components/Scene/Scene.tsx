@@ -131,7 +131,7 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
             <SceneLighting environment={manifest.environment} />
             <WorldRuntime chapter={chapter} manifest={manifest} />
 
-            <PostProcessing outlineColor={manifest.environment.outlineColor} />
+            <PostProcessing environment={manifest.environment} />
         </Canvas>
     );
 };

@@ -29,7 +29,6 @@ export const HIGHLANDS_MANIFEST: IThemeManifest = {
             groundFill: "#4c5a60",
             hemisphereIntensity: 0.7,
         },
-        fogColor: "#cfdae0",
         fogDensity: 0.0042,
         outlineColor: "#1a2028",
         terrain: {

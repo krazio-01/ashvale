@@ -29,7 +29,6 @@ export const SETTLEMENT_MANIFEST: IThemeManifest = {
             groundFill: "#61533e",
             hemisphereIntensity: 0.7,
         },
-        fogColor: "#cbc0ac",
         fogDensity: 0.0062,
         outlineColor: "#241d16",
         terrain: {

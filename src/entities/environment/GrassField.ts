@@ -19,7 +19,6 @@ import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightField } from "@/world/TerrainHeightField";
 import { GRASS } from "@/constants/game";
 import { clamp, createSeededRandom, hashString, lerp } from "@/lib/helpers";
-import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 
 const VERTEX_SHADER = /* glsl */ `
     uniform float time;
@@ -325,7 +324,6 @@ export class GrassField extends Entity implements IWorldEntity {
         mesh.computeBoundingSphere();
         mesh.castShadow = false;
         mesh.receiveShadow = false;
-        mesh.layers.enable(FOLIAGE_LAYER);
 
         return mesh;
     }

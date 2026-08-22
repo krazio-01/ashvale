@@ -152,7 +152,6 @@ export const WOODLAND_MANIFEST: IThemeManifest = {
             groundFill: "#59502e",
             hemisphereIntensity: 0.65,
         },
-        fogColor: "#d5c8a8",
         fogDensity: 0.0052,
         outlineColor: "#2a2318",
         terrain: {
