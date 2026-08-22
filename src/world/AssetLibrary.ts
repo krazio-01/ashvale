@@ -1,8 +1,11 @@
-import { Box3, Material, Mesh, MeshStandardMaterial, Object3D } from "three";
+import { Box3, Material, Mesh, MeshStandardMaterial, Object3D, Vector3 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { BufferGeometry } from "three";
 import type { MaterialLibrary } from "@/world/MaterialLibrary";
 import type { IThemeManifest } from "@/types/theme";
 import type { IModelPart, IModelTemplate } from "@/types/world";
+
+const FOLIAGE_MATERIAL_PATTERN = /leaves|leaf|foliage/i;
 
 export class AssetLibrary {
     private readonly templatesByPath = new Map<string, IModelTemplate>();
@@ -49,10 +52,38 @@ function flattenForInstancing(root: Object3D, materialLibrary: MaterialLibrary):
         const geometry = object.geometry.clone();
         geometry.applyMatrix4(object.matrixWorld);
 
+        if (isFoliage(object.material)) applyCanopyNormals(geometry);
+
         parts.push({ geometry, material: toToonMaterial(object.material, materialLibrary) });
     });
 
     return { parts, height: measureHeight(parts) };
+}
+
+function isFoliage(source: Material | Material[]): boolean {
+    const materials = Array.isArray(source) ? source : [source];
+
+    return materials.some((material) => FOLIAGE_MATERIAL_PATTERN.test(material.name));
+}
+
+function applyCanopyNormals(geometry: BufferGeometry): void {
+    geometry.computeBoundingSphere();
+    const canopyCenter = geometry.boundingSphere?.center ?? new Vector3();
+
+    const positions = geometry.getAttribute("position");
+    const normals = geometry.getAttribute("normal");
+    const radial = new Vector3();
+
+    for (let index = 0; index < positions.count; index += 1) {
+        radial
+            .set(positions.getX(index), positions.getY(index), positions.getZ(index))
+            .sub(canopyCenter)
+            .normalize();
+
+        normals.setXYZ(index, radial.x, radial.y, radial.z);
+    }
+
+    normals.needsUpdate = true;
 }
 
 function toToonMaterial(

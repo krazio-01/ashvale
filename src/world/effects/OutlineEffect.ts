@@ -8,52 +8,79 @@ const fragmentShader = `
     uniform vec3 outlineColor;
     uniform float normalThreshold;
     uniform float depthThreshold;
+    uniform float grazingCompensation;
+    uniform float fadeStartDistance;
+    uniform float fadeEndDistance;
+    uniform float opacity;
+    uniform float thickness;
     uniform vec2 texelSize;
     uniform float debugView;
 
+    float distanceAt(const in vec2 uv) {
+        return -getViewZ(readDepth(uv));
+    }
+
     void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-        vec3 normalCenter = texture2D(normalBuffer, uv).rgb * 2.0 - 1.0;
-        float depthCenter = texture2D(depthBuffer, uv).r;
+        float centerDistance = distanceAt(uv);
+        float distanceFade = 1.0 - smoothstep(fadeStartDistance, fadeEndDistance, centerDistance);
 
-        vec3 normalRight = texture2D(normalBuffer, uv + vec2(texelSize.x, 0.0)).rgb * 2.0 - 1.0;
-        vec3 normalLeft = texture2D(normalBuffer, uv - vec2(texelSize.x, 0.0)).rgb * 2.0 - 1.0;
-        vec3 normalUp = texture2D(normalBuffer, uv + vec2(0.0, texelSize.y)).rgb * 2.0 - 1.0;
-        vec3 normalDown = texture2D(normalBuffer, uv - vec2(0.0, texelSize.y)).rgb * 2.0 - 1.0;
-
-        float depthRight = texture2D(depthBuffer, uv + vec2(texelSize.x, 0.0)).r;
-        float depthLeft = texture2D(depthBuffer, uv - vec2(texelSize.x, 0.0)).r;
-        float depthUp = texture2D(depthBuffer, uv + vec2(0.0, texelSize.y)).r;
-        float depthDown = texture2D(depthBuffer, uv - vec2(0.0, texelSize.y)).r;
-
-        float normalEdge = max(
-            max(1.0 - dot(normalCenter, normalRight), 1.0 - dot(normalCenter, normalLeft)),
-            max(1.0 - dot(normalCenter, normalUp), 1.0 - dot(normalCenter, normalDown))
-        );
-
-        float depthEdge = max(
-            max(abs(depthCenter - depthRight), abs(depthCenter - depthLeft)),
-            max(abs(depthCenter - depthUp), abs(depthCenter - depthDown))
-        );
-
-        // Raw signal view: red = normal-edge strength, green = depth-edge strength (scaled up, it's tiny)
-        if (debugView > 0.5) {
-            outputColor = vec4(normalEdge, depthEdge * 200.0, 0.0, 1.0);
+        if (distanceFade <= 0.001) {
+            outputColor = inputColor;
             return;
         }
 
-        float isEdge = clamp(
-            step(normalThreshold, normalEdge) + step(depthThreshold, depthEdge),
-            0.0,
-            1.0
+        vec2 offset = texelSize * thickness;
+        vec3 centerNormal = texture2D(normalBuffer, uv).rgb * 2.0 - 1.0;
+
+        float rightDistance = distanceAt(uv + vec2(offset.x, 0.0));
+        float leftDistance = distanceAt(uv - vec2(offset.x, 0.0));
+        float upDistance = distanceAt(uv + vec2(0.0, offset.y));
+        float downDistance = distanceAt(uv - vec2(0.0, offset.y));
+
+        // Only the nearer surface draws its own outline, which halves line width: testing
+        // both sides marks two pixels for every one boundary.
+        float nearestGap = max(
+            max(rightDistance - centerDistance, leftDistance - centerDistance),
+            max(upDistance - centerDistance, downDistance - centerDistance)
         );
 
-        outputColor = vec4(mix(inputColor.rgb, outlineColor, isEdge), inputColor.a);
+        // A surface angled away from the camera changes depth quickly across the screen
+        // without being an edge, so its threshold widens by how far it is turned away.
+        float facingCamera = max(abs(centerNormal.z), grazingCompensation);
+        float scaledDepthThreshold = (depthThreshold * centerDistance) / facingCamera;
+
+        float depthEdge = smoothstep(
+            scaledDepthThreshold,
+            scaledDepthThreshold * 2.0,
+            max(nearestGap, 0.0)
+        );
+
+        vec3 rightNormal = texture2D(normalBuffer, uv + vec2(offset.x, 0.0)).rgb * 2.0 - 1.0;
+        vec3 leftNormal = texture2D(normalBuffer, uv - vec2(offset.x, 0.0)).rgb * 2.0 - 1.0;
+        vec3 upNormal = texture2D(normalBuffer, uv + vec2(0.0, offset.y)).rgb * 2.0 - 1.0;
+        vec3 downNormal = texture2D(normalBuffer, uv - vec2(0.0, offset.y)).rgb * 2.0 - 1.0;
+
+        float normalDifference = max(
+            max(1.0 - dot(centerNormal, rightNormal), 1.0 - dot(centerNormal, leftNormal)),
+            max(1.0 - dot(centerNormal, upNormal), 1.0 - dot(centerNormal, downNormal))
+        );
+
+        float normalEdge = smoothstep(
+            normalThreshold,
+            normalThreshold * 1.6,
+            normalDifference
+        );
+
+        if (debugView > 0.5) {
+            outputColor = vec4(normalEdge, depthEdge, 0.0, 1.0);
+            return;
+        }
+
+        float edgeStrength = max(normalEdge, depthEdge) * distanceFade * opacity;
+
+        outputColor = vec4(mix(inputColor.rgb, outlineColor, edgeStrength), inputColor.a);
     }
 `;
-
-export interface IOutlineEffectOptions {
-    normalBuffer: Texture | null;
-}
 
 export interface IOutlineEffectOptions {
     normalBuffer: Texture | null;
@@ -67,6 +94,11 @@ export class OutlineEffect extends Effect {
             ["outlineColor", new Uniform(new Color(outlineColor))],
             ["normalThreshold", new Uniform(OUTLINE.normalThreshold)],
             ["depthThreshold", new Uniform(OUTLINE.depthThreshold)],
+            ["grazingCompensation", new Uniform(OUTLINE.grazingCompensation)],
+            ["fadeStartDistance", new Uniform(OUTLINE.fadeStartDistance)],
+            ["fadeEndDistance", new Uniform(OUTLINE.fadeEndDistance)],
+            ["opacity", new Uniform(OUTLINE.opacity)],
+            ["thickness", new Uniform(OUTLINE.thickness)],
             ["texelSize", new Uniform(new Vector2())],
             ["debugView", new Uniform(OUTLINE.debugView ? 1 : 0)],
         ]);
