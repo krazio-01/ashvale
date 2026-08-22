@@ -1,7 +1,7 @@
 import { Color, Matrix4, Uniform } from "three";
 import type { Camera, WebGLRenderer } from "three";
 import { ViewPositionEffect } from "@/world/effects/ViewPositionEffect";
-import { sunDirectionOf } from "@/themes/themeManifests";
+import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { ISkyGradient } from "@/types/theme";
 import { ATMOSPHERE } from "@/constants/game";
 

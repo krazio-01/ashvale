@@ -14,7 +14,7 @@ import {
     type Vector3Tuple,
 } from "three";
 import { Entity } from "@/entities/Entity";
-import { sunDirectionOf } from "@/themes/themeManifests";
+import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightField } from "@/world/TerrainHeightField";
 import { TerrainSampleGrid } from "@/world/TerrainSampleGrid";

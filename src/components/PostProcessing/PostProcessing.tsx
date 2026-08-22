@@ -13,8 +13,8 @@ import {
 import { ToneMappingMode } from "postprocessing";
 import { Vector2 } from "three";
 import type { Texture, WebGLRenderer } from "three";
-import OutlinePass from "@/components/OutlinePass";
-import AtmospherePass from "@/components/AtmospherePass";
+import OutlinePass from "@/components/PostProcessing/OutlinePass";
+import AtmospherePass from "@/components/PostProcessing/AtmospherePass";
 import { FoliageMaskPass } from "@/world/effects/FoliageMaskPass";
 import type { IThemeEnvironment } from "@/types/theme";
 import { AMBIENT_OCCLUSION, POST_PROCESSING, RENDER } from "@/constants/game";
