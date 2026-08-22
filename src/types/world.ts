@@ -33,3 +33,9 @@ export interface IModelTemplate {
     parts: IModelPart[];
     height: number;
 }
+
+export interface IModelPart {
+    geometry: BufferGeometry;
+    material: Material | Material[];
+    isFoliage: boolean;
+}
