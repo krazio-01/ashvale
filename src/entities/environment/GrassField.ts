@@ -17,6 +17,7 @@ import { Entity } from "@/entities/Entity";
 import { sunDirectionOf } from "@/themes/themeManifests";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightField } from "@/world/TerrainHeightField";
+import { TerrainSampleGrid } from "@/world/TerrainSampleGrid";
 import { GRASS } from "@/constants/game";
 import { clamp, createSeededRandom, hashString, lerp } from "@/lib/helpers";
 
@@ -270,15 +271,25 @@ export class GrassField extends Entity implements IWorldEntity {
 
         const nextRandom = createSeededRandom(hashString(`${this.seed}:${key}`));
         const transform = new Object3D();
-        const matrices: number[] = [];
-        const curls: number[] = [];
-        const tints: number[] = [];
+
+        const matrixValues = new Float32Array(bladeCount * 16);
+        const curls = new Float32Array(bladeCount);
+        const tints = new Float32Array(bladeCount);
+        let placedCount = 0;
+
+        const heights = new TerrainSampleGrid(
+            this.heightField,
+            originX,
+            originZ,
+            GRASS.tileSize,
+            GRASS.heightSampleSpacing
+        );
 
         for (let blade = 0; blade < bladeCount; blade += 1) {
             const localX = originX + nextRandom() * GRASS.tileSize;
             const localZ = originZ + nextRandom() * GRASS.tileSize;
 
-            const sample = this.heightField.sampleAt(localX, localZ);
+            const sample = heights.sampleAt(localX, localZ);
             if (sample.isCorridor && sample.flatWeight > GRASS.routeRejectWeight) continue;
 
             const lean = lerp(GRASS.leanRange[0], GRASS.leanRange[1], nextRandom());
@@ -300,26 +311,26 @@ export class GrassField extends Entity implements IWorldEntity {
             transform.scale.set(GRASS.bladeWidth * tier.scale, height, 1);
             transform.updateMatrix();
 
-            matrices.push(...transform.matrix.elements);
-            curls.push(lerp(GRASS.curlRange[0], GRASS.curlRange[1], nextRandom()));
-            tints.push(lerp(GRASS.tintRange[0], GRASS.tintRange[1], nextRandom()));
+            transform.matrix.toArray(matrixValues, placedCount * 16);
+            curls[placedCount] = lerp(GRASS.curlRange[0], GRASS.curlRange[1], nextRandom());
+            tints[placedCount] = lerp(GRASS.tintRange[0], GRASS.tintRange[1], nextRandom());
+            placedCount += 1;
         }
 
-        const instanceCount = curls.length;
-        if (instanceCount === 0) return null;
+        if (placedCount === 0) return null;
 
         const geometry = bladeGeometry.clone();
         geometry.setAttribute(
             "bladeCurl",
-            new InstancedBufferAttribute(new Float32Array(curls), 1)
+            new InstancedBufferAttribute(curls.slice(0, placedCount), 1)
         );
         geometry.setAttribute(
             "bladeTint",
-            new InstancedBufferAttribute(new Float32Array(tints), 1)
+            new InstancedBufferAttribute(tints.slice(0, placedCount), 1)
         );
 
-        const mesh = new InstancedMesh(geometry, this.material, instanceCount);
-        mesh.instanceMatrix.array.set(matrices);
+        const mesh = new InstancedMesh(geometry, this.material, placedCount);
+        mesh.instanceMatrix.array.set(matrixValues.subarray(0, placedCount * 16));
         mesh.instanceMatrix.needsUpdate = true;
         mesh.computeBoundingSphere();
         mesh.castShadow = false;

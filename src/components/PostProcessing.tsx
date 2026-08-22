@@ -51,7 +51,7 @@ const PostProcessing = ({ environment }: { environment: IThemeEnvironment }) => 
     const foliageMask = useFoliageMaskTexture();
 
     return (
-        <EffectComposer enableNormalPass multisampling={RENDER.multisampling}>
+        <EffectComposer multisampling={RENDER.multisampling}>
             <N8AO
                 halfRes={AMBIENT_OCCLUSION.halfResolution}
                 aoRadius={AMBIENT_OCCLUSION.radius}

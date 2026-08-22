@@ -15,6 +15,7 @@ import type { IThemeManifest } from "@/types/theme";
 import { CAMERA, POST_PROCESSING, RENDER } from "@/constants/game";
 import { InlineLoader } from "generative-loaders";
 import "generative-loaders/styles.css";
+import PerformanceOverlay from "../PerformanceOverlay";
 import "./scene.scss";
 
 const ACTIVE_CHAPTER_INDEX = 2;
@@ -132,6 +133,8 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
             <WorldRuntime chapter={chapter} manifest={manifest} />
 
             <PostProcessing environment={manifest.environment} />
+
+            <PerformanceOverlay />
         </Canvas>
     );
 };
