@@ -1,7 +1,7 @@
 "use client";
-import { forwardRef, useContext, useMemo } from "react";
+import { forwardRef, useMemo } from "react";
+import { useThree } from "@react-three/fiber";
 import type { Texture } from "three";
-import { EffectComposerContext } from "@react-three/postprocessing";
 import { OutlineEffect } from "@/world/effects/OutlineEffect";
 
 interface IOutlinePassProps {
@@ -11,12 +11,11 @@ interface IOutlinePassProps {
 
 const OutlinePass = forwardRef<OutlineEffect, IOutlinePassProps>(
     ({ outlineColor, foliageMask }, ref) => {
-        const composerContext = useContext(EffectComposerContext);
-        const normalBuffer = composerContext?.normalPass?.texture ?? null;
+        const camera = useThree((state) => state.camera);
 
         const effect = useMemo(
-            () => new OutlineEffect({ normalBuffer, foliageMask, outlineColor }),
-            [normalBuffer, foliageMask, outlineColor]
+            () => new OutlineEffect({ camera, foliageMask, outlineColor }),
+            [camera, foliageMask, outlineColor]
         );
 
         return <primitive ref={ref} object={effect} dispose={null} />;
