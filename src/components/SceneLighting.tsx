@@ -1,7 +1,7 @@
 "use client";
 import { useMemo } from "react";
 import type { Vector3Tuple } from "three";
-import { sunDirectionOf } from "@/themes/themeManifests";
+import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IThemeEnvironment } from "@/types/theme";
 import { LIGHT } from "@/constants/game";
 

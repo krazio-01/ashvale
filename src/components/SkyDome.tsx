@@ -2,7 +2,7 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { BackSide, Color, Mesh, ShaderMaterial } from "three";
-import { sunDirectionOf } from "@/themes/themeManifests";
+import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IThemeEnvironment } from "@/types/theme";
 import { ATMOSPHERE } from "@/constants/game";
 
