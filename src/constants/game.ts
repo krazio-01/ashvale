@@ -133,8 +133,13 @@ export const RENDER = {
 };
 
 export const OUTLINE = {
-    normalThreshold: 0.15,
-    depthThreshold: 0.0015,
+    thickness: 1,
+    normalThreshold: 0.42,
+    depthThreshold: 0.014,
+    grazingCompensation: 0.18,
+    fadeStartDistance: 26,
+    fadeEndDistance: 70,
+    opacity: 0.68,
     debugView: false,
 };
 
