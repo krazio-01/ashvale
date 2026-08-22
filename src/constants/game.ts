@@ -66,6 +66,21 @@ export const ATMOSPHERE = {
     skyRadius: 200,
     middleAltitude: 0.32,
     skyDitherStrength: 0.6,
+    hazeBaseHeight: 0,
+    hazeHeightFadeRate: 0.022,
+    hazeHeightInfluence: 0.75,
+    sunGlowStrength: 0.5,
+    sunGlowFalloff: 4,
+};
+
+export const AMBIENT_OCCLUSION = {
+    radius: 1.4,
+    distanceFalloff: 1,
+    intensity: 2.4,
+    samples: 8,
+    denoiseSamples: 4,
+    denoiseRadius: 12,
+    halfResolution: true,
 };
 
 export const TERRAIN = {
@@ -128,8 +143,9 @@ export const LIGHT = {
 };
 
 export const RENDER = {
-    pixelRatioRange: pair(1, 2),
-    multisampling: 8,
+    pixelRatioRange: pair(1, 1.5),
+    multisampling: 0,
+    foliageMaskScale: 0.5,
 };
 
 export const POST_PROCESSING = {
