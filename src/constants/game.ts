@@ -132,6 +132,17 @@ export const RENDER = {
     multisampling: 8,
 };
 
+export const POST_PROCESSING = {
+    exposure: 1.15,
+    bloomIntensity: 0.55,
+    bloomThreshold: 0.68,
+    bloomSmoothing: 0.35,
+    bloomRadius: 0.72,
+    saturationBoost: 0.24,
+    brightnessLift: 0.02,
+    contrastBoost: 0.12,
+};
+
 export const OUTLINE = {
     thickness: 1,
     normalThreshold: 0.42,

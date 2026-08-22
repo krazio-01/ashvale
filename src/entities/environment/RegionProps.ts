@@ -5,6 +5,7 @@ import { Entity } from "@/entities/Entity";
 import { PropRole } from "@/types/theme";
 import type { IPropGroup } from "@/types/theme";
 import type { IModelTemplate, IWorldContext, IWorldEntity } from "@/types/world";
+import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 
 export class RegionProps extends Entity implements IWorldEntity {
     readonly sceneObject = new Group();
@@ -51,6 +52,7 @@ export class RegionProps extends Entity implements IWorldEntity {
             const batch = new InstancedMesh(part.geometry, part.material, group.placements.length);
             batch.castShadow = castsShadow;
             batch.receiveShadow = true;
+            if (part.isFoliage) batch.layers.enable(FOLIAGE_LAYER);
 
             group.placements.forEach((placement, index) => {
                 transform.position.set(...placement.position);

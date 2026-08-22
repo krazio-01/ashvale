@@ -1,19 +1,18 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { EffectComposer } from "@react-three/postprocessing";
 import { NoToneMapping } from "three";
 import { World } from "@/world/World";
 import SkyDome from "@/components/SkyDome";
 import SceneLighting from "@/components/SceneLighting";
-import OutlinePass from "@/components/OutlinePass";
+import PostProcessing from "@/components/PostProcessing";
 import { spawnChapter } from "@/factories/RealmSpawner";
 import { resolveThemeManifest } from "@/themes/themeManifests";
 import { isRequestCancellation, useRequest } from "@/hooks/useRequest";
 import { HttpMethod } from "@/constants/strings";
 import type { ChapterResponse, RealmResponse } from "@/responses/realm/RealmResponse";
 import type { IThemeManifest } from "@/types/theme";
-import { CAMERA, RENDER } from "@/constants/game";
+import { CAMERA, POST_PROCESSING, RENDER } from "@/constants/game";
 import { InlineLoader } from "generative-loaders";
 import "generative-loaders/styles.css";
 import "./scene.scss";
@@ -125,15 +124,14 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
             gl={{
                 antialias: false,
                 toneMapping: NoToneMapping,
+                toneMappingExposure: POST_PROCESSING.exposure,
             }}
         >
             <SkyDome environment={manifest.environment} />
             <SceneLighting environment={manifest.environment} />
             <WorldRuntime chapter={chapter} manifest={manifest} />
 
-            <EffectComposer enableNormalPass multisampling={RENDER.multisampling}>
-                <OutlinePass outlineColor={manifest.environment.outlineColor} />
-            </EffectComposer>
+            <PostProcessing outlineColor={manifest.environment.outlineColor} />
         </Canvas>
     );
 };

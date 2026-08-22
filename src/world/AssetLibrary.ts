@@ -52,9 +52,14 @@ function flattenForInstancing(root: Object3D, materialLibrary: MaterialLibrary):
         const geometry = object.geometry.clone();
         geometry.applyMatrix4(object.matrixWorld);
 
-        if (isFoliage(object.material)) applyCanopyNormals(geometry);
+        const partIsFoliage = isFoliage(object.material);
+        if (partIsFoliage) applyCanopyNormals(geometry);
 
-        parts.push({ geometry, material: toToonMaterial(object.material, materialLibrary) });
+        parts.push({
+            geometry,
+            material: toToonMaterial(object.material, materialLibrary),
+            isFoliage: partIsFoliage,
+        });
     });
 
     return { parts, height: measureHeight(parts) };

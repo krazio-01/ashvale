@@ -19,6 +19,7 @@ import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightField } from "@/world/TerrainHeightField";
 import { GRASS } from "@/constants/game";
 import { clamp, createSeededRandom, hashString, lerp } from "@/lib/helpers";
+import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 
 const VERTEX_SHADER = /* glsl */ `
     uniform float time;
@@ -143,7 +144,9 @@ export class GrassField extends Entity implements IWorldEntity {
                     ),
                 },
                 sunColor: {
-                    value: new Color(lighting.keyColor).multiplyScalar(lighting.keyIntensity * 0.55),
+                    value: new Color(lighting.keyColor).multiplyScalar(
+                        lighting.keyIntensity * 0.55
+                    ),
                 },
                 ambientColor: {
                     value: new Color(lighting.skyFill).multiplyScalar(
@@ -182,8 +185,6 @@ export class GrassField extends Entity implements IWorldEntity {
         this.sceneObject.clear();
     }
 
-    // A tile is dropped when it leaves view or when its detail tier no longer matches its
-    // distance; queueMissingTiles then rebuilds it at the tier it now deserves.
     private releaseStaleTiles(): void {
         const releaseRadius = this.viewRadius + GRASS.tileSize;
 
@@ -239,7 +240,9 @@ export class GrassField extends Entity implements IWorldEntity {
         for (let tier = 0; tier < GRASS.detailTiers.length; tier += 1) {
             const boundary = GRASS.detailTiers[tier]!.radius;
             const widened =
-                currentTier !== null && currentTier > tier ? boundary + GRASS.tierHysteresis : boundary;
+                currentTier !== null && currentTier > tier
+                    ? boundary + GRASS.tierHysteresis
+                    : boundary;
 
             if (distance <= widened) return tier;
         }
@@ -264,9 +267,7 @@ export class GrassField extends Entity implements IWorldEntity {
         const [tileX, tileZ] = key.split(":").map(Number);
         const originX = tileX! * GRASS.tileSize;
         const originZ = tileZ! * GRASS.tileSize;
-        const bladeCount = Math.round(
-            GRASS.tileSize * GRASS.tileSize * tier.bladesPerSquareMetre
-        );
+        const bladeCount = Math.round(GRASS.tileSize * GRASS.tileSize * tier.bladesPerSquareMetre);
 
         const nextRandom = createSeededRandom(hashString(`${this.seed}:${key}`));
         const transform = new Object3D();
@@ -309,8 +310,14 @@ export class GrassField extends Entity implements IWorldEntity {
         if (instanceCount === 0) return null;
 
         const geometry = bladeGeometry.clone();
-        geometry.setAttribute("bladeCurl", new InstancedBufferAttribute(new Float32Array(curls), 1));
-        geometry.setAttribute("bladeTint", new InstancedBufferAttribute(new Float32Array(tints), 1));
+        geometry.setAttribute(
+            "bladeCurl",
+            new InstancedBufferAttribute(new Float32Array(curls), 1)
+        );
+        geometry.setAttribute(
+            "bladeTint",
+            new InstancedBufferAttribute(new Float32Array(tints), 1)
+        );
 
         const mesh = new InstancedMesh(geometry, this.material, instanceCount);
         mesh.instanceMatrix.array.set(matrices);
@@ -318,6 +325,7 @@ export class GrassField extends Entity implements IWorldEntity {
         mesh.computeBoundingSphere();
         mesh.castShadow = false;
         mesh.receiveShadow = false;
+        mesh.layers.enable(FOLIAGE_LAYER);
 
         return mesh;
     }
