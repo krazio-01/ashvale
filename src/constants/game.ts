@@ -161,9 +161,7 @@ export const POST_PROCESSING = {
 
 export const OUTLINE = {
     thickness: 1,
-    normalThreshold: 0.42,
-    depthThreshold: 0.014,
-    grazingCompensation: 0.18,
+    edgeThreshold: 0.012,
     fadeStartDistance: 26,
     fadeEndDistance: 70,
     opacity: 0.68,
@@ -212,6 +210,7 @@ export const GRASS = {
     tileSize: 16,
     tilesPerFrame: 2,
     tierHysteresis: 3,
+    heightSampleSpacing: 1,
     detailTiers: [
         { radius: 20, bladesPerSquareMetre: 14, segments: 5, scale: 1 },
         { radius: 36, bladesPerSquareMetre: 7, segments: 3, scale: 1.25 },
