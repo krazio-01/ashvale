@@ -1,3 +1,4 @@
+import { Color } from "three";
 import type { Vector3Tuple } from "three";
 
 export function vec3(x: number, y: number, z: number): Vector3Tuple {
@@ -35,4 +36,28 @@ export function createSeededRandom(seed: number): () => number {
 
         return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
     };
+}
+
+export function blendColors(fromHex: string, toHex: string, ratio: number): string {
+    const blended = new Color(fromHex).lerp(new Color(toHex), clamp(ratio, 0, 1));
+
+    return `#${blended.getHexString()}`;
+}
+
+export function shiftColorHsl(
+    hex: string,
+    hueShift: number,
+    saturationScale: number,
+    lightnessShift: number
+): string {
+    const hsl = { h: 0, s: 0, l: 0 };
+    new Color(hex).getHSL(hsl);
+
+    const shifted = new Color().setHSL(
+        (((hsl.h + hueShift) % 1) + 1) % 1,
+        clamp(hsl.s * saturationScale, 0, 1),
+        clamp(hsl.l + lightnessShift, 0, 1)
+    );
+
+    return `#${shifted.getHexString()}`;
 }
