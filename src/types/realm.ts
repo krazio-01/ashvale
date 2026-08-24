@@ -21,6 +21,7 @@ export interface IRealmChapter {
     pathways: IRegionPathway[];
     boss: IChapterBoss | null;
     theme: ChapterTheme;
+    season: ChapterSeason;
 }
 
 export interface IChapterRegion {
@@ -53,4 +54,11 @@ export enum ChapterTheme {
     Settlement = "settlement",
     Ruins = "ruins",
     Highlands = "highlands",
+}
+
+export enum ChapterSeason {
+    Spring = "spring",
+    Summer = "summer",
+    Autumn = "autumn",
+    Winter = "winter",
 }
