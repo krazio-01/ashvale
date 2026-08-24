@@ -19,7 +19,7 @@ import { SPAWNING, TERRAIN } from "@/constants/game";
 import { hashString } from "@/lib/helpers";
 
 export function spawnChapter(world: World, camera: Camera, chapter: ChapterResponse): void {
-    const manifest = resolveThemeManifest(chapter.theme);
+    const manifest = resolveThemeManifest(chapter.theme, chapter.season);
     const positionsByRegionId = new Map<string, Vector3Tuple>();
 
     for (const region of chapter.regions)

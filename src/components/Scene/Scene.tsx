@@ -18,7 +18,7 @@ import "generative-loaders/styles.css";
 import PerformanceOverlay from "../PerformanceOverlay";
 import "./scene.scss";
 
-const ACTIVE_CHAPTER_INDEX = 2;
+const ACTIVE_CHAPTER_INDEX = 0;
 
 const WorldRuntime = ({
     chapter,
@@ -110,7 +110,7 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
     const chapter = realm?.chapters[ACTIVE_CHAPTER_INDEX];
     if (!chapter) return null;
 
-    const manifest = resolveThemeManifest(chapter.theme);
+    const manifest = resolveThemeManifest(chapter.theme, chapter.season);
 
     return (
         <Canvas
