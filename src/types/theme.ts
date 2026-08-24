@@ -1,4 +1,4 @@
-import type { ChapterTheme } from "@/types/realm";
+import type { ChapterSeason, ChapterTheme } from "@/types/realm";
 
 export enum PropRole {
     Landmark = "landmark",
@@ -70,6 +70,28 @@ export interface IThemeEnvironment {
     fogDensity: number;
     outlineColor: string;
     terrain: ITerrainProfile;
+}
+
+export interface ISeasonColorShift {
+    hueShift: number;
+    saturationScale: number;
+    lightnessShift: number;
+}
+
+export interface ISeasonTint {
+    color: string;
+    strength: number;
+}
+
+export interface ISeasonProfile {
+    season: ChapterSeason;
+    ground: ISeasonColorShift;
+    skyTint: ISeasonTint;
+    lightTint: ISeasonTint;
+    keyIntensityScale: number;
+    hemisphereIntensityScale: number;
+    fogDensityScale: number;
+    sunElevationDelta: number;
 }
 
 export interface IThemeManifest {

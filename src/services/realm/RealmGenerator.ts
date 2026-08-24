@@ -24,10 +24,16 @@ import {
     isCommitDescendedFrom,
 } from "@/services/github/GithubService";
 import { packChapterRegions } from "@/services/realm/RegionPacker";
-import { ChapterTheme, IChapterBoss, IChapterRegion, IRealmChapter, IResolvedRealm } from "@/types/realm";
+import { ChapterSeason, ChapterTheme, IChapterBoss, IChapterRegion, IRealmChapter, IResolvedRealm } from "@/types/realm";
 
 const NEWEST_COMMIT_POSITION = 0;
 const SEED_HASH_MULTIPLIER = 31;
+const SEASON_PROGRESSION = [
+    ChapterSeason.Spring,
+    ChapterSeason.Summer,
+    ChapterSeason.Autumn,
+    ChapterSeason.Winter,
+];
 
 export async function generateRealm(
     repositoryOwner: string,
@@ -224,7 +230,23 @@ async function buildChapter(
         pathways: geometry.pathways,
         boss,
         theme: resolveChapterTheme(chapterIndex, context.chapterCount, context.generationSeed),
+        season: resolveChapterSeason(chapterIndex, context.chapterCount, context.generationSeed),
     };
+}
+
+function resolveChapterSeason(
+    chapterIndex: number,
+    chapterCount: number,
+    generationSeed: number
+): ChapterSeason {
+    const progress = chapterCount <= 1 ? 0 : chapterIndex / (chapterCount - 1);
+    const stepsForward = Math.min(
+        Math.floor(progress * SEASON_PROGRESSION.length),
+        SEASON_PROGRESSION.length - 1
+    );
+    const seasonIndex = (stepsForward + generationSeed) % SEASON_PROGRESSION.length;
+
+    return SEASON_PROGRESSION[seasonIndex] ?? ChapterSeason.Spring;
 }
 
 function resolveChapterTheme(
