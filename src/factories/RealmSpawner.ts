@@ -10,7 +10,7 @@ import { placeRegionProps } from "@/factories/PropPlacer";
 import { placeSurroundVegetation } from "@/factories/SurroundPlacer";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
 import { TerrainHeightField } from "@/world/TerrainHeightField";
-import type { IFlatArea, IFlatPath } from "@/world/TerrainHeightField";
+import type { IRegionFloor, ICorridorPath } from "@/world/TerrainHeightField";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
 import type { IChapterRegion } from "@/types/realm";
@@ -25,14 +25,19 @@ export function spawnChapter(world: World, camera: Camera, chapter: ChapterRespo
     for (const region of chapter.regions)
         positionsByRegionId.set(region.regionId, region.worldPosition);
 
-    spawnTerrain(world, camera, chapter, manifest, positionsByRegionId);
+    const groundHeightAt = spawnTerrain(world, camera, chapter, manifest, positionsByRegionId);
 
     for (const region of chapter.regions) {
         world.addEntity(
-            new RegionProps(region.regionId, world.context, placeRegionProps(region, manifest))
+            new RegionProps(
+                region.regionId,
+                world.context,
+                placeRegionProps(region, manifest, groundHeightAt)
+            )
         );
 
-        if (region.regionId !== chapter.bossRegionId) spawnRegionEnemies(world, region);
+        if (region.regionId !== chapter.bossRegionId)
+            spawnRegionEnemies(world, region, groundHeightAt);
     }
 
     const spawnPosition = positionsByRegionId.get(chapter.spawnRegionId);
@@ -40,7 +45,7 @@ export function spawnChapter(world: World, camera: Camera, chapter: ChapterRespo
         world.addEntity(
             new Player("player", world.context, camera, [
                 spawnPosition[0],
-                spawnPosition[1] + SPAWNING.playerSpawnHeight,
+                groundHeightAt(spawnPosition[0], spawnPosition[2]) + SPAWNING.playerSpawnHeight,
                 spawnPosition[2],
             ])
         );
@@ -51,14 +56,18 @@ export function spawnChapter(world: World, camera: Camera, chapter: ChapterRespo
         world.addEntity(
             new CharacterBody(bossModel(), world.context, [
                 bossPosition[0],
-                bossPosition[1] + SPAWNING.bossSpawnHeight,
+                groundHeightAt(bossPosition[0], bossPosition[2]) + SPAWNING.bossSpawnHeight,
                 bossPosition[2],
             ])
         );
     }
 }
 
-function spawnRegionEnemies(world: World, region: IChapterRegion): void {
+function spawnRegionEnemies(
+    world: World,
+    region: IChapterRegion,
+    groundHeightAt: GroundHeightLookup
+): void {
     const enemyCount = Math.min(
         Math.max(Math.floor(region.fileCount / SPAWNING.filesPerEnemy), 1),
         SPAWNING.maximumEnemiesPerRegion
@@ -66,21 +75,29 @@ function spawnRegionEnemies(world: World, region: IChapterRegion): void {
 
     for (let index = 0; index < enemyCount; index += 1)
         world.addEntity(
-            spawnEnemyBody(region, world.context, enemyPosition(region, index, enemyCount))
+            spawnEnemyBody(
+                region,
+                world.context,
+                enemyPosition(region, index, enemyCount, groundHeightAt)
+            )
         );
 }
 
-function enemyPosition(region: IChapterRegion, index: number, count: number): Vector3Tuple {
+function enemyPosition(
+    region: IChapterRegion,
+    index: number,
+    count: number,
+    groundHeightAt: GroundHeightLookup
+): Vector3Tuple {
     const [width, depth] = region.floorSize;
-    const [x, y, z] = region.worldPosition;
+    const [x, , z] = region.worldPosition;
     const radius = Math.min(width, depth) * SPAWNING.enemyRingRadiusFactor;
     const angle = (index / count) * Math.PI * 2;
 
-    return [
-        x + Math.cos(angle) * radius,
-        y + SPAWNING.enemySpawnHeight,
-        z + Math.sin(angle) * radius,
-    ];
+    const enemyX = x + Math.cos(angle) * radius;
+    const enemyZ = z + Math.sin(angle) * radius;
+
+    return [enemyX, groundHeightAt(enemyX, enemyZ) + SPAWNING.enemySpawnHeight, enemyZ];
 }
 
 function spawnTerrain(
@@ -89,7 +106,7 @@ function spawnTerrain(
     chapter: ChapterResponse,
     manifest: IThemeManifest,
     positionsByRegionId: Map<string, Vector3Tuple>
-): void {
+): GroundHeightLookup {
     const regions = chapter.regions;
     let centerX = 0;
     let centerZ = 0;
@@ -103,7 +120,7 @@ function spawnTerrain(
     centerZ /= regions.length;
 
     let furthestDistance = 0;
-    const flatAreas: IFlatArea[] = [];
+    const flatAreas: IRegionFloor[] = [];
 
     for (const region of regions) {
         const [x, y, z] = region.worldPosition;
@@ -114,7 +131,7 @@ function spawnTerrain(
             centerZ: z - centerZ,
             halfWidth: width / 2,
             halfDepth: depth / 2,
-            height: y,
+            floorElevation: y,
             floorColorIndex: region.nestingDepth,
         });
 
@@ -122,7 +139,7 @@ function spawnTerrain(
         if (distance > furthestDistance) furthestDistance = distance;
     }
 
-    const flatPaths: IFlatPath[] = [];
+    const flatPaths: ICorridorPath[] = [];
 
     for (const pathway of chapter.pathways) {
         const fromPosition = positionsByRegionId.get(pathway.fromRegionId);
@@ -136,7 +153,7 @@ function spawnTerrain(
             toX: toPosition[0] - centerX,
             toZ: toPosition[2] - centerZ,
             halfWidth: pathway.corridorWidth / 2,
-            height: (fromPosition[1] + toPosition[1]) / 2,
+            floorElevation: (fromPosition[1] + toPosition[1]) / 2,
         });
     }
 
@@ -159,4 +176,8 @@ function spawnTerrain(
         (groups, bucketIndex) =>
             world.addEntity(new RegionProps(`wild-${bucketIndex}`, world.context, groups))
     );
+
+    return (worldX, worldZ) => heightField.elevationAt(worldX - centerX, worldZ - centerZ);
 }
+
+type GroundHeightLookup = (worldX: number, worldZ: number) => number;

@@ -111,16 +111,16 @@ function scatterBand(
         const localX = Math.cos(angle) * radius;
         const localZ = Math.sin(angle) * radius;
 
-        const sample = heightField.sampleAt(localX, localZ);
-        if (sample.flatWeight > SURROUND.flatRejectWeight) continue;
-        if (heightField.slopeAt(localX, localZ) > slopeLimit) continue;
+        const sample = heightField.sampleTerrainAt(localX, localZ);
+        if (sample.carveStrength > SURROUND.carveRejectThreshold) continue;
+        if (heightField.steepnessAt(localX, localZ) > slopeLimit) continue;
 
         const scale =
             scaleBetween(prop.scaleRange, nextRandom()) *
             lerp(scaleBoostRange[0], scaleBoostRange[1], nextRandom());
 
         appendPlacement(groupsByBucket, prop, localX, localZ, {
-            position: [center[0] + localX, sample.height - 0.02, center[2] + localZ],
+            position: [center[0] + localX, sample.elevation - 0.02, center[2] + localZ],
             rotationY: nextRandom() * Math.PI * 2,
             scale,
         });

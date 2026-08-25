@@ -19,7 +19,11 @@ interface IPlacedProp {
     placement: IPropPlacement;
 }
 
-export function placeRegionProps(region: IChapterRegion, manifest: IThemeManifest): IPropGroup[] {
+export function placeRegionProps(
+    region: IChapterRegion,
+    manifest: IThemeManifest,
+    groundHeightAt: (worldX: number, worldZ: number) => number
+): IPropGroup[] {
     const nextRandom = createSeededRandom(hashString(region.regionId));
 
     const landmarkSpecies = pickSpecies(
@@ -71,6 +75,9 @@ export function placeRegionProps(region: IChapterRegion, manifest: IThemeManifes
     );
 
     placeScatter(placedProps, scatterSpecies, scatterCount, region, clusterCenters, nextRandom);
+
+    for (const { placement } of placedProps)
+        placement.position[1] = groundHeightAt(placement.position[0], placement.position[2]);
 
     return groupByModel(placedProps);
 }

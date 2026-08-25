@@ -1,6 +1,13 @@
 import { lerp } from "@/lib/helpers";
 import type { ITerrainSample, TerrainHeightField } from "@/world/TerrainHeightField";
 
+interface IGridCoordinate {
+    column: number;
+    row: number;
+    acrossRatio: number;
+    downRatio: number;
+}
+
 export class TerrainSampleGrid {
     private readonly samples: ITerrainSample[];
     private readonly originX: number;
@@ -24,18 +31,12 @@ export class TerrainSampleGrid {
         for (let row = 0; row < this.pointsPerSide; row += 1)
             for (let column = 0; column < this.pointsPerSide; column += 1)
                 this.samples.push(
-                    heightField.sampleAt(originX + column * spacing, originZ + row * spacing)
+                    heightField.sampleTerrainAt(originX + column * spacing, originZ + row * spacing)
                 );
     }
 
-    sampleAt(localX: number, localZ: number): ITerrainSample {
-        const columnPosition = (localX - this.originX) / this.spacing;
-        const rowPosition = (localZ - this.originZ) / this.spacing;
-
-        const column = this.clampBaseIndex(Math.floor(columnPosition));
-        const row = this.clampBaseIndex(Math.floor(rowPosition));
-        const acrossRatio = columnPosition - column;
-        const downRatio = rowPosition - row;
+    sampleTerrainAt(localX: number, localZ: number): ITerrainSample {
+        const { column, row, acrossRatio, downRatio } = this.coordinateAt(localX, localZ);
 
         const topLeft = this.cornerAt(column, row);
         const topRight = this.cornerAt(column + 1, row);
@@ -48,18 +49,61 @@ export class TerrainSampleGrid {
         );
 
         return {
-            height: lerp(
-                lerp(topLeft.height, topRight.height, acrossRatio),
-                lerp(bottomLeft.height, bottomRight.height, acrossRatio),
+            elevation: lerp(
+                lerp(topLeft.elevation, topRight.elevation, acrossRatio),
+                lerp(bottomLeft.elevation, bottomRight.elevation, acrossRatio),
                 downRatio
             ),
-            flatWeight: lerp(
-                lerp(topLeft.flatWeight, topRight.flatWeight, acrossRatio),
-                lerp(bottomLeft.flatWeight, bottomRight.flatWeight, acrossRatio),
+            carveStrength: lerp(
+                lerp(topLeft.carveStrength, topRight.carveStrength, acrossRatio),
+                lerp(bottomLeft.carveStrength, bottomRight.carveStrength, acrossRatio),
                 downRatio
             ),
             floorColorIndex: nearest.floorColorIndex,
             isCorridor: nearest.isCorridor,
+        };
+    }
+
+    elevationAt(localX: number, localZ: number): number {
+        const { column, row, acrossRatio, downRatio } = this.coordinateAt(localX, localZ);
+
+        return lerp(
+            lerp(
+                this.cornerAt(column, row).elevation,
+                this.cornerAt(column + 1, row).elevation,
+                acrossRatio
+            ),
+            lerp(
+                this.cornerAt(column, row + 1).elevation,
+                this.cornerAt(column + 1, row + 1).elevation,
+                acrossRatio
+            ),
+            downRatio
+        );
+    }
+
+    steepnessAt(localX: number, localZ: number): number {
+        const step = this.spacing;
+        const deltaX =
+            this.elevationAt(localX + step, localZ) - this.elevationAt(localX - step, localZ);
+        const deltaZ =
+            this.elevationAt(localX, localZ + step) - this.elevationAt(localX, localZ - step);
+
+        return Math.hypot(deltaX, deltaZ) / (2 * step);
+    }
+
+    private coordinateAt(localX: number, localZ: number): IGridCoordinate {
+        const columnPosition = (localX - this.originX) / this.spacing;
+        const rowPosition = (localZ - this.originZ) / this.spacing;
+
+        const column = this.clampBaseIndex(Math.floor(columnPosition));
+        const row = this.clampBaseIndex(Math.floor(rowPosition));
+
+        return {
+            column,
+            row,
+            acrossRatio: columnPosition - column,
+            downRatio: rowPosition - row,
         };
     }
 
