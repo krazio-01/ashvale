@@ -1,8 +1,8 @@
 import { vec3, pair } from "@/lib/helpers";
 
 export const PLAYER = {
-    speed: 5,
-    sprintSpeed: 10,
+    speed: 7,
+    sprintSpeed: 25,
     jumpForce: 6,
     height: 1.7,
     radius: 0.4,
@@ -22,7 +22,7 @@ export const PLAYER = {
 export const CAMERA = {
     fov: 55,
     near: 0.1,
-    far: 320,
+    far: 700,
     startPosition: vec3(0, 8, 18),
     targetFollowDistance: 7,
     minimumFollowDistance: 1.7,
@@ -63,7 +63,7 @@ export const GROUND = {
 };
 
 export const ATMOSPHERE = {
-    skyRadius: 200,
+    skyRadius: 650,
     middleAltitude: 0.32,
     skyDitherStrength: 0.6,
     hazeBaseHeight: 0,
@@ -84,14 +84,14 @@ export const AMBIENT_OCCLUSION = {
 };
 
 export const TERRAIN = {
-    targetCellSize: 2.5,
+    targetCellSize: 3,
     minimumResolution: 96,
-    maximumResolution: 208,
-    playMargin: 20,
-    transition: 50,
-    spread: 110,
+    maximumResolution: 400,
+    playMargin: 30,
+    transition: 90,
+    spread: 160,
     pathLevel: 0,
-    bankWidth: 8,
+    bankWidth: 12,
     corridorDrop: 0.4,
     wildReliefScale: 0.035,
     peakShaping: 1.5,
@@ -139,7 +139,7 @@ export const LIGHT = {
     shadowMapSize: 2048,
     shadowBias: -0.0006,
     shadowExtent: 60,
-    shadowFar: 160,
+    shadowFar: 200,
 };
 
 export const RENDER = {
