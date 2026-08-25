@@ -289,8 +289,8 @@ export class GrassField extends Entity implements IWorldEntity {
             const localX = originX + nextRandom() * GRASS.tileSize;
             const localZ = originZ + nextRandom() * GRASS.tileSize;
 
-            const sample = heights.sampleAt(localX, localZ);
-            if (sample.isCorridor && sample.flatWeight > GRASS.routeRejectWeight) continue;
+            const sample = heights.sampleTerrainAt(localX, localZ);
+            if (sample.isCorridor && sample.carveStrength > GRASS.corridorRejectThreshold) continue;
 
             const lean = lerp(GRASS.leanRange[0], GRASS.leanRange[1], nextRandom());
             const leanAngle = nextRandom() * Math.PI * 2;
@@ -300,7 +300,7 @@ export class GrassField extends Entity implements IWorldEntity {
 
             transform.position.set(
                 this.center[0] + localX,
-                sample.height - 0.02,
+                sample.elevation - 0.02,
                 this.center[2] + localZ
             );
             transform.rotation.set(

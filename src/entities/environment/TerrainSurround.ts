@@ -61,8 +61,8 @@ export class TerrainSurround extends Entity implements IWorldEntity {
         const samples: ITerrainSample[] = [];
 
         for (let index = 0; index < positions.count; index += 1) {
-            const sample = heightField.sampleAt(positions.getX(index), positions.getZ(index));
-            positions.setY(index, sample.height);
+            const sample = heightField.sampleTerrainAt(positions.getX(index), positions.getZ(index));
+            positions.setY(index, sample.elevation);
             samples.push(sample);
         }
 
@@ -186,12 +186,12 @@ function paintVertexColors(
 
         blended.lerp(palette.rock, rockRatio * rockRatio * (3 - 2 * rockRatio));
 
-        if (sample.flatWeight > 0) {
+        if (sample.carveStrength > 0) {
             const flatColor = sample.isCorridor
                 ? palette.route
                 : palette.floorAtDepth(sample.floorColorIndex);
 
-            blended.lerp(flatColor, Math.pow(sample.flatWeight, TERRAIN.flatColorSharpness));
+            blended.lerp(flatColor, Math.pow(sample.carveStrength, TERRAIN.carveColorSharpness));
         }
 
         const broad =
