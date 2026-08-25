@@ -96,7 +96,7 @@ export const TERRAIN = {
     wildReliefScale: 0.035,
     peakShaping: 1.5,
     colorNoiseStrength: 0.08,
-    flatColorSharpness: 0.75,
+    carveColorSharpness: 0.75,
     bucketSize: 70,
 };
 
@@ -112,7 +112,7 @@ export const SURROUND = {
     grassSlopeLimit: 0.8,
     treeScaleBoost: pair(1.1, 1.7),
     edgePadding: 2,
-    flatRejectWeight: 0.1,
+    carveRejectThreshold: 0.1,
 };
 
 export const SPAWNING = {
@@ -232,17 +232,35 @@ export const GRASS = {
     windFrequency: 1.5,
     windScale: 0.11,
     windGustScale: 0.02,
-    routeRejectWeight: 0.3,
+    corridorRejectThreshold: 0.3,
 };
 
 export const TERRAIN_DETAIL = {
     textureSize: 256,
     worldRepeat: 11,
     grainStrength: 0.3,
-    microReliefHeight: 0.55,
-    microReliefScale: 0.42,
+    grainNoiseHeight: 0.55,
+    grainNoiseScale: 0.42,
     rockSlopeStart: 0.32,
     rockSlopeEnd: 0.85,
     broadVariationScale: 0.012,
     broadVariationStrength: 0.16,
+};
+
+export const LANDFORM = {
+    floorReliefHeight: 0.5,
+    floorReliefScale: 0.028,
+    minimumOpennessRatio: 0.5,
+    wildRampRatio: 0.7,
+    mountainRampStartRatio: 0.5,
+    mountainRampEndRatio: 1.6,
+    terraceBandCount: 6,
+    terraceOnsetRatio: 0.5,
+    terraceRiserWidth: 0.13,
+    terraceStrength: 0.85,
+    vistaGapScale: 1.6,
+    vistaGapDepth: 0.55,
+    vistaGapRange: pair(0.34, 0.6),
+    rampartStartRatio: 0.72,
+    rampartHeightRatio: 1,
 };
