@@ -20,14 +20,14 @@ export const CHAPTER_TIERS_BY_DIRECTORY_COUNT: IChapterTier[] = [
 ];
 
 export const REGION_DESIGN = {
-    minFootprint: 14,
-    maxFootprint: 46,
+    minFootprint: 40,
+    maxFootprint: 140,
     aspectJitter: 0.3,
     minWallHeight: 5,
     maxWallHeight: 16,
-    regionGap: 14,
+    regionGap: 45,
     objectiveFootprintRatio: 0.5,
-    spawnSizeRatio: 0.35,
+    spawnSizeRatio: 0.25,
 };
 
 export const ROUTE_DESIGN = {
@@ -36,12 +36,12 @@ export const ROUTE_DESIGN = {
     maxTurnAngle: Math.PI / 3,
     placementAttempts: 12,
     spacingGrowthPerAttempt: 0.25,
-    corridorClearance: 1.5,
+    corridorClearance: 5,
 };
 
 export const CORRIDOR_DESIGN = {
-    minWidth: 4,
-    maxWidth: 11,
+    minWidth: 15,
+    maxWidth: 30,
     widthRatio: 0.4,
 };
 
