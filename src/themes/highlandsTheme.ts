@@ -1,11 +1,31 @@
 import { ChapterTheme } from "@/types/realm";
-import type { IThemeManifest } from "@/types/theme";
-import { WOODLAND_PROPS } from "@/themes/woodlandTheme";
+import type { IThemeManifest, IThemeProp } from "@/types/theme";
+import {
+    PINE_TREES,
+    TWISTED_TREES,
+    DEAD_TREES,
+    BOULDERS,
+    ROCK_SLABS,
+    ROCK_CHUNKS,
+    GRASS_TUFTS,
+    PEBBLES,
+} from "@/themes/woodlandTheme";
+
+export const HIGHLANDS_PROPS: IThemeProp[] = [
+    ...PINE_TREES,
+    ...TWISTED_TREES,
+    ...DEAD_TREES,
+    ...BOULDERS,
+    ...ROCK_SLABS,
+    ...ROCK_CHUNKS,
+    ...GRASS_TUFTS,
+    ...PEBBLES,
+];
 
 export const HIGHLANDS_MANIFEST: IThemeManifest = {
     theme: ChapterTheme.Highlands,
     scatterPropsPerFile: 0.4,
-    props: WOODLAND_PROPS,
+    props: HIGHLANDS_PROPS,
     environment: {
         sky: {
             zenith: "#24548c",
