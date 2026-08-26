@@ -1,11 +1,31 @@
 import { ChapterTheme } from "@/types/realm";
-import type { IThemeManifest } from "@/types/theme";
-import { WOODLAND_PROPS } from "@/themes/woodlandTheme";
+import type { IThemeManifest, IThemeProp } from "@/types/theme";
+import {
+    CANOPY_TREES,
+    PINE_TREES,
+    BUSHES,
+    BROAD_PLANTS,
+    GRASS_TUFTS,
+    FLOWERS,
+    ROCK_SLABS,
+    PEBBLES,
+} from "@/themes/woodlandTheme";
+
+export const SETTLEMENT_PROPS: IThemeProp[] = [
+    ...CANOPY_TREES,
+    ...PINE_TREES,
+    ...BUSHES,
+    ...BROAD_PLANTS,
+    ...GRASS_TUFTS,
+    ...FLOWERS,
+    ...ROCK_SLABS,
+    ...PEBBLES,
+];
 
 export const SETTLEMENT_MANIFEST: IThemeManifest = {
     theme: ChapterTheme.Settlement,
     scatterPropsPerFile: 0.45,
-    props: WOODLAND_PROPS,
+    props: SETTLEMENT_PROPS,
     environment: {
         sky: {
             zenith: "#56718a",

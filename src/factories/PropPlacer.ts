@@ -7,79 +7,394 @@ import {
 } from "@/types/theme";
 import type { IChapterRegion } from "@/types/realm";
 import { PROP_PLACEMENT } from "@/constants/game";
-import { clamp, createSeededRandom, hashString } from "@/lib/helpers";
-
-interface IClusterCenter {
-    offsetX: number;
-    offsetZ: number;
-}
-
-interface IPlacedProp {
-    prop: IThemeProp;
-    placement: IPropPlacement;
-}
+import {
+    clamp,
+    createSeededRandom,
+    hashString,
+    pickRandomSubset,
+    scaleBetween,
+} from "@/lib/helpers";
 
 export function placeRegionProps(
     region: IChapterRegion,
     manifest: IThemeManifest,
-    groundHeightAt: (worldX: number, worldZ: number) => number
+    groundHeightAt: GroundHeightLookup,
+    entrances: IRegionEntrance[]
 ): IPropGroup[] {
     const nextRandom = createSeededRandom(hashString(region.regionId));
+    const bounds = resolvePlacementBounds(region, entrances);
+    const furnishing = resolveFurnishingBudget(region, manifest);
 
-    const landmarkSpecies = pickSpecies(
-        manifest.props.filter((prop) => prop.role === PropRole.Landmark),
-        PROP_PLACEMENT.landmarkSpeciesPerRegion,
-        nextRandom
-    );
-
-    const structureSpecies = pickSpecies(
-        manifest.props.filter((prop) => prop.role === PropRole.Structure),
-        PROP_PLACEMENT.structureSpeciesPerRegion,
-        nextRandom
-    );
-
-    const scatterSpecies = manifest.props.filter((prop) => prop.role === PropRole.Scatter);
-
-    const clusterCenters = buildClusterCenters(region, nextRandom);
+    const anchorPoints = spreadAnchorPoints(bounds, furnishing.anchorCount, nextRandom);
     const placedProps: IPlacedProp[] = [];
 
-    placeClustered(
-        placedProps,
-        landmarkSpecies,
-        PROP_PLACEMENT.landmarksPerRegion,
-        region,
-        clusterCenters,
-        nextRandom
-    );
+    placeAnchoredSpecies(placedProps, {
+        species: pickRandomSubset(
+            manifest.props.filter((prop) => prop.role === PropRole.Landmark),
+            PROP_PLACEMENT.landmarkSpeciesPerRegion,
+            nextRandom
+        ),
+        count: furnishing.landmarkCount,
+        bounds,
+        anchorPoints,
+        spreadRadius: bounds.clusterRadius,
+        entranceClearanceFactor: 1,
+        avoidsOtherProps: true,
+        nextRandom,
+    });
 
-    const structureCount = Math.min(
-        PROP_PLACEMENT.maximumStructuresPerRegion,
-        Math.max(
-            PROP_PLACEMENT.minimumStructuresPerRegion,
-            Math.floor(region.fileCount / PROP_PLACEMENT.filesPerStructure)
-        )
-    );
+    placeAnchoredSpecies(placedProps, {
+        species: pickRandomSubset(
+            manifest.props.filter((prop) => prop.role === PropRole.Structure),
+            PROP_PLACEMENT.structureSpeciesPerRegion,
+            nextRandom
+        ),
+        count: furnishing.structureCount,
+        bounds,
+        anchorPoints,
+        spreadRadius: bounds.clusterRadius,
+        entranceClearanceFactor: 1,
+        avoidsOtherProps: true,
+        nextRandom,
+    });
 
-    placeClustered(
-        placedProps,
-        structureSpecies,
-        structureCount,
-        region,
-        clusterCenters,
-        nextRandom
-    );
+    placeGroundClutter(placedProps, {
+        species: pickRandomSubset(
+            manifest.props.filter((prop) => prop.role === PropRole.Scatter),
+            PROP_PLACEMENT.clutterSpeciesPerRegion,
+            nextRandom
+        ),
+        count: furnishing.clutterCount,
+        bounds,
+        anchorPoints,
+        nextRandom,
+    });
 
-    const scatterCount = Math.min(
-        PROP_PLACEMENT.maximumScatterPerRegion,
-        Math.floor(region.fileCount * manifest.scatterPropsPerFile)
-    );
-
-    placeScatter(placedProps, scatterSpecies, scatterCount, region, clusterCenters, nextRandom);
-
-    for (const { placement } of placedProps)
-        placement.position[1] = groundHeightAt(placement.position[0], placement.position[2]);
+    settleOntoTerrain(placedProps, groundHeightAt);
 
     return groupByModel(placedProps);
+}
+
+function resolvePlacementBounds(
+    region: IChapterRegion,
+    entrances: IRegionEntrance[]
+): IPlacementBounds {
+    const [width, depth] = region.floorSize;
+    const halfWidth = width / 2;
+    const halfDepth = depth / 2;
+    const shortestSpan = Math.min(width, depth);
+
+    return {
+        originX: region.worldPosition[0],
+        originZ: region.worldPosition[2],
+        halfWidth,
+        halfDepth,
+        combatArenaRadius: shortestSpan * PROP_PLACEMENT.combatArenaRatio,
+        clusterRadius: shortestSpan * PROP_PLACEMENT.clusterRadiusRatio,
+        entranceMouths: entrances.map((entrance) =>
+            resolveEntranceMouth(entrance, halfWidth, halfDepth)
+        ),
+    };
+}
+
+function resolveEntranceMouth(
+    entrance: IRegionEntrance,
+    halfWidth: number,
+    halfDepth: number
+): IEntranceMouth {
+    const stepsToVerticalEdge =
+        entrance.directionX === 0 ? Infinity : halfWidth / Math.abs(entrance.directionX);
+    const stepsToHorizontalEdge =
+        entrance.directionZ === 0 ? Infinity : halfDepth / Math.abs(entrance.directionZ);
+    const stepsToBoundary = Math.min(stepsToVerticalEdge, stepsToHorizontalEdge);
+
+    const corridorHalfWidth = entrance.corridorWidth / 2;
+
+    return {
+        offsetX: entrance.directionX * stepsToBoundary,
+        offsetZ: entrance.directionZ * stepsToBoundary,
+        mouthClearRadius: corridorHalfWidth * PROP_PLACEMENT.entranceMouthClearanceRatio,
+        laneHalfWidth: corridorHalfWidth * PROP_PLACEMENT.entranceLaneWidthRatio,
+    };
+}
+
+function resolveFurnishingBudget(
+    region: IChapterRegion,
+    manifest: IThemeManifest
+): IFurnishingBudget {
+    const [width, depth] = region.floorSize;
+    const area = width * depth;
+
+    const richness = clamp(
+        region.fileCount / PROP_PLACEMENT.typicalFileCount,
+        PROP_PLACEMENT.minimumRichness,
+        PROP_PLACEMENT.maximumRichness
+    );
+
+    const clutterRichness =
+        richness * (manifest.scatterPropsPerFile / PROP_PLACEMENT.referenceScatterPropsPerFile);
+
+    return {
+        landmarkCount: countForArea(area, richness, PROP_PLACEMENT.landmarkDensity, 1, 6),
+        structureCount: countForArea(area, richness, PROP_PLACEMENT.structureDensity, 3, 26),
+        clutterCount: countForArea(area, clutterRichness, PROP_PLACEMENT.clutterDensity, 15, 320),
+        anchorCount: countForArea(area, richness, PROP_PLACEMENT.anchorDensity, 2, 9),
+    };
+}
+
+function countForArea(
+    area: number,
+    richness: number,
+    density: number,
+    minimum: number,
+    maximum: number
+): number {
+    return clamp(Math.round(area * density * richness), minimum, maximum);
+}
+
+function spreadAnchorPoints(
+    bounds: IPlacementBounds,
+    count: number,
+    nextRandom: () => number
+): IAnchorPoint[] {
+    const anchorPoints: IAnchorPoint[] = [];
+
+    for (let index = 0; index < count; index += 1) {
+        const candidate = findOpenSpot(bounds, 0, 1, nextRandom, () => {
+            const angle = nextRandom() * Math.PI * 2;
+            const edgeBias = Math.pow(nextRandom(), PROP_PLACEMENT.edgeBiasExponent);
+
+            return {
+                offsetX: Math.cos(angle) * edgeBias * bounds.halfWidth,
+                offsetZ: Math.sin(angle) * edgeBias * bounds.halfDepth,
+            };
+        });
+
+        if (candidate) anchorPoints.push(candidate);
+    }
+
+    return anchorPoints;
+}
+
+function placeAnchoredSpecies(placedProps: IPlacedProp[], options: IAnchoredSpeciesOptions): void {
+    const {
+        species,
+        count,
+        bounds,
+        anchorPoints,
+        spreadRadius,
+        entranceClearanceFactor,
+        avoidsOtherProps,
+        nextRandom,
+    } = options;
+
+    if (species.length === 0 || anchorPoints.length === 0) return;
+
+    for (let index = 0; index < count; index += 1) {
+        const prop = species[Math.floor(nextRandom() * species.length)];
+        const anchor = anchorPoints[Math.floor(nextRandom() * anchorPoints.length)];
+        if (!prop || !anchor) continue;
+
+        const scale = scaleBetween(prop.scaleRange, nextRandom());
+        const footprintRadius = prop.footprintRadius * scale;
+
+        const spot = findOpenSpot(
+            bounds,
+            footprintRadius,
+            entranceClearanceFactor,
+            nextRandom,
+            () => scatterAround(anchor, spreadRadius, nextRandom)
+        );
+
+        if (!spot) continue;
+
+        const placement = buildPlacement(bounds, spot, scale, nextRandom);
+
+        if (avoidsOtherProps && !isClearOfStandingProps(placement, footprintRadius, placedProps))
+            continue;
+
+        placedProps.push({ prop, placement });
+    }
+}
+
+function placeGroundClutter(placedProps: IPlacedProp[], options: IGroundClutterOptions): void {
+    const { species, count, bounds, anchorPoints, nextRandom } = options;
+    if (species.length === 0) return;
+
+    const standingProps = placedProps.filter(({ prop }) => prop.role !== PropRole.Scatter);
+
+    for (let index = 0; index < count; index += 1) {
+        const prop = species[Math.floor(nextRandom() * species.length)];
+        if (!prop) continue;
+
+        const scale = scaleBetween(prop.scaleRange, nextRandom());
+        const footprintRadius = prop.footprintRadius * scale;
+
+        const huddlesAgainstProp =
+            nextRandom() < PROP_PLACEMENT.clutterHuddledAgainstPropRatio &&
+            standingProps.length > 0;
+
+        const spot = huddlesAgainstProp
+            ? findOpenSpot(
+                  bounds,
+                  footprintRadius,
+                  PROP_PLACEMENT.clutterEntranceClearanceFactor,
+                  nextRandom,
+                  () => {
+                      const host = standingProps[Math.floor(nextRandom() * standingProps.length)];
+                      if (!host) return null;
+
+                      return scatterAround(
+                          {
+                              offsetX: host.placement.position[0] - bounds.originX,
+                              offsetZ: host.placement.position[2] - bounds.originZ,
+                          },
+                          PROP_PLACEMENT.clutterHuddleRadius,
+                          nextRandom
+                      );
+                  }
+              )
+            : findOpenSpot(
+                  bounds,
+                  footprintRadius,
+                  PROP_PLACEMENT.clutterEntranceClearanceFactor,
+                  nextRandom,
+                  () => {
+                      const anchor = anchorPoints[Math.floor(nextRandom() * anchorPoints.length)];
+                      if (!anchor) return null;
+
+                      return scatterAround(anchor, bounds.clusterRadius, nextRandom);
+                  }
+              );
+
+        if (!spot) continue;
+
+        placedProps.push({ prop, placement: buildPlacement(bounds, spot, scale, nextRandom) });
+    }
+}
+
+function findOpenSpot(
+    bounds: IPlacementBounds,
+    footprintRadius: number,
+    entranceClearanceFactor: number,
+    nextRandom: () => number,
+    proposeSpot: () => IAnchorPoint | null
+): IAnchorPoint | null {
+    for (const relaxation of PROP_PLACEMENT.clearanceRelaxationSteps) {
+        for (let attempt = 0; attempt < PROP_PLACEMENT.placementAttempts; attempt += 1) {
+            const candidate = proposeSpot();
+            if (!candidate) continue;
+
+            const clamped = clampInsideBounds(bounds, candidate, footprintRadius);
+
+            if (isSpotOpen(bounds, clamped, footprintRadius, entranceClearanceFactor * relaxation))
+                return clamped;
+        }
+    }
+
+    return null;
+}
+
+function isSpotOpen(
+    bounds: IPlacementBounds,
+    spot: IAnchorPoint,
+    footprintRadius: number,
+    entranceClearanceFactor: number
+): boolean {
+    const distanceFromCentre = Math.hypot(spot.offsetX, spot.offsetZ);
+    if (distanceFromCentre < bounds.combatArenaRadius + footprintRadius) return false;
+
+    for (const mouth of bounds.entranceMouths) {
+        const clearRadius = mouth.mouthClearRadius * entranceClearanceFactor + footprintRadius;
+        if (Math.hypot(spot.offsetX - mouth.offsetX, spot.offsetZ - mouth.offsetZ) < clearRadius)
+            return false;
+
+        const laneHalfWidth = mouth.laneHalfWidth * entranceClearanceFactor + footprintRadius;
+        if (distanceToLane(spot, mouth) < laneHalfWidth) return false;
+    }
+
+    return true;
+}
+
+function distanceToLane(spot: IAnchorPoint, mouth: IEntranceMouth): number {
+    const laneLengthSquared = mouth.offsetX * mouth.offsetX + mouth.offsetZ * mouth.offsetZ;
+    if (laneLengthSquared === 0) return Math.hypot(spot.offsetX, spot.offsetZ);
+
+    const projection = clamp(
+        (spot.offsetX * mouth.offsetX + spot.offsetZ * mouth.offsetZ) / laneLengthSquared,
+        0,
+        1
+    );
+
+    return Math.hypot(
+        spot.offsetX - mouth.offsetX * projection,
+        spot.offsetZ - mouth.offsetZ * projection
+    );
+}
+
+function clampInsideBounds(
+    bounds: IPlacementBounds,
+    spot: IAnchorPoint,
+    footprintRadius: number
+): IAnchorPoint {
+    const insetHalfWidth = Math.max(1, bounds.halfWidth - footprintRadius);
+    const insetHalfDepth = Math.max(1, bounds.halfDepth - footprintRadius);
+
+    return {
+        offsetX: clamp(spot.offsetX, -insetHalfWidth, insetHalfWidth),
+        offsetZ: clamp(spot.offsetZ, -insetHalfDepth, insetHalfDepth),
+    };
+}
+
+function scatterAround(
+    anchor: IAnchorPoint,
+    spreadRadius: number,
+    nextRandom: () => number
+): IAnchorPoint {
+    const angle = nextRandom() * Math.PI * 2;
+    const distance = Math.sqrt(nextRandom()) * spreadRadius;
+
+    return {
+        offsetX: anchor.offsetX + Math.cos(angle) * distance,
+        offsetZ: anchor.offsetZ + Math.sin(angle) * distance,
+    };
+}
+
+function buildPlacement(
+    bounds: IPlacementBounds,
+    spot: IAnchorPoint,
+    scale: number,
+    nextRandom: () => number
+): IPropPlacement {
+    return {
+        position: [bounds.originX + spot.offsetX, 0, bounds.originZ + spot.offsetZ],
+        rotationY: nextRandom() * Math.PI * 2,
+        scale,
+    };
+}
+
+function isClearOfStandingProps(
+    candidate: IPropPlacement,
+    candidateRadius: number,
+    placedProps: IPlacedProp[]
+): boolean {
+    for (const { prop, placement } of placedProps) {
+        if (prop.role === PropRole.Scatter) continue;
+
+        const distance = Math.hypot(
+            candidate.position[0] - placement.position[0],
+            candidate.position[2] - placement.position[2]
+        );
+
+        if (distance < candidateRadius + PROP_PLACEMENT.separationGap) return false;
+    }
+
+    return true;
+}
+
+function settleOntoTerrain(placedProps: IPlacedProp[], groundHeightAt: GroundHeightLookup): void {
+    for (const { placement } of placedProps)
+        placement.position[1] = groundHeightAt(placement.position[0], placement.position[2]);
 }
 
 function groupByModel(placedProps: IPlacedProp[]): IPropGroup[] {
@@ -105,203 +420,63 @@ function groupByModel(placedProps: IPlacedProp[]): IPropGroup[] {
     return [...groupsByModelPath.values()];
 }
 
-function pickSpecies(props: IThemeProp[], count: number, nextRandom: () => number): IThemeProp[] {
-    const shuffled = [...props];
-
-    for (let index = shuffled.length - 1; index > 0; index--) {
-        const swapIndex = Math.floor(nextRandom() * (index + 1));
-        const current = shuffled[index];
-        const target = shuffled[swapIndex];
-
-        if (current === undefined || target === undefined) continue;
-
-        shuffled[index] = target;
-        shuffled[swapIndex] = current;
-    }
-
-    return shuffled.slice(0, count);
+export interface IRegionEntrance {
+    directionX: number;
+    directionZ: number;
+    corridorWidth: number;
 }
 
-function buildClusterCenters(region: IChapterRegion, nextRandom: () => number): IClusterCenter[] {
-    const clusterCount = Math.min(
-        PROP_PLACEMENT.maximumClustersPerRegion,
-        Math.max(
-            PROP_PLACEMENT.minimumClustersPerRegion,
-            Math.floor(region.fileCount / PROP_PLACEMENT.filesPerCluster)
-        )
-    );
-
-    const [width, depth] = region.floorSize;
-    const clearRadius = Math.min(width, depth) * PROP_PLACEMENT.centerClearanceRatio;
-    const centers: IClusterCenter[] = [];
-
-    for (let index = 0; index < clusterCount; index++) {
-        let offsetX = 0;
-        let offsetZ = 0;
-
-        for (let attempt = 0; attempt < PROP_PLACEMENT.placementAttempts; attempt++) {
-            offsetX = (nextRandom() * 2 - 1) * (width / 2);
-            offsetZ = (nextRandom() * 2 - 1) * (depth / 2);
-
-            if (Math.hypot(offsetX, offsetZ) >= clearRadius) break;
-        }
-
-        centers.push({ offsetX, offsetZ });
-    }
-
-    return centers;
+interface IPlacementBounds {
+    originX: number;
+    originZ: number;
+    halfWidth: number;
+    halfDepth: number;
+    combatArenaRadius: number;
+    clusterRadius: number;
+    entranceMouths: IEntranceMouth[];
 }
 
-function placeClustered(
-    placedProps: IPlacedProp[],
-    species: IThemeProp[],
-    count: number,
-    region: IChapterRegion,
-    clusterCenters: IClusterCenter[],
-    nextRandom: () => number
-): void {
-    if (species.length === 0 || clusterCenters.length === 0) return;
-
-    const clusterRadius =
-        Math.min(region.floorSize[0], region.floorSize[1]) * PROP_PLACEMENT.clusterRadiusRatio;
-
-    for (let index = 0; index < count; index++) {
-        const prop = species[Math.floor(nextRandom() * species.length)];
-        const center = clusterCenters[Math.floor(nextRandom() * clusterCenters.length)];
-        if (!prop || !center) continue;
-
-        const scale = scaleBetween(prop.scaleRange, nextRandom());
-
-        for (let attempt = 0; attempt < PROP_PLACEMENT.placementAttempts; attempt++) {
-            const candidate = buildPlacementNear(
-                prop,
-                scale,
-                region,
-                center,
-                clusterRadius,
-                nextRandom
-            );
-            if (!candidate) continue;
-
-            if (isClearOfStructures(candidate, prop.footprintRadius * scale, placedProps)) {
-                placedProps.push({ prop, placement: candidate });
-                break;
-            }
-        }
-    }
+interface IEntranceMouth {
+    offsetX: number;
+    offsetZ: number;
+    mouthClearRadius: number;
+    laneHalfWidth: number;
 }
 
-function placeScatter(
-    placedProps: IPlacedProp[],
-    species: IThemeProp[],
-    count: number,
-    region: IChapterRegion,
-    clusterCenters: IClusterCenter[],
-    nextRandom: () => number
-): void {
-    if (species.length === 0) return;
-
-    const clusterRadius =
-        Math.min(region.floorSize[0], region.floorSize[1]) * PROP_PLACEMENT.clusterRadiusRatio;
-
-    const structureAnchors = placedProps.filter(({ prop }) => prop.role !== PropRole.Scatter);
-
-    for (let index = 0; index < count; index++) {
-        const prop = species[Math.floor(nextRandom() * species.length)];
-        if (!prop) continue;
-
-        const scale = scaleBetween(prop.scaleRange, nextRandom());
-        const roll = nextRandom();
-
-        let candidate: IPropPlacement | null = null;
-
-        if (roll < PROP_PLACEMENT.scatterAnchoredToStructureRatio && structureAnchors.length > 0) {
-            const anchor = structureAnchors[Math.floor(nextRandom() * structureAnchors.length)];
-
-            if (anchor) {
-                candidate = buildPlacementNear(
-                    prop,
-                    scale,
-                    region,
-                    {
-                        offsetX: anchor.placement.position[0] - region.worldPosition[0],
-                        offsetZ: anchor.placement.position[2] - region.worldPosition[2],
-                    },
-                    PROP_PLACEMENT.structureAnchorRadius,
-                    nextRandom
-                );
-            }
-        } else if (clusterCenters.length > 0) {
-            const center = clusterCenters[Math.floor(nextRandom() * clusterCenters.length)];
-
-            if (center)
-                candidate = buildPlacementNear(
-                    prop,
-                    scale,
-                    region,
-                    center,
-                    clusterRadius,
-                    nextRandom
-                );
-        }
-
-        if (candidate) placedProps.push({ prop, placement: candidate });
-    }
+interface IFurnishingBudget {
+    landmarkCount: number;
+    structureCount: number;
+    clutterCount: number;
+    anchorCount: number;
 }
 
-function buildPlacementNear(
-    prop: IThemeProp,
-    scale: number,
-    region: IChapterRegion,
-    center: IClusterCenter,
-    radius: number,
-    nextRandom: () => number
-): IPropPlacement | null {
-    const [regionX, regionY, regionZ] = region.worldPosition;
-    const [width, depth] = region.floorSize;
-
-    const insetWidth = Math.max(1, width / 2 - prop.footprintRadius * scale);
-    const insetDepth = Math.max(1, depth / 2 - prop.footprintRadius * scale);
-    const clearRadius = Math.min(width, depth) * PROP_PLACEMENT.centerClearanceRatio;
-
-    for (let attempt = 0; attempt < PROP_PLACEMENT.placementAttempts; attempt++) {
-        const angle = nextRandom() * Math.PI * 2;
-        const distance = Math.sqrt(nextRandom()) * radius;
-
-        const offsetX = clamp(center.offsetX + Math.cos(angle) * distance, -insetWidth, insetWidth);
-        const offsetZ = clamp(center.offsetZ + Math.sin(angle) * distance, -insetDepth, insetDepth);
-
-        if (Math.hypot(offsetX, offsetZ) < clearRadius) continue;
-
-        return {
-            position: [regionX + offsetX, regionY, regionZ + offsetZ],
-            rotationY: nextRandom() * Math.PI * 2,
-            scale,
-        };
-    }
-
-    return null;
+interface IAnchorPoint {
+    offsetX: number;
+    offsetZ: number;
 }
 
-function isClearOfStructures(
-    candidate: IPropPlacement,
-    candidateRadius: number,
-    placedProps: IPlacedProp[]
-): boolean {
-    for (const { prop, placement } of placedProps) {
-        if (prop.role === PropRole.Scatter) continue;
-
-        const distance = Math.hypot(
-            candidate.position[0] - placement.position[0],
-            candidate.position[2] - placement.position[2]
-        );
-
-        if (distance < candidateRadius + PROP_PLACEMENT.separationGap) return false;
-    }
-
-    return true;
+interface IPlacedProp {
+    prop: IThemeProp;
+    placement: IPropPlacement;
 }
 
-function scaleBetween([minimum, maximum]: [number, number], ratio: number): number {
-    return minimum + ratio * (maximum - minimum);
+interface IAnchoredSpeciesOptions {
+    species: IThemeProp[];
+    count: number;
+    bounds: IPlacementBounds;
+    anchorPoints: IAnchorPoint[];
+    spreadRadius: number;
+    entranceClearanceFactor: number;
+    avoidsOtherProps: boolean;
+    nextRandom: () => number;
 }
+
+interface IGroundClutterOptions {
+    species: IThemeProp[];
+    count: number;
+    bounds: IPlacementBounds;
+    anchorPoints: IAnchorPoint[];
+    nextRandom: () => number;
+}
+
+type GroundHeightLookup = (worldX: number, worldZ: number) => number;

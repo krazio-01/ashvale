@@ -1,11 +1,31 @@
 import { ChapterTheme } from "@/types/realm";
-import type { IThemeManifest } from "@/types/theme";
-import { WOODLAND_PROPS } from "@/themes/woodlandTheme";
+import type { IThemeManifest, IThemeProp } from "@/types/theme";
+import {
+    TWISTED_TREES,
+    DEAD_TREES,
+    BOULDERS,
+    ROCK_SLABS,
+    ROCK_CHUNKS,
+    UNDERGROWTH,
+    MUSHROOMS,
+    PEBBLES,
+} from "@/themes/woodlandTheme";
+
+export const RUINS_PROPS: IThemeProp[] = [
+    ...TWISTED_TREES,
+    ...DEAD_TREES,
+    ...BOULDERS,
+    ...ROCK_SLABS,
+    ...ROCK_CHUNKS,
+    ...UNDERGROWTH,
+    ...MUSHROOMS,
+    ...PEBBLES,
+];
 
 export const RUINS_MANIFEST: IThemeManifest = {
     theme: ChapterTheme.Ruins,
     scatterPropsPerFile: 0.35,
-    props: WOODLAND_PROPS,
+    props: RUINS_PROPS,
     environment: {
         sky: {
             zenith: "#3b4b56",

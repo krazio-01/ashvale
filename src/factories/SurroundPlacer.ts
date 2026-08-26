@@ -2,7 +2,7 @@ import { PropRole, type IPropGroup, type IThemeManifest, type IThemeProp } from 
 import type { TerrainHeightField } from "@/world/TerrainHeightField";
 import type { Vector3Tuple } from "three";
 import { SURROUND, TERRAIN } from "@/constants/game";
-import { createSeededRandom, lerp } from "@/lib/helpers";
+import { createSeededRandom, lerp, pickRandomSubset, scaleBetween } from "@/lib/helpers";
 
 export function placeSurroundVegetation(
     manifest: IThemeManifest,
@@ -14,93 +14,95 @@ export function placeSurroundVegetation(
     const nextRandom = createSeededRandom(seed);
     const groupsByBucket = new Map<string, Map<string, IPropGroup>>();
 
-    const trees = manifest.props.filter((prop) => prop.role === PropRole.Landmark);
-    const fillers = manifest.props.filter((prop) => prop.role === PropRole.Structure);
-    const grasses = manifest.props.filter((prop) => prop.role === PropRole.Scatter);
+    const trees = pickRandomSubset(
+        manifest.props.filter((prop) => prop.role === PropRole.Landmark),
+        SURROUND.treeSpeciesPerBand,
+        nextRandom
+    );
+    const fillers = pickRandomSubset(
+        manifest.props.filter((prop) => prop.role === PropRole.Structure),
+        SURROUND.fillerSpeciesPerBand,
+        nextRandom
+    );
+    const groundCover = pickRandomSubset(
+        manifest.props.filter((prop) => prop.role === PropRole.Scatter),
+        SURROUND.groundCoverSpeciesPerBand,
+        nextRandom
+    );
 
     const innerEdge = playRadius + SURROUND.edgePadding;
     const slopeStart = playRadius + TERRAIN.transition;
 
-    const bands = [
+    const bands: IVegetationBand[] = [
         {
-            species: grasses,
-            count: SURROUND.innerGrassCount,
-            range: [0, playRadius],
+            species: groundCover,
+            radiusRange: [0, playRadius],
+            density: SURROUND.groundCoverDensity,
+            densityFactor: 1,
             slopeLimit: SURROUND.grassSlopeLimit,
-            boost: [1, 1],
+            scaleBoostRange: [1, 1],
         },
         {
             species: fillers,
-            count: SURROUND.innerFillerCount,
-            range: [0, playRadius],
+            radiusRange: [0, playRadius],
+            density: SURROUND.fillerDensity,
+            densityFactor: 1,
             slopeLimit: SURROUND.fillerSlopeLimit,
-            boost: [1, 1.2],
+            scaleBoostRange: [1, 1.2],
         },
         {
             species: trees,
-            count: SURROUND.innerTreeCount,
-            range: [0, playRadius],
+            radiusRange: [0, playRadius],
+            density: SURROUND.treeDensity,
+            densityFactor: 1,
             slopeLimit: SURROUND.treeSlopeLimit,
-            boost: [1, 1.3],
+            scaleBoostRange: [1, 1.3],
         },
         {
-            species: grasses,
-            count: SURROUND.outerGrassCount,
-            range: [innerEdge, slopeStart],
+            species: groundCover,
+            radiusRange: [innerEdge, slopeStart],
+            density: SURROUND.groundCoverDensity,
+            densityFactor: SURROUND.outerDensityFactor,
             slopeLimit: SURROUND.grassSlopeLimit,
-            boost: [1, 1],
+            scaleBoostRange: [1, 1],
         },
         {
             species: fillers,
-            count: SURROUND.outerFillerCount,
-            range: [innerEdge, slopeStart + TERRAIN.spread * 0.5],
+            radiusRange: [innerEdge, slopeStart + TERRAIN.spread * 0.5],
+            density: SURROUND.fillerDensity,
+            densityFactor: SURROUND.outerDensityFactor,
             slopeLimit: SURROUND.fillerSlopeLimit,
-            boost: [1, 1.3],
+            scaleBoostRange: [1, 1.3],
         },
         {
             species: trees,
-            count: SURROUND.outerTreeCount,
-            range: [innerEdge, slopeStart + TERRAIN.spread * 0.7],
+            radiusRange: [innerEdge, slopeStart + TERRAIN.spread * 0.7],
+            density: SURROUND.treeDensity,
+            densityFactor: SURROUND.outerDensityFactor,
             slopeLimit: SURROUND.treeSlopeLimit,
-            boost: SURROUND.treeScaleBoost,
+            scaleBoostRange: SURROUND.treeScaleBoost,
         },
     ];
 
     for (const band of bands)
-        scatterBand(groupsByBucket, band.species, band.count, {
-            heightField,
-            center,
-            nextRandom,
-            radiusRange: [band.range[0] ?? 0, band.range[1] ?? 0],
-            slopeLimit: band.slopeLimit,
-            scaleBoostRange: [band.boost[0] ?? 1, band.boost[1] ?? 1],
-        });
+        scatterBand(groupsByBucket, band, { heightField, center, nextRandom });
 
     return [...groupsByBucket.values()].map((groups) => [...groups.values()]);
 }
 
-interface IScatterBandOptions {
-    heightField: TerrainHeightField;
-    center: Vector3Tuple;
-    nextRandom: () => number;
-    radiusRange: [number, number];
-    slopeLimit: number;
-    scaleBoostRange: [number, number];
-}
-
 function scatterBand(
     groupsByBucket: Map<string, Map<string, IPropGroup>>,
-    species: IThemeProp[],
-    count: number,
-    options: IScatterBandOptions
+    band: IVegetationBand,
+    world: IScatterWorld
 ): void {
-    if (species.length === 0) return;
+    if (band.species.length === 0) return;
 
-    const { heightField, center, nextRandom, radiusRange, slopeLimit, scaleBoostRange } = options;
-    const [innerRadius, outerRadius] = radiusRange;
+    const { heightField, center, nextRandom } = world;
+    const [innerRadius, outerRadius] = band.radiusRange;
+    const count = countForAnnulus(innerRadius, outerRadius, band.density, band.densityFactor);
 
     for (let index = 0; index < count; index += 1) {
-        const prop = species[Math.floor(nextRandom() * species.length)];
+        const prop = band.species[Math.floor(nextRandom() * band.species.length)];
         if (!prop) continue;
 
         const angle = nextRandom() * Math.PI * 2;
@@ -113,11 +115,11 @@ function scatterBand(
 
         const sample = heightField.sampleTerrainAt(localX, localZ);
         if (sample.carveStrength > SURROUND.carveRejectThreshold) continue;
-        if (heightField.steepnessAt(localX, localZ) > slopeLimit) continue;
+        if (heightField.steepnessAt(localX, localZ) > band.slopeLimit) continue;
 
         const scale =
             scaleBetween(prop.scaleRange, nextRandom()) *
-            lerp(scaleBoostRange[0], scaleBoostRange[1], nextRandom());
+            lerp(band.scaleBoostRange[0], band.scaleBoostRange[1], nextRandom());
 
         appendPlacement(groupsByBucket, prop, localX, localZ, {
             position: [center[0] + localX, sample.elevation - 0.02, center[2] + localZ],
@@ -125,6 +127,17 @@ function scatterBand(
             scale,
         });
     }
+}
+
+function countForAnnulus(
+    innerRadius: number,
+    outerRadius: number,
+    density: number,
+    densityFactor: number
+): number {
+    const annulusArea = Math.PI * (outerRadius * outerRadius - innerRadius * innerRadius);
+
+    return Math.min(Math.round(annulusArea * density * densityFactor), SURROUND.maximumPerBand);
 }
 
 function appendPlacement(
@@ -158,6 +171,17 @@ function appendPlacement(
     });
 }
 
-function scaleBetween([minimum, maximum]: [number, number], ratio: number): number {
-    return minimum + ratio * (maximum - minimum);
+interface IVegetationBand {
+    species: IThemeProp[];
+    radiusRange: [number, number];
+    density: number;
+    densityFactor: number;
+    slopeLimit: number;
+    scaleBoostRange: [number, number];
+}
+
+interface IScatterWorld {
+    heightField: TerrainHeightField;
+    center: Vector3Tuple;
+    nextRandom: () => number;
 }
