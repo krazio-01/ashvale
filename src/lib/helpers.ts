@@ -61,3 +61,24 @@ export function shiftColorHsl(
 
     return `#${shifted.getHexString()}`;
 }
+
+export function pickRandomSubset<T>(items: T[], count: number, nextRandom: () => number): T[] {
+    const shuffled = [...items];
+
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(nextRandom() * (index + 1));
+        const current = shuffled[index];
+        const target = shuffled[swapIndex];
+
+        if (current === undefined || target === undefined) continue;
+
+        shuffled[index] = target;
+        shuffled[swapIndex] = current;
+    }
+
+    return shuffled.slice(0, count);
+}
+
+export function scaleBetween([minimum, maximum]: [number, number], ratio: number): number {
+    return minimum + ratio * (maximum - minimum);
+}

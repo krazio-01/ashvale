@@ -213,18 +213,18 @@ export class TerrainHeightField {
         const baseGroundElevation =
             TERRAIN.pathLevel +
             (this.profile.wildElevation + groundUndulationSample * this.profile.wildRelief) *
-            elevationRampRatio +
+                elevationRampRatio +
             fineDetailOffset;
 
         const distanceFromCenter = Math.sqrt(localX * localX + localZ * localZ);
         const boundaryWallFloor =
             baseGroundElevation +
             this.boundaryWallHeight *
-            smoothstep(
-                this.boundaryWallStartRadius,
-                this.boundaryWallEndRadius,
-                distanceFromCenter
-            );
+                smoothstep(
+                    this.boundaryWallStartRadius,
+                    this.boundaryWallEndRadius,
+                    distanceFromCenter
+                );
 
         const mountainRampRatio = smoothstep(
             this.mountainRampStartDistance,
@@ -257,8 +257,8 @@ export class TerrainHeightField {
         const rawMountainElevation =
             baseGroundElevation +
             Math.pow(mountainShapeNoise, TERRAIN.peakShaping) *
-            this.profile.mountainHeight *
-            this.enclosureFactorAt(localX, localZ, distanceFromCenter);
+                this.profile.mountainHeight *
+                this.enclosureFactorAt(localX, localZ, distanceFromCenter);
 
         const fadedMountainElevation = lerp(
             baseGroundElevation,
@@ -390,11 +390,11 @@ function distanceOutsideCorridor(x: number, z: number, corridor: IPreparedCorrid
         corridor.spanLengthSquared === 0
             ? 0
             : clamp(
-                (offsetX * corridor.spanX + offsetZ * corridor.spanZ) /
-                corridor.spanLengthSquared,
-                0,
-                1
-            );
+                  (offsetX * corridor.spanX + offsetZ * corridor.spanZ) /
+                      corridor.spanLengthSquared,
+                  0,
+                  1
+              );
 
     const gapX = offsetX - corridor.spanX * projection;
     const gapZ = offsetZ - corridor.spanZ * projection;
