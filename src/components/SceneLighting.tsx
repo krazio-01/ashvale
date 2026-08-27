@@ -5,7 +5,7 @@ import type { DirectionalLight } from "three";
 import type { Vector3Tuple } from "three";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IThemeEnvironment } from "@/types/theme";
-import { LIGHT } from "@/constants/game";
+import { LIGHT } from "@/constants/rendering";
 
 const shadowTexelSize = (LIGHT.shadowExtent * 2) / LIGHT.shadowMapSize;
 

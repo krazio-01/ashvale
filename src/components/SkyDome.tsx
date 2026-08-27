@@ -4,7 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { BackSide, Color, Mesh, ShaderMaterial } from "three";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IThemeEnvironment } from "@/types/theme";
-import { ATMOSPHERE } from "@/constants/game";
+import { ATMOSPHERE } from "@/constants/rendering";
 
 const VERTEX_SHADER = /* glsl */ `
     varying vec3 vWorldPosition;
