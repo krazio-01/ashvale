@@ -1,7 +1,7 @@
 import { Box3, Material, Mesh, MeshStandardMaterial, Object3D, Vector3 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { BufferGeometry } from "three";
-import type { MaterialLibrary } from "@/world/MaterialLibrary";
+import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { IThemeManifest } from "@/types/theme";
 import type { IModelPart, IModelTemplate } from "@/types/world";
 

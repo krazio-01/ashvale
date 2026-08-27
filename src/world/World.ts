@@ -1,11 +1,11 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Group } from "three";
-import { MaterialLibrary } from "@/world/MaterialLibrary";
-import { AssetLibrary } from "@/world/AssetLibrary";
+import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
+import { AssetLibrary } from "@/world/assets/AssetLibrary";
 import type { IThemeEnvironment, IThemeManifest } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import { WORLD } from "@/constants/game";
+import { WORLD } from "@/constants/world";
 
 export class World {
     private readonly physicsWorld: PhysicsWorld;
