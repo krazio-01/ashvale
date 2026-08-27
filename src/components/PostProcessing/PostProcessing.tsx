@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import {
     Bloom,
@@ -13,11 +13,11 @@ import {
 import { ToneMappingMode } from "postprocessing";
 import { Vector2 } from "three";
 import type { Texture, WebGLRenderer } from "three";
-import OutlinePass from "@/components/PostProcessing/OutlinePass";
-import AtmospherePass from "@/components/PostProcessing/AtmospherePass";
+import { AtmosphereEffect } from "@/world/effects/AtmosphereEffect";
 import { FoliageMaskPass } from "@/world/effects/FoliageMaskPass";
+import { OutlineEffect } from "@/world/effects/OutlineEffect";
 import type { IThemeEnvironment } from "@/types/theme";
-import { AMBIENT_OCCLUSION, POST_PROCESSING, RENDER } from "@/constants/game";
+import { AMBIENT_OCCLUSION, POST_PROCESSING, RENDER } from "@/constants/rendering";
 
 const FOLIAGE_MASK_RENDER_PRIORITY = 0;
 
@@ -48,7 +48,23 @@ const useFoliageMaskTexture = (): Texture => {
 };
 
 const PostProcessing = ({ environment }: { environment: IThemeEnvironment }) => {
+    const camera = useThree((state) => state.camera);
     const foliageMask = useFoliageMaskTexture();
+
+    const outline = useMemo(
+        () => new OutlineEffect({ camera, foliageMask, outlineColor: environment.outlineColor }),
+        [camera, foliageMask, environment.outlineColor]
+    );
+
+    const atmosphere = useMemo(
+        () =>
+            new AtmosphereEffect({
+                camera,
+                sky: environment.sky,
+                fogDensity: environment.fogDensity,
+            }),
+        [camera, environment.sky, environment.fogDensity]
+    );
 
     return (
         <EffectComposer multisampling={RENDER.multisampling}>
@@ -62,9 +78,9 @@ const PostProcessing = ({ environment }: { environment: IThemeEnvironment }) => 
                 denoiseRadius={AMBIENT_OCCLUSION.denoiseRadius}
             />
 
-            <OutlinePass outlineColor={environment.outlineColor} foliageMask={foliageMask} />
+            <primitive object={outline} dispose={null} />
 
-            <AtmospherePass sky={environment.sky} fogDensity={environment.fogDensity} />
+            <primitive object={atmosphere} dispose={null} />
 
             <Bloom
                 mipmapBlur
