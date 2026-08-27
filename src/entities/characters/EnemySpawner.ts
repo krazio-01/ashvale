@@ -5,7 +5,7 @@ import { Wraith } from "@/entities/characters/enemies/Wraith";
 import { Enemy } from "@/entities/characters/Enemy";
 import { CharacterBody } from "@/entities/characters/CharacterBody";
 import { modelFor } from "@/entities/characters/enemies/EnemyModels";
-import { EnemyArchetype } from "@/constants/game";
+import { EnemyArchetype } from "@/constants/characters";
 import { IChapterRegion } from "@/types/realm";
 import type { IWorldContext } from "@/types/world";
 

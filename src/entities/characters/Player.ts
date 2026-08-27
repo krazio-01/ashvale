@@ -8,10 +8,11 @@ import type {
 import { CapsuleGeometry, Camera, Mesh, Vector3 } from "three";
 import type { Vector3Tuple } from "three";
 import { Character } from "@/entities/characters/Character";
-import { InputManager } from "@/input/InputManager";
+import { InputManager } from "@/entities/characters/InputManager";
 import type { IWeapon } from "@/types/entities";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import { CAMERA, PALETTE, PLAYER, WORLD } from "@/constants/game";
+import { CAMERA, PALETTE, PLAYER } from "@/constants/characters";
+import { WORLD } from "@/constants/world";
 import { clamp } from "@/lib/helpers";
 
 const forwardDirection = new Vector3();
