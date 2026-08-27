@@ -6,13 +6,14 @@ import { World } from "@/world/World";
 import SkyDome from "@/components/SkyDome";
 import SceneLighting from "@/components/SceneLighting";
 import PostProcessing from "@/components/PostProcessing/PostProcessing";
-import { spawnChapter } from "@/factories/RealmSpawner";
+import { spawnChapterWorld } from "@/world/ChapterSpawner";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
 import { isRequestCancellation, useRequest } from "@/hooks/useRequest";
 import { HttpMethod } from "@/constants/strings";
 import type { ChapterResponse, RealmResponse } from "@/responses/realm/RealmResponse";
 import type { IThemeManifest } from "@/types/theme";
-import { CAMERA, POST_PROCESSING, RENDER } from "@/constants/game";
+import { POST_PROCESSING, RENDER } from "@/constants/rendering";
+import { CAMERA } from "@/constants/characters";
 import { InlineLoader } from "generative-loaders";
 import "generative-loaders/styles.css";
 import PerformanceOverlay from "../PerformanceOverlay";
@@ -43,7 +44,7 @@ const WorldRuntime = ({
                 return;
             }
 
-            spawnChapter(createdWorld, camera, chapter);
+            spawnChapterWorld(createdWorld, camera, chapter);
             activeWorld = createdWorld;
             setWorld(createdWorld);
         };

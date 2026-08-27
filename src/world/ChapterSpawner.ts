@@ -1,29 +1,31 @@
 import type { Camera, Vector3Tuple } from "three";
-import { RegionProps } from "@/entities/environment/RegionProps";
-import { TerrainSurround } from "@/entities/environment/TerrainSurround";
-import { GrassField } from "@/entities/environment/GrassField";
+import { PropBatch } from "@/world/props/PropBatch";
+import { TerrainMesh } from "@/world/terrain/TerrainMesh";
+import { GrassField } from "@/world/vegetation/GrassField";
 import { Player } from "@/entities/characters/Player";
 import { CharacterBody } from "@/entities/characters/CharacterBody";
 import { bossModel } from "@/entities/characters/BossModel";
-import { spawnEnemyBody } from "@/factories/EnemySpawner";
-import { placeRegionProps, type IRegionEntrance } from "@/factories/PropPlacer";
-import { placeSurroundVegetation } from "@/factories/SurroundPlacer";
+import { spawnEnemyBody } from "@/entities/characters/EnemySpawner";
+import { placeRegionProps, type IRegionEntrance } from "@/world/props/RegionPropPlacement";
+import { scatterVegetation } from "@/world/vegetation/VegetationScatter";
 import {
-    placeCorridorAnchors,
+    placeCorridorProps,
     type ICorridorSpan,
     type IRegionFootprint,
-} from "@/factories/CorridorAnchorPlacer";
+} from "@/world/props/CorridorPropPlacement";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
-import { TerrainHeightField } from "@/world/TerrainHeightField";
-import type { IRegionFloor, ICorridorPath } from "@/world/TerrainHeightField";
+import { TerrainHeightField } from "@/world/terrain/TerrainHeightField";
+import { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainHeightField";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
 import type { IChapterRegion } from "@/types/realm";
 import type { IThemeManifest } from "@/types/theme";
-import { SPAWNING, TERRAIN } from "@/constants/game";
+import { SPAWNING } from "@/constants/characters";
+import { TERRAIN } from "@/constants/world";
 import { hashString } from "@/lib/helpers";
 
-export function spawnChapter(world: World, camera: Camera, chapter: ChapterResponse): void {
+export function spawnChapterWorld(world: World, camera: Camera, chapter: ChapterResponse): void {
     const manifest = resolveThemeManifest(chapter.theme, chapter.season);
     const positionsByRegionId = new Map<string, Vector3Tuple>();
 
@@ -35,7 +37,7 @@ export function spawnChapter(world: World, camera: Camera, chapter: ChapterRespo
 
     for (const region of chapter.regions) {
         world.addEntity(
-            new RegionProps(
+            new PropBatch(
                 region.regionId,
                 world.context,
                 placeRegionProps(
@@ -234,17 +236,22 @@ function spawnTerrain(
         seed
     );
 
-    world.addEntity(new TerrainSurround(world.context, center, playRadius, heightField, seed));
-    world.addEntity(new GrassField(world.context, camera, center, heightField, seed + 5));
-
-    placeSurroundVegetation(manifest, heightField, playRadius, center, seed + 3).forEach(
-        (groups, bucketIndex) =>
-            world.addEntity(new RegionProps(`wild-${bucketIndex}`, world.context, groups))
+    const heightMap = new TerrainHeightMap(
+        heightField,
+        playRadius + TERRAIN.transition + TERRAIN.spread
     );
 
-    const corridorGroups = placeCorridorAnchors(
+    world.addEntity(new TerrainMesh(world.context, center, heightMap, seed));
+    world.addEntity(new GrassField(world.context, camera, center, heightMap));
+
+    scatterVegetation(manifest, heightMap, playRadius, center, seed + 3).forEach(
+        (groups, bucketIndex) =>
+            world.addEntity(new PropBatch(`wild-${bucketIndex}`, world.context, groups))
+    );
+
+    const corridorGroups = placeCorridorProps(
         manifest,
-        heightField,
+        heightMap,
         corridorSpans,
         regionFootprints,
         center,
@@ -252,11 +259,11 @@ function spawnTerrain(
     );
 
     if (corridorGroups.length > 0)
-        world.addEntity(new RegionProps("corridor-anchors", world.context, corridorGroups));
+        world.addEntity(new PropBatch("corridor-anchors", world.context, corridorGroups));
 
     return {
         groundHeightAt: (worldX, worldZ) =>
-            heightField.elevationAt(worldX - centerX, worldZ - centerZ),
+            heightMap.elevationAt(worldX - centerX, worldZ - centerZ),
     };
 }
 
