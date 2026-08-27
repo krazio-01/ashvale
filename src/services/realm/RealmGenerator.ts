@@ -24,7 +24,14 @@ import {
     isCommitDescendedFrom,
 } from "@/services/github/GithubService";
 import { packChapterRegions } from "@/services/realm/RegionPacker";
-import { ChapterSeason, ChapterTheme, IChapterBoss, IChapterRegion, IRealmChapter, IResolvedRealm } from "@/types/realm";
+import {
+    ChapterSeason,
+    ChapterTheme,
+    IChapterBoss,
+    IChapterRegion,
+    IRealmChapter,
+    IResolvedRealm,
+} from "@/types/realm";
 
 const NEWEST_COMMIT_POSITION = 0;
 const SEED_HASH_MULTIPLIER = 31;
@@ -127,12 +134,12 @@ async function resolveChapterBoundaries(
             boundaryIndex === 0
                 ? { commit: foundingCommit, position: plannedPosition }
                 : resolveBoundaryOnFoundingHistory(
-                    repositoryOwner,
-                    repositoryName,
-                    plannedPosition,
-                    foundingCommit.sha,
-                    maxPositionsToSkip
-                )
+                      repositoryOwner,
+                      repositoryName,
+                      plannedPosition,
+                      foundingCommit.sha,
+                      maxPositionsToSkip
+                  )
         )
     );
 }
@@ -299,7 +306,8 @@ async function resolveChapterContributors(
 function isRateLimitError(error: unknown): boolean {
     return (
         error instanceof ErrorWrapper &&
-        (error.statusCode === HttpStatus.FORBIDDEN || error.statusCode === HttpStatus.TOO_MANY_REQUESTS)
+        (error.statusCode === HttpStatus.FORBIDDEN ||
+            error.statusCode === HttpStatus.TOO_MANY_REQUESTS)
     );
 }
 
@@ -317,13 +325,13 @@ function assignBossAppearanceCounts(chapters: IRealmChapter[]): IRealmChapter[] 
         chapter.boss === null
             ? chapter
             : {
-                ...chapter,
-                boss: {
-                    ...chapter.boss,
-                    chapterAppearanceCount:
-                        appearanceCountByLogin.get(chapter.boss.contributorLogin) ?? 1,
-                },
-            }
+                  ...chapter,
+                  boss: {
+                      ...chapter.boss,
+                      chapterAppearanceCount:
+                          appearanceCountByLogin.get(chapter.boss.contributorLogin) ?? 1,
+                  },
+              }
     );
 }
 

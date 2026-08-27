@@ -1,4 +1,3 @@
-
 export interface ISuccessResponse<TData> {
     success: true;
     message: string;

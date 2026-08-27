@@ -1,5 +1,5 @@
+import { EnemyAction } from "@/constants/characters";
 import { Enemy } from "@/entities/characters/Enemy";
-import { EnemyAction } from "@/constants/game";
 
 const WRAITH_MAX_HEALTH = 24;
 const WRAITH_ATTACK_DAMAGE = 6;

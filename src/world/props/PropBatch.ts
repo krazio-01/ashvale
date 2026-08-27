@@ -7,7 +7,7 @@ import type { IPropGroup } from "@/types/theme";
 import type { IModelTemplate, IWorldContext, IWorldEntity } from "@/types/world";
 import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 
-export class RegionProps extends Entity implements IWorldEntity {
+export class PropBatch extends Entity implements IWorldEntity {
     readonly sceneObject = new Group();
 
     private readonly context: IWorldContext;
@@ -30,7 +30,7 @@ export class RegionProps extends Entity implements IWorldEntity {
         }
     }
 
-    update(): void { }
+    update(): void {}
 
     dispose(): void {
         for (const collider of this.colliders)

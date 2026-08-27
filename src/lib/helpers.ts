@@ -17,6 +17,14 @@ export function lerp(from: number, to: number, ratio: number): number {
     return from + (to - from) * ratio;
 }
 
+export function smoothstep(edgeStart: number, edgeEnd: number, value: number): number {
+    if (edgeEnd === edgeStart) return value < edgeStart ? 0 : 1;
+
+    const ratio = clamp((value - edgeStart) / (edgeEnd - edgeStart), 0, 1);
+
+    return ratio * ratio * (3 - 2 * ratio);
+}
+
 export function hashString(value: string): number {
     let hash = 0;
 

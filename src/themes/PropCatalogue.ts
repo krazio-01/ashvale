@@ -1,5 +1,4 @@
-import { ChapterTheme } from "@/types/realm";
-import { PropRole, type IThemeManifest, type IThemeProp } from "@/types/theme";
+import { PropRole, type IThemeProp } from "@/types/theme";
 
 const MODEL_DIRECTORY = "/models/woodland";
 
@@ -156,64 +155,3 @@ export const FALLEN_PETALS = propFamily(
     [0.8, 1.4],
     false
 );
-
-export const WOODLAND_PROPS: IThemeProp[] = [
-    ...CANOPY_TREES,
-    ...PINE_TREES,
-    ...TWISTED_TREES,
-    ...DEAD_TREES,
-    ...BOULDERS,
-    ...ROCK_SLABS,
-    ...ROCK_CHUNKS,
-    ...BUSHES,
-    ...BROAD_PLANTS,
-    ...GRASS_TUFTS,
-    ...UNDERGROWTH,
-    ...FLOWERS,
-    ...MUSHROOMS,
-    ...PEBBLES,
-    ...FALLEN_PETALS,
-];
-
-export const WOODLAND_MANIFEST: IThemeManifest = {
-    theme: ChapterTheme.Woodland,
-    scatterPropsPerFile: 0.6,
-    props: WOODLAND_PROPS,
-    environment: {
-        sky: {
-            zenith: "#3d6480",
-            middle: "#8fadb8",
-            horizon: "#e6d9ba",
-            abyss: "#22303c",
-            glow: "#f2b06a",
-            sun: "#ffe6bc",
-            sunElevation: 0.62,
-            sunAzimuth: 0.7,
-            sunSize: 0.026,
-            glowFalloff: 9,
-            hazeStrength: 3,
-        },
-        lighting: {
-            keyColor: "#ffe8c4",
-            keyIntensity: 1.6,
-            rimColor: "#9cb8d8",
-            rimIntensity: 0.55,
-            skyFill: "#b8ccd4",
-            groundFill: "#59502e",
-            hemisphereIntensity: 0.65,
-        },
-        fogDensity: 0.0052,
-        outlineColor: "#2a2318",
-        terrain: {
-            wildColor: "#4e6238",
-            rockColor: "#6b6455",
-            peakColor: "#a8b29a",
-            wildElevation: 11,
-            wildRelief: 5,
-            mountainHeight: 30,
-            featureSize: 90,
-            ruggedness: 0.35,
-            slopeShade: 0.45,
-        },
-    },
-};

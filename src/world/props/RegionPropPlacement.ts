@@ -6,7 +6,7 @@ import {
     type IThemeProp,
 } from "@/types/theme";
 import type { IChapterRegion } from "@/types/realm";
-import { PROP_PLACEMENT } from "@/constants/game";
+import { PROP_PLACEMENT } from "@/constants/placement";
 import {
     clamp,
     createSeededRandom,
@@ -14,6 +14,7 @@ import {
     pickRandomSubset,
     scaleBetween,
 } from "@/lib/helpers";
+import { PropGroupCollector } from "@/world/props/PropGroups";
 
 export function placeRegionProps(
     region: IChapterRegion,
@@ -72,7 +73,10 @@ export function placeRegionProps(
 
     settleOntoTerrain(placedProps, groundHeightAt);
 
-    return groupByModel(placedProps);
+    const collector = new PropGroupCollector(true);
+    for (const { prop, placement } of placedProps) collector.add(prop, placement);
+
+    return collector.toGroups();
 }
 
 function resolvePlacementBounds(
@@ -395,29 +399,6 @@ function isClearOfStandingProps(
 function settleOntoTerrain(placedProps: IPlacedProp[], groundHeightAt: GroundHeightLookup): void {
     for (const { placement } of placedProps)
         placement.position[1] = groundHeightAt(placement.position[0], placement.position[2]);
-}
-
-function groupByModel(placedProps: IPlacedProp[]): IPropGroup[] {
-    const groupsByModelPath = new Map<string, IPropGroup>();
-
-    for (const { prop, placement } of placedProps) {
-        const existingGroup = groupsByModelPath.get(prop.modelPath);
-
-        if (existingGroup) {
-            existingGroup.placements.push(placement);
-            continue;
-        }
-
-        groupsByModelPath.set(prop.modelPath, {
-            modelPath: prop.modelPath,
-            role: prop.role,
-            hasCollider: prop.hasCollider,
-            footprintRadius: prop.footprintRadius,
-            placements: [placement],
-        });
-    }
-
-    return [...groupsByModelPath.values()];
 }
 
 export interface IRegionEntrance {

@@ -8,10 +8,12 @@ import type {
     IThemeLighting,
     IThemeManifest,
 } from "@/types/theme";
-import { WOODLAND_MANIFEST } from "@/themes/woodlandTheme";
-import { SETTLEMENT_MANIFEST } from "@/themes/settlementTheme";
-import { RUINS_MANIFEST } from "@/themes/ruinsTheme";
-import { HIGHLANDS_MANIFEST } from "@/themes/highlandsTheme";
+import {
+    HIGHLANDS_MANIFEST,
+    RUINS_MANIFEST,
+    SETTLEMENT_MANIFEST,
+    WOODLAND_MANIFEST,
+} from "@/themes/Biomes";
 import {
     AUTUMN_SEASON,
     SPRING_SEASON,

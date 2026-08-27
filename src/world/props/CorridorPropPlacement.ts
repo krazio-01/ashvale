@@ -1,12 +1,13 @@
 import { PropRole, type IPropGroup, type IThemeManifest, type IThemeProp } from "@/types/theme";
-import type { TerrainHeightField } from "@/world/TerrainHeightField";
+import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import type { Vector3Tuple } from "three";
-import { CORRIDOR_ANCHOR } from "@/constants/game";
+import { PropGroupCollector } from "@/world/props/PropGroups";
 import { clamp, createSeededRandom, lerp, pickRandomSubset, scaleBetween } from "@/lib/helpers";
+import { CORRIDOR_PROPS, VEGETATION } from "@/constants/placement";
 
-export function placeCorridorAnchors(
+export function placeCorridorProps(
     manifest: IThemeManifest,
-    heightField: TerrainHeightField,
+    heightMap: TerrainHeightMap,
     corridors: ICorridorSpan[],
     regionFootprints: IRegionFootprint[],
     center: Vector3Tuple,
@@ -18,26 +19,26 @@ export function placeCorridorAnchors(
         manifest.props.filter(
             (prop) => prop.role === PropRole.Landmark || prop.role === PropRole.Structure
         ),
-        CORRIDOR_ANCHOR.speciesPerRealm,
+        CORRIDOR_PROPS.speciesPerRealm,
         nextRandom
     );
 
     if (species.length === 0) return [];
 
-    const groupsByModelPath = new Map<string, IPropGroup>();
+    const collector = new PropGroupCollector(false);
 
     for (const corridor of corridors)
         for (const anchor of spreadAnchorsAlong(corridor, nextRandom))
             placeClusterAt(anchor, {
                 species,
-                heightField,
+                heightMap,
                 regionFootprints,
                 center,
                 nextRandom,
-                groupsByModelPath,
+                collector,
             });
 
-    return [...groupsByModelPath.values()];
+    return collector.toGroups();
 }
 
 function spreadAnchorsAlong(corridor: ICorridorSpan, nextRandom: () => number): IAnchorSpot[] {
@@ -48,9 +49,9 @@ function spreadAnchorsAlong(corridor: ICorridorSpan, nextRandom: () => number): 
     if (spanLength === 0) return [];
 
     const anchorCount = clamp(
-        Math.round(spanLength * CORRIDOR_ANCHOR.anchorsPerUnitLength),
-        CORRIDOR_ANCHOR.minimumAnchorsPerCorridor,
-        CORRIDOR_ANCHOR.maximumAnchorsPerCorridor
+        Math.round(spanLength * CORRIDOR_PROPS.anchorsPerUnitLength),
+        CORRIDOR_PROPS.minimumAnchorsPerCorridor,
+        CORRIDOR_PROPS.maximumAnchorsPerCorridor
     );
 
     const alongX = spanX / spanLength;
@@ -62,7 +63,7 @@ function spreadAnchorsAlong(corridor: ICorridorSpan, nextRandom: () => number): 
 
     for (let index = 0; index < anchorCount; index += 1) {
         const evenSpacing = (index + 0.5) / anchorCount;
-        const jitter = (nextRandom() * 2 - 1) * (CORRIDOR_ANCHOR.spineJitter / anchorCount);
+        const jitter = (nextRandom() * 2 - 1) * (CORRIDOR_PROPS.spineJitter / anchorCount);
         const alongRatio = clamp(evenSpacing + jitter, 0.05, 0.95);
 
         const spineX = corridor.fromX + spanX * alongRatio;
@@ -70,8 +71,8 @@ function spreadAnchorsAlong(corridor: ICorridorSpan, nextRandom: () => number): 
 
         const side = nextRandom() < 0.5 ? -1 : 1;
         const lateralDistance =
-            corridor.halfWidth * (1 + CORRIDOR_ANCHOR.lateralMarginRatio) +
-            nextRandom() * CORRIDOR_ANCHOR.lateralSpread;
+            corridor.halfWidth * (1 + CORRIDOR_PROPS.lateralMarginRatio) +
+            nextRandom() * CORRIDOR_PROPS.lateralSpread;
 
         anchors.push({
             localX: spineX + sidewaysX * side * lateralDistance,
@@ -83,28 +84,27 @@ function spreadAnchorsAlong(corridor: ICorridorSpan, nextRandom: () => number): 
 }
 
 function placeClusterAt(anchor: IAnchorSpot, options: IClusterOptions): void {
-    const { species, heightField, regionFootprints, center, nextRandom, groupsByModelPath } =
-        options;
+    const { species, heightMap, regionFootprints, center, nextRandom, collector } = options;
 
     const propCount = Math.round(
-        lerp(CORRIDOR_ANCHOR.propsPerAnchor[0], CORRIDOR_ANCHOR.propsPerAnchor[1], nextRandom())
+        lerp(CORRIDOR_PROPS.propsPerAnchor[0], CORRIDOR_PROPS.propsPerAnchor[1], nextRandom())
     );
 
     for (let index = 0; index < propCount; index += 1) {
         const prop = species[Math.floor(nextRandom() * species.length)];
         if (!prop) continue;
 
-        const spot = findOpenSpot(anchor, heightField, regionFootprints, nextRandom);
+        const spot = findOpenSpot(anchor, heightMap, regionFootprints, nextRandom);
         if (!spot) continue;
 
         const scale =
             scaleBetween(prop.scaleRange, nextRandom()) *
-            lerp(CORRIDOR_ANCHOR.scaleBoost[0], CORRIDOR_ANCHOR.scaleBoost[1], nextRandom());
+            lerp(CORRIDOR_PROPS.scaleBoost[0], CORRIDOR_PROPS.scaleBoost[1], nextRandom());
 
-        appendPlacement(groupsByModelPath, prop, {
+        collector.add(prop, {
             position: [
                 center[0] + spot.localX,
-                heightField.elevationAt(spot.localX, spot.localZ) - 0.02,
+                heightMap.elevationAt(spot.localX, spot.localZ) - VEGETATION.groundBite,
                 center[2] + spot.localZ,
             ],
             rotationY: nextRandom() * Math.PI * 2,
@@ -115,22 +115,22 @@ function placeClusterAt(anchor: IAnchorSpot, options: IClusterOptions): void {
 
 function findOpenSpot(
     anchor: IAnchorSpot,
-    heightField: TerrainHeightField,
+    heightMap: TerrainHeightMap,
     regionFootprints: IRegionFootprint[],
     nextRandom: () => number
 ): IAnchorSpot | null {
-    for (let attempt = 0; attempt < CORRIDOR_ANCHOR.placementAttempts; attempt += 1) {
+    for (let attempt = 0; attempt < CORRIDOR_PROPS.placementAttempts; attempt += 1) {
         const angle = nextRandom() * Math.PI * 2;
-        const distance = Math.sqrt(nextRandom()) * CORRIDOR_ANCHOR.clusterRadius;
+        const distance = Math.sqrt(nextRandom()) * CORRIDOR_PROPS.clusterRadius;
 
         const localX = anchor.localX + Math.cos(angle) * distance;
         const localZ = anchor.localZ + Math.sin(angle) * distance;
 
         if (isInsideAnyRegion(localX, localZ, regionFootprints)) continue;
 
-        const sample = heightField.sampleTerrainAt(localX, localZ);
-        if (sample.carveStrength > CORRIDOR_ANCHOR.carveRejectThreshold) continue;
-        if (heightField.steepnessAt(localX, localZ) > CORRIDOR_ANCHOR.slopeLimit) continue;
+        if (heightMap.carveStrengthAt(localX, localZ) > CORRIDOR_PROPS.carveRejectThreshold)
+            continue;
+        if (heightMap.steepnessAt(localX, localZ) > CORRIDOR_PROPS.slopeLimit) continue;
 
         return { localX, localZ };
     }
@@ -145,35 +145,14 @@ function isInsideAnyRegion(
 ): boolean {
     for (const region of regionFootprints) {
         const insideX =
-            Math.abs(localX - region.centerX) < region.halfWidth + CORRIDOR_ANCHOR.regionKeepOut;
+            Math.abs(localX - region.centerX) < region.halfWidth + CORRIDOR_PROPS.regionKeepOut;
         const insideZ =
-            Math.abs(localZ - region.centerZ) < region.halfDepth + CORRIDOR_ANCHOR.regionKeepOut;
+            Math.abs(localZ - region.centerZ) < region.halfDepth + CORRIDOR_PROPS.regionKeepOut;
 
         if (insideX && insideZ) return true;
     }
 
     return false;
-}
-
-function appendPlacement(
-    groupsByModelPath: Map<string, IPropGroup>,
-    prop: IThemeProp,
-    placement: IPropGroup["placements"][number]
-): void {
-    const existingGroup = groupsByModelPath.get(prop.modelPath);
-
-    if (existingGroup) {
-        existingGroup.placements.push(placement);
-        return;
-    }
-
-    groupsByModelPath.set(prop.modelPath, {
-        modelPath: prop.modelPath,
-        role: prop.role,
-        hasCollider: false,
-        footprintRadius: prop.footprintRadius,
-        placements: [placement],
-    });
 }
 
 export interface ICorridorSpan {
@@ -198,9 +177,9 @@ interface IAnchorSpot {
 
 interface IClusterOptions {
     species: IThemeProp[];
-    heightField: TerrainHeightField;
+    heightMap: TerrainHeightMap;
     regionFootprints: IRegionFootprint[];
     center: Vector3Tuple;
     nextRandom: () => number;
-    groupsByModelPath: Map<string, IPropGroup>;
+    collector: PropGroupCollector;
 }

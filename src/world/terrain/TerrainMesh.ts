@@ -13,9 +13,9 @@ import {
 import { Entity } from "@/entities/Entity";
 import type { ITerrainProfile } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import type { ITerrainSample, TerrainHeightField } from "@/world/TerrainHeightField";
-import { GROUND, TERRAIN, TERRAIN_DETAIL } from "@/constants/game";
-import { clamp } from "@/lib/helpers";
+import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+import { GROUND, TERRAIN, TERRAIN_DETAIL } from "@/constants/world";
+import { clamp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
 
 interface IGroundPalette {
@@ -26,7 +26,7 @@ interface IGroundPalette {
     floorAtDepth(nestingDepth: number): Color;
 }
 
-export class TerrainSurround extends Entity implements IWorldEntity {
+export class TerrainMesh extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;
 
     private readonly context: IWorldContext;
@@ -38,41 +38,49 @@ export class TerrainSurround extends Entity implements IWorldEntity {
     constructor(
         context: IWorldContext,
         center: Vector3Tuple,
-        playRadius: number,
-        heightField: TerrainHeightField,
+        heightMap: TerrainHeightMap,
         seed: number
     ) {
         super("terrain");
         this.context = context;
 
         const profile = context.environment.terrain;
-        const outerRadius = playRadius + TERRAIN.transition + TERRAIN.spread;
-        const size = outerRadius * 2;
-        const resolution = clamp(
-            Math.round(size / TERRAIN.targetCellSize),
-            TERRAIN.minimumResolution,
-            TERRAIN.maximumResolution
-        );
 
-        this.geometry = new PlaneGeometry(size, size, resolution, resolution);
+        this.geometry = new PlaneGeometry(
+            heightMap.span,
+            heightMap.span,
+            heightMap.cellsPerSide,
+            heightMap.cellsPerSide
+        );
         this.geometry.rotateX(-Math.PI / 2);
 
         const positions = this.geometry.getAttribute("position");
-        const samples: ITerrainSample[] = [];
+        const gridPoints = new Int32Array(positions.count);
 
         for (let index = 0; index < positions.count; index += 1) {
-            const sample = heightField.sampleTerrainAt(positions.getX(index), positions.getZ(index));
-            positions.setY(index, sample.elevation);
-            samples.push(sample);
+            const pointIndex = heightMap.nearestPointIndex(
+                positions.getX(index),
+                positions.getZ(index)
+            );
+
+            gridPoints[index] = pointIndex;
+            positions.setY(index, heightMap.elevationAtPoint(pointIndex));
         }
 
         positions.needsUpdate = true;
         this.geometry.computeVertexNormals();
-        paintVertexColors(this.geometry, samples, profile, deriveGroundPalette(profile), seed);
+        paintVertexColors(
+            this.geometry,
+            heightMap,
+            gridPoints,
+            profile,
+            deriveGroundPalette(profile),
+            seed
+        );
 
         this.material = new MeshLambertMaterial({
             vertexColors: true,
-            map: buildGrainTexture(seed, size),
+            map: buildGrainTexture(seed, heightMap.span),
         });
 
         this.sceneObject = new Mesh(this.geometry, this.material);
@@ -94,7 +102,7 @@ export class TerrainSurround extends Entity implements IWorldEntity {
         );
     }
 
-    update(): void { }
+    update(): void {}
 
     dispose(): void {
         this.context.physicsWorld.removeCollider(this.collider, false);
@@ -147,7 +155,8 @@ function deriveGroundPalette(profile: ITerrainProfile): IGroundPalette {
 
 function paintVertexColors(
     geometry: PlaneGeometry,
-    samples: ITerrainSample[],
+    heightMap: TerrainHeightMap,
+    gridPoints: Int32Array,
     profile: ITerrainProfile,
     palette: IGroundPalette,
     seed: number
@@ -162,8 +171,8 @@ function paintVertexColors(
     const wildTop = TERRAIN.pathLevel + profile.wildElevation;
 
     for (let index = 0; index < positions.count; index += 1) {
-        const sample = samples[index];
-        if (!sample) continue;
+        const pointIndex = gridPoints[index] ?? 0;
+        const carveStrength = heightMap.carveStrengthAtPoint(pointIndex);
 
         const x = positions.getX(index);
         const z = positions.getZ(index);
@@ -177,21 +186,18 @@ function paintVertexColors(
         blended.copy(palette.wild).lerp(palette.peak, Math.pow(heightRatio, 0.7));
 
         const slope = 1 - Math.abs(normals.getY(index));
-        const rockRatio = clamp(
-            (slope - TERRAIN_DETAIL.rockSlopeStart) /
-            (TERRAIN_DETAIL.rockSlopeEnd - TERRAIN_DETAIL.rockSlopeStart),
-            0,
-            1
+
+        blended.lerp(
+            palette.rock,
+            smoothstep(TERRAIN_DETAIL.rockSlopeStart, TERRAIN_DETAIL.rockSlopeEnd, slope)
         );
 
-        blended.lerp(palette.rock, rockRatio * rockRatio * (3 - 2 * rockRatio));
-
-        if (sample.carveStrength > 0) {
-            const flatColor = sample.isCorridor
+        if (carveStrength > 0) {
+            const flatColor = heightMap.isCorridorAtPoint(pointIndex)
                 ? palette.route
-                : palette.floorAtDepth(sample.floorColorIndex);
+                : palette.floorAtDepth(heightMap.floorColorIndexAtPoint(pointIndex));
 
-            blended.lerp(flatColor, Math.pow(sample.carveStrength, TERRAIN.carveColorSharpness));
+            blended.lerp(flatColor, Math.pow(carveStrength, TERRAIN.carveColorSharpness));
         }
 
         const broad =
@@ -203,12 +209,20 @@ function paintVertexColors(
                 0.5
             ) -
                 0.5) *
-            TERRAIN_DETAIL.broadVariationStrength *
-            2;
+                TERRAIN_DETAIL.broadVariationStrength *
+                2;
 
         const patch =
             1 +
-            (patchNoise.sample(x * 0.08, z * 0.08, 2, 0.5) - 0.5) * TERRAIN.colorNoiseStrength * 2;
+            (patchNoise.sample(
+                x * TERRAIN_DETAIL.patchVariationScale,
+                z * TERRAIN_DETAIL.patchVariationScale,
+                2,
+                0.5
+            ) -
+                0.5) *
+                TERRAIN.colorNoiseStrength *
+                2;
 
         const shade = 1 - slope * profile.slopeShade;
 

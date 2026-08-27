@@ -63,7 +63,7 @@ function insertDirectory(rootDirectory: IDirectoryNode, directoryPath: string): 
     let directory = rootDirectory;
     let segmentStart = 0;
 
-    for (; ;) {
+    for (;;) {
         const separatorIndex = directoryPath.indexOf("/", segmentStart);
         const segmentEnd = separatorIndex === -1 ? directoryPath.length : separatorIndex;
         const segment = directoryPath.slice(segmentStart, segmentEnd);
@@ -93,7 +93,7 @@ function countFileIntoAncestors(rootDirectory: IDirectoryNode, filePath: string)
     let directory = rootDirectory;
     let segmentStart = 0;
 
-    for (; ;) {
+    for (;;) {
         const separatorIndex = filePath.indexOf("/", segmentStart);
         if (separatorIndex === -1) return;
 

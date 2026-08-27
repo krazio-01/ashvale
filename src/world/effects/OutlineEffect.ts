@@ -1,7 +1,7 @@
 import { Color, Uniform, Vector2 } from "three";
 import type { Camera, Texture, WebGLRenderer } from "three";
 import { ViewPositionEffect } from "@/world/effects/ViewPositionEffect";
-import { OUTLINE } from "@/constants/game";
+import { OUTLINE } from "@/constants/rendering";
 
 const fragmentShader = `
     uniform sampler2D foliageMask;

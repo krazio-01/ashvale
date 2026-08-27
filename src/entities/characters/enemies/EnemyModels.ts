@@ -1,9 +1,16 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { ColliderDesc } from "@dimforge/rapier3d-compat";
-import { BoxGeometry, BufferGeometry, ConeGeometry, IcosahedronGeometry, Mesh, OctahedronGeometry } from "three";
-import type { MaterialLibrary } from "@/world/MaterialLibrary";
+import {
+    BoxGeometry,
+    BufferGeometry,
+    ConeGeometry,
+    IcosahedronGeometry,
+    Mesh,
+    OctahedronGeometry,
+} from "three";
+import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { ICharacterModel } from "@/types/world";
-import { EnemyArchetype, PALETTE } from "@/constants/game";
+import { EnemyArchetype, PALETTE } from "@/constants/characters";
 
 interface IPlaceholderShape {
     geometry: () => BufferGeometry;

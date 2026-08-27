@@ -1,3 +1,4 @@
+import { SHADING } from "@/constants/rendering";
 import {
     DataTexture,
     MeshStandardMaterial,
@@ -5,7 +6,6 @@ import {
     NearestFilter,
     RedFormat,
 } from "three";
-import { SHADING } from "@/constants/game";
 
 export class MaterialLibrary {
     private readonly gradientMap: DataTexture;

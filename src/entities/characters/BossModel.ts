@@ -1,9 +1,9 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { ColliderDesc } from "@dimforge/rapier3d-compat";
 import { BufferGeometry, DodecahedronGeometry, Mesh } from "three";
-import type { MaterialLibrary } from "@/world/MaterialLibrary";
+import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { ICharacterModel } from "@/types/world";
-import { BOSS, PALETTE } from "@/constants/game";
+import { BOSS, PALETTE } from "@/constants/characters";
 
 class PlaceholderBossModel implements ICharacterModel {
     private geometry: BufferGeometry | null = null;

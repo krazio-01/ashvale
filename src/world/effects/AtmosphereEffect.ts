@@ -3,7 +3,7 @@ import type { Camera, WebGLRenderer } from "three";
 import { ViewPositionEffect } from "@/world/effects/ViewPositionEffect";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { ISkyGradient } from "@/types/theme";
-import { ATMOSPHERE } from "@/constants/game";
+import { ATMOSPHERE } from "@/constants/rendering";
 
 const fragmentShader = `
     uniform mat4 cameraWorldMatrix;

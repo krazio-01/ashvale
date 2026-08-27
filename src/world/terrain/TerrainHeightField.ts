@@ -1,6 +1,6 @@
 import type { ITerrainProfile } from "@/types/theme";
-import { LANDFORM, TERRAIN, TERRAIN_DETAIL } from "@/constants/game";
-import { clamp, lerp } from "@/lib/helpers";
+import { LANDFORM, TERRAIN, TERRAIN_DETAIL } from "@/constants/world";
+import { clamp, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
 
 export class TerrainHeightField {
@@ -16,6 +16,7 @@ export class TerrainHeightField {
     private readonly boundaryWallStartRadius: number;
     private readonly boundaryWallEndRadius: number;
     private readonly boundaryWallHeight: number;
+    private readonly scratchSample = createTerrainSample();
 
     constructor(
         profile: ITerrainProfile,
@@ -42,13 +43,14 @@ export class TerrainHeightField {
         this.boundaryWallHeight = profile.mountainHeight * LANDFORM.rampartHeightRatio;
     }
 
-    sampleTerrainAt(localX: number, localZ: number): ITerrainSample {
+    sampleInto(localX: number, localZ: number, sample: ITerrainSample): ITerrainSample {
         let dominantCarveWeight = 0;
         let weightedFloorElevation = 0;
         let totalCarveWeight = 0;
-        let floorColorIndex = 0;
-        let isCorridor = false;
         let distanceToCarvedGround = Infinity;
+
+        sample.floorColorIndex = 0;
+        sample.isCorridor = false;
 
         for (const region of this.regionFloors) {
             const edgeDistance = distanceOutsideRegionFloor(localX, localZ, region);
@@ -62,8 +64,8 @@ export class TerrainHeightField {
 
             if (carveWeight > dominantCarveWeight) {
                 dominantCarveWeight = carveWeight;
-                floorColorIndex = region.floorColorIndex;
-                isCorridor = false;
+                sample.floorColorIndex = region.floorColorIndex;
+                sample.isCorridor = false;
             }
         }
 
@@ -80,57 +82,12 @@ export class TerrainHeightField {
 
             if (carveWeight > dominantCarveWeight) {
                 dominantCarveWeight = carveWeight;
-                isCorridor = true;
+                sample.isCorridor = true;
             }
         }
 
-        return {
-            elevation: this.resolveElevationAt(
-                localX,
-                localZ,
-                distanceToCarvedGround,
-                weightedFloorElevation,
-                totalCarveWeight,
-                dominantCarveWeight
-            ),
-            carveStrength: dominantCarveWeight,
-            floorColorIndex,
-            isCorridor,
-        };
-    }
-
-    elevationAt(localX: number, localZ: number): number {
-        let dominantCarveWeight = 0;
-        let weightedFloorElevation = 0;
-        let totalCarveWeight = 0;
-        let distanceToCarvedGround = Infinity;
-
-        for (const region of this.regionFloors) {
-            const edgeDistance = distanceOutsideRegionFloor(localX, localZ, region);
-            if (edgeDistance < distanceToCarvedGround) distanceToCarvedGround = edgeDistance;
-
-            const carveWeight = carveWeightFromEdgeDistance(edgeDistance);
-            if (carveWeight <= 0) continue;
-
-            weightedFloorElevation += region.floorElevation * carveWeight;
-            totalCarveWeight += carveWeight;
-            if (carveWeight > dominantCarveWeight) dominantCarveWeight = carveWeight;
-        }
-
-        for (const corridor of this.preparedCorridors) {
-            const edgeDistance = distanceOutsideCorridor(localX, localZ, corridor);
-            if (edgeDistance < distanceToCarvedGround) distanceToCarvedGround = edgeDistance;
-
-            const carveWeight = carveWeightFromEdgeDistance(edgeDistance);
-            if (carveWeight <= 0) continue;
-
-            weightedFloorElevation +=
-                (corridor.floorElevation - TERRAIN.corridorDrop) * carveWeight;
-            totalCarveWeight += carveWeight;
-            if (carveWeight > dominantCarveWeight) dominantCarveWeight = carveWeight;
-        }
-
-        return this.resolveElevationAt(
+        sample.carveStrength = dominantCarveWeight;
+        sample.elevation = this.resolveElevationAt(
             localX,
             localZ,
             distanceToCarvedGround,
@@ -138,13 +95,12 @@ export class TerrainHeightField {
             totalCarveWeight,
             dominantCarveWeight
         );
+
+        return sample;
     }
 
-    steepnessAt(localX: number, localZ: number): number {
-        const deltaX = this.elevationAt(localX + 1, localZ) - this.elevationAt(localX - 1, localZ);
-        const deltaZ = this.elevationAt(localX, localZ + 1) - this.elevationAt(localX, localZ - 1);
-
-        return Math.sqrt(deltaX * deltaX + deltaZ * deltaZ) / 2;
+    elevationAt(localX: number, localZ: number): number {
+        return this.sampleInto(localX, localZ, this.scratchSample).elevation;
     }
 
     private resolveElevationAt(
@@ -236,21 +192,9 @@ export class TerrainHeightField {
 
         const mountainNoiseX = localX / this.profile.featureSize;
         const mountainNoiseZ = localZ / this.profile.featureSize;
-        const smoothMountainNoise = this.mountainNoise.sample(
-            mountainNoiseX,
-            mountainNoiseZ,
-            5,
-            0.5
-        );
-        const ridgedMountainNoise = this.mountainNoise.sampleRidged(
-            mountainNoiseX,
-            mountainNoiseZ,
-            4,
-            0.5
-        );
         const mountainShapeNoise = lerp(
-            smoothMountainNoise,
-            ridgedMountainNoise,
+            this.mountainNoise.sample(mountainNoiseX, mountainNoiseZ, 5, 0.5),
+            this.mountainNoise.sampleRidged(mountainNoiseX, mountainNoiseZ, 4, 0.5),
             this.profile.ruggedness
         );
 
@@ -266,11 +210,10 @@ export class TerrainHeightField {
             mountainRampRatio
         );
 
-        const mountainRise = fadedMountainElevation - baseGroundElevation;
         const terraceBlend = smoothstep(
             0,
             this.terraceStepHeight * LANDFORM.terraceOnsetRatio,
-            mountainRise
+            fadedMountainElevation - baseGroundElevation
         );
 
         const terracedElevation = lerp(
@@ -313,6 +256,10 @@ export class TerrainHeightField {
             smoothstep(gapOpensBelow, gapClosesAbove, vistaGapSample)
         );
     }
+}
+
+export function createTerrainSample(): ITerrainSample {
+    return { elevation: 0, carveStrength: 0, floorColorIndex: 0, isCorridor: false };
 }
 
 function measureNeighbourSpacing(regionFloors: IRegionFloor[]): number {
@@ -400,11 +347,6 @@ function distanceOutsideCorridor(x: number, z: number, corridor: IPreparedCorrid
     const gapZ = offsetZ - corridor.spanZ * projection;
 
     return Math.max(Math.sqrt(gapX * gapX + gapZ * gapZ) - corridor.halfWidth, 0);
-}
-
-function smoothstep(edgeStart: number, edgeEnd: number, value: number): number {
-    const ratio = clamp((value - edgeStart) / (edgeEnd - edgeStart), 0, 1);
-    return ratio * ratio * (3 - 2 * ratio);
 }
 
 export interface IRegionFloor {
