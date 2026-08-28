@@ -4,9 +4,9 @@ import {
     DataUtils,
     HalfFloatType,
     LinearFilter,
-    RGFormat,
+    RGBAFormat,
 } from "three";
-import { TERRAIN } from "@/constants/world";
+import { TERRAIN, TERRAIN_DETAIL } from "@/constants/world";
 import { clamp, lerp } from "@/lib/helpers";
 import { createTerrainSample, type TerrainHeightField } from "@/world/terrain/TerrainHeightField";
 
@@ -19,6 +19,7 @@ export class TerrainHeightMap {
     readonly cellsPerSide: number;
 
     private readonly elevations: Float32Array;
+    private readonly steepnesses: Float32Array;
     private readonly carveStrengths: Float32Array;
     private readonly corridorCarves: Float32Array;
     private readonly floorColorIndices: Uint8Array;
@@ -37,23 +38,35 @@ export class TerrainHeightMap {
 
         const pointCount = this.pointsPerSide * this.pointsPerSide;
         this.elevations = new Float32Array(pointCount);
+        this.steepnesses = new Float32Array(pointCount);
         this.carveStrengths = new Float32Array(pointCount);
         this.corridorCarves = new Float32Array(pointCount);
         this.floorColorIndices = new Uint8Array(pointCount);
 
         const sample = createTerrainSample();
+        const slopeReach = TERRAIN.macroSlopeGrainWavelengths / TERRAIN_DETAIL.grainNoiseScale / 2;
 
         for (let row = 0; row < this.pointsPerSide; row += 1) {
             const localZ = this.originZ + row * this.cellSize;
 
             for (let column = 0; column < this.pointsPerSide; column += 1) {
                 const index = row * this.pointsPerSide + column;
-                heightField.sampleInto(this.originX + column * this.cellSize, localZ, sample);
+                const localX = this.originX + column * this.cellSize;
+                heightField.sampleInto(localX, localZ, sample);
 
                 this.elevations[index] = sample.elevation;
                 this.carveStrengths[index] = sample.carveStrength;
                 this.corridorCarves[index] = sample.isCorridor ? sample.carveStrength : 0;
                 this.floorColorIndices[index] = Math.min(sample.floorColorIndex, 255);
+
+                const riseAcross =
+                    heightField.elevationAt(localX + slopeReach, localZ) -
+                    heightField.elevationAt(localX - slopeReach, localZ);
+                const riseAlong =
+                    heightField.elevationAt(localX, localZ + slopeReach) -
+                    heightField.elevationAt(localX, localZ - slopeReach);
+
+                this.steepnesses[index] = Math.hypot(riseAcross, riseAlong) / (2 * slopeReach);
             }
         }
     }
@@ -71,13 +84,7 @@ export class TerrainHeightMap {
     }
 
     steepnessAt(localX: number, localZ: number): number {
-        const step = this.cellSize;
-        const deltaX =
-            this.elevationAt(localX + step, localZ) - this.elevationAt(localX - step, localZ);
-        const deltaZ =
-            this.elevationAt(localX, localZ + step) - this.elevationAt(localX, localZ - step);
-
-        return Math.sqrt(deltaX * deltaX + deltaZ * deltaZ) / (2 * step);
+        return this.interpolate(this.steepnesses, localX, localZ);
     }
 
     nearestPointIndex(localX: number, localZ: number): number {
@@ -104,18 +111,21 @@ export class TerrainHeightMap {
     }
 
     createShaderTexture(): DataTexture {
-        const channels = new Uint16Array(this.elevations.length * 2);
+        const channels = new Uint16Array(this.elevations.length * 4);
 
         for (let index = 0; index < this.elevations.length; index += 1) {
-            channels[index * 2] = DataUtils.toHalfFloat(this.elevations[index] ?? 0);
-            channels[index * 2 + 1] = DataUtils.toHalfFloat(this.corridorCarves[index] ?? 0);
+            const channelStart = index * 4;
+
+            channels[channelStart] = DataUtils.toHalfFloat(this.elevations[index] ?? 0);
+            channels[channelStart + 1] = DataUtils.toHalfFloat(this.corridorCarves[index] ?? 0);
+            channels[channelStart + 2] = DataUtils.toHalfFloat(this.steepnesses[index] ?? 0);
         }
 
         const texture = new DataTexture(
             channels,
             this.pointsPerSide,
             this.pointsPerSide,
-            RGFormat,
+            RGBAFormat,
             HalfFloatType
         );
 

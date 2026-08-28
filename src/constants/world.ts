@@ -17,6 +17,7 @@ export const TERRAIN = {
     pathLevel: 0,
     bankWidth: 12,
     corridorDrop: 0.4,
+    macroSlopeGrainWavelengths: 4,
     wildReliefScale: 0.035,
     peakShaping: 1.5,
     colorNoiseStrength: 0.08,
