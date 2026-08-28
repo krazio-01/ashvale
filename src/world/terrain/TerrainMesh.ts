@@ -15,8 +15,13 @@ import type { ITerrainProfile } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import { GROUND, TERRAIN, TERRAIN_DETAIL } from "@/constants/world";
-import { clamp, smoothstep } from "@/lib/helpers";
+import { clamp, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
+
+interface IRunningRange {
+    include(value: number): void;
+    normalize(value: number): number;
+}
 
 interface IGroundPalette {
     wild: Color;
@@ -74,8 +79,7 @@ export class TerrainMesh extends Entity implements IWorldEntity {
             heightMap,
             gridPoints,
             profile,
-            deriveGroundPalette(profile),
-            seed
+            deriveGroundPalette(profile)
         );
 
         this.material = new MeshLambertMaterial({
@@ -158,24 +162,18 @@ function paintVertexColors(
     heightMap: TerrainHeightMap,
     gridPoints: Int32Array,
     profile: ITerrainProfile,
-    palette: IGroundPalette,
-    seed: number
+    palette: IGroundPalette
 ): void {
-    const patchNoise = new FractalNoise(seed + 2);
-    const broadNoise = new FractalNoise(seed + 3);
     const positions = geometry.getAttribute("position");
     const normals = geometry.getAttribute("normal");
-    const colors = new Float32Array(positions.count * 3);
+    const vertexCount = positions.count;
+    const colors = new Float32Array(vertexCount * 3);
     const blended = new Color();
-
     const wildTop = TERRAIN.pathLevel + profile.wildElevation;
 
-    for (let index = 0; index < positions.count; index += 1) {
+    for (let index = 0; index < vertexCount; index += 1) {
         const pointIndex = gridPoints[index] ?? 0;
         const carveStrength = heightMap.carveStrengthAtPoint(pointIndex);
-
-        const x = positions.getX(index);
-        const z = positions.getZ(index);
 
         const heightRatio = clamp(
             (positions.getY(index) - wildTop) / Math.max(profile.mountainHeight, 1),
@@ -200,43 +198,70 @@ function paintVertexColors(
             blended.lerp(flatColor, Math.pow(carveStrength, TERRAIN.carveColorSharpness));
         }
 
-        const broad =
-            1 +
-            (broadNoise.sample(
-                x * TERRAIN_DETAIL.broadVariationScale,
-                z * TERRAIN_DETAIL.broadVariationScale,
-                2,
-                0.5
-            ) -
-                0.5) *
-                TERRAIN_DETAIL.broadVariationStrength *
-                2;
-
-        const patch =
-            1 +
-            (patchNoise.sample(
-                x * TERRAIN_DETAIL.patchVariationScale,
-                z * TERRAIN_DETAIL.patchVariationScale,
-                2,
-                0.5
-            ) -
-                0.5) *
-                TERRAIN.colorNoiseStrength *
-                2;
-
         const shade = 1 - slope * profile.slopeShade;
 
-        colors[index * 3] = blended.r * shade * broad * patch;
-        colors[index * 3 + 1] = blended.g * shade * broad * patch;
-        colors[index * 3 + 2] = blended.b * shade * broad * patch;
+        colors[index * 3] = blended.r * shade;
+        colors[index * 3 + 1] = blended.g * shade;
+        colors[index * 3 + 2] = blended.b * shade;
     }
 
     geometry.setAttribute("color", new BufferAttribute(colors, 3));
 }
 
+function createRunningRange(): IRunningRange {
+    let minSeen = Infinity;
+    let maxSeen = -Infinity;
+
+    return {
+        include(value: number): void {
+            if (value < minSeen) minSeen = value;
+            if (value > maxSeen) maxSeen = value;
+        },
+        normalize(value: number): number {
+            const span = maxSeen - minSeen;
+            return span > 1e-6 ? (value - minSeen) / span : 0.5;
+        },
+    };
+}
+
 function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
     const grainNoise = new FractalNoise(seed + 4);
+    const blotchNoise = new FractalNoise(seed + 5);
     const size = TERRAIN_DETAIL.textureSize;
+    const texelCount = size * size;
+
+    const rawGrain = new Float32Array(texelCount);
+    const rawBlotch = new Float32Array(texelCount);
+    const grainRange = createRunningRange();
+    const blotchRange = createRunningRange();
+
+    for (let pixelZ = 0; pixelZ < size; pixelZ += 1) {
+        for (let pixelX = 0; pixelX < size; pixelX += 1) {
+            const texel = pixelZ * size + pixelX;
+            const unitX = pixelX / size;
+            const unitZ = pixelZ / size;
+
+            const grain = grainNoise.sampleTileable(
+                unitX,
+                unitZ,
+                TERRAIN_DETAIL.grainTileCount,
+                3,
+                0.55
+            );
+            const mudClump = blotchNoise.sampleTileable(
+                unitX,
+                unitZ,
+                TERRAIN_DETAIL.blotchTileCount,
+                3,
+                0.55
+            );
+
+            rawGrain[texel] = grain;
+            rawBlotch[texel] = mudClump;
+            grainRange.include(grain);
+            blotchRange.include(mudClump);
+        }
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = size;
@@ -246,20 +271,28 @@ function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
     if (!drawing) return new CanvasTexture(canvas);
 
     const pixels = drawing.createImageData(size, size);
+    const [mudRed, mudGreen, mudBlue] = TERRAIN_DETAIL.mudMultiplier;
+    const [dustRed, dustGreen, dustBlue] = TERRAIN_DETAIL.dustMultiplier;
 
-    for (let pixelZ = 0; pixelZ < size; pixelZ += 1) {
-        for (let pixelX = 0; pixelX < size; pixelX += 1) {
-            const grain = grainNoise.sample((pixelX / size) * 9, (pixelZ / size) * 9, 3, 0.55);
-            const brightness = Math.round(
-                255 * (1 - TERRAIN_DETAIL.grainStrength / 2 + grain * TERRAIN_DETAIL.grainStrength)
-            );
+    for (let texel = 0; texel < texelCount; texel += 1) {
+        const dustAmount = blotchRange.normalize(rawBlotch[texel] ?? 0);
+        const grit = lerp(
+            1 - TERRAIN_DETAIL.grainStrength,
+            1 + TERRAIN_DETAIL.grainStrength,
+            grainRange.normalize(rawGrain[texel] ?? 0)
+        );
 
-            const offset = (pixelZ * size + pixelX) * 4;
-            pixels.data[offset] = brightness;
-            pixels.data[offset + 1] = brightness;
-            pixels.data[offset + 2] = brightness;
-            pixels.data[offset + 3] = 255;
-        }
+        const offset = texel * 4;
+        pixels.data[offset] = Math.round(
+            255 * clamp(lerp(mudRed, dustRed, dustAmount) * grit, 0, 1)
+        );
+        pixels.data[offset + 1] = Math.round(
+            255 * clamp(lerp(mudGreen, dustGreen, dustAmount) * grit, 0, 1)
+        );
+        pixels.data[offset + 2] = Math.round(
+            255 * clamp(lerp(mudBlue, dustBlue, dustAmount) * grit, 0, 1)
+        );
+        pixels.data[offset + 3] = 255;
     }
 
     drawing.putImageData(pixels, 0, 0);

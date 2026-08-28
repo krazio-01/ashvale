@@ -17,11 +17,12 @@ export const TERRAIN = {
     pathLevel: 0,
     bankWidth: 12,
     corridorDrop: 0.4,
+    macroSlopeGrainWavelengths: 4,
     wildReliefScale: 0.035,
     peakShaping: 1.5,
     colorNoiseStrength: 0.08,
     carveColorSharpness: 0.75,
-    bucketSize: 70,
+    bucketSize: 220,
 };
 
 export const LANDFORM = {
@@ -43,16 +44,17 @@ export const LANDFORM = {
 };
 
 export const TERRAIN_DETAIL = {
-    textureSize: 256,
-    worldRepeat: 11,
-    grainStrength: 0.3,
+    textureSize: 384,
+    worldRepeat: 7,
+    grainTileCount: 10,
+    grainStrength: 0.15,
+    blotchTileCount: 3,
+    mudMultiplier: [0.55, 0.48, 0.4],
+    dustMultiplier: [1, 0.94, 0.78],
     grainNoiseHeight: 0.55,
     grainNoiseScale: 0.42,
     rockSlopeStart: 0.32,
     rockSlopeEnd: 0.85,
-    broadVariationScale: 0.012,
-    broadVariationStrength: 0.16,
-    patchVariationScale: 0.08,
 };
 
 export const GROUND = {
