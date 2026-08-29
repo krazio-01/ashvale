@@ -1,10 +1,12 @@
 import { PropRole, type IPropGroup, type IThemeManifest, type IThemeProp } from "@/types/theme";
-import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+import { createHeightMapSample, type IHeightMapSample, type TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import type { Vector3Tuple } from "three";
 import { PropGroupCollector } from "@/world/props/PropGroups";
 import { createSeededRandom, lerp, pickRandomSubset, scaleBetween } from "@/lib/helpers";
 import { VEGETATION } from "@/constants/placement";
 import { TERRAIN } from "@/constants/world";
+
+const BUCKET_KEY_OFFSET = 1 << 20;
 
 export function scatterVegetation(
     manifest: IThemeManifest,
@@ -14,7 +16,8 @@ export function scatterVegetation(
     seed: number
 ): IPropGroup[][] {
     const nextRandom = createSeededRandom(seed);
-    const collectorsByBucket = new Map<string, PropGroupCollector>();
+    const collectorsByBucket = new Map<number, PropGroupCollector>();
+    const heightSample = createHeightMapSample();
 
     const trees = pickRandomSubset(
         manifest.props.filter((prop) => prop.role === PropRole.Landmark),
@@ -87,19 +90,19 @@ export function scatterVegetation(
     ];
 
     for (const band of bands)
-        scatterBand(collectorsByBucket, band, { heightMap, center, nextRandom });
+        scatterBand(collectorsByBucket, band, { heightMap, center, nextRandom, heightSample });
 
     return [...collectorsByBucket.values()].map((collector) => collector.toGroups());
 }
 
 function scatterBand(
-    collectorsByBucket: Map<string, PropGroupCollector>,
+    collectorsByBucket: Map<number, PropGroupCollector>,
     band: IVegetationBand,
     world: IScatterWorld
 ): void {
     if (band.species.length === 0) return;
 
-    const { heightMap, center, nextRandom } = world;
+    const { heightMap, center, nextRandom, heightSample } = world;
     const [innerRadius, outerRadius] = band.radiusRange;
     const count = countForAnnulus(innerRadius, outerRadius, band.density, band.densityFactor);
 
@@ -115,8 +118,9 @@ function scatterBand(
         const localX = Math.cos(angle) * radius;
         const localZ = Math.sin(angle) * radius;
 
-        if (heightMap.carveStrengthAt(localX, localZ) > VEGETATION.carveRejectThreshold) continue;
-        if (heightMap.steepnessAt(localX, localZ) > band.slopeLimit) continue;
+        heightMap.sampleAt(localX, localZ, heightSample);
+        if (heightSample.carveStrength > VEGETATION.carveRejectThreshold) continue;
+        if (heightSample.steepness > band.slopeLimit) continue;
 
         const scale =
             scaleBetween(prop.scaleRange, nextRandom()) *
@@ -125,7 +129,7 @@ function scatterBand(
         collectorFor(collectorsByBucket, localX, localZ).add(prop, {
             position: [
                 center[0] + localX,
-                heightMap.elevationAt(localX, localZ) - VEGETATION.groundBite,
+                heightSample.elevation - VEGETATION.groundBite,
                 center[2] + localZ,
             ],
             rotationY: nextRandom() * Math.PI * 2,
@@ -146,11 +150,15 @@ function countForAnnulus(
 }
 
 function collectorFor(
-    collectorsByBucket: Map<string, PropGroupCollector>,
+    collectorsByBucket: Map<number, PropGroupCollector>,
     localX: number,
     localZ: number
 ): PropGroupCollector {
-    const bucketKey = `${Math.floor(localX / TERRAIN.bucketSize)}:${Math.floor(localZ / TERRAIN.bucketSize)}`;
+    const bucketX = Math.floor(localX / TERRAIN.bucketSize);
+    const bucketZ = Math.floor(localZ / TERRAIN.bucketSize);
+    const bucketKey =
+        (bucketX + BUCKET_KEY_OFFSET) * (BUCKET_KEY_OFFSET * 2) + (bucketZ + BUCKET_KEY_OFFSET);
+
     const existing = collectorsByBucket.get(bucketKey);
     if (existing) return existing;
 
@@ -173,4 +181,5 @@ interface IScatterWorld {
     heightMap: TerrainHeightMap;
     center: Vector3Tuple;
     nextRandom: () => number;
+    heightSample: IHeightMapSample;
 }

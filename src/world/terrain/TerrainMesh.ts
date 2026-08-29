@@ -185,7 +185,7 @@ function paintVertexColors(
             1
         );
 
-        blended.copy(palette.wild).lerp(palette.peak, Math.pow(heightRatio, 0.7));
+        blended.copy(palette.wild).lerp(palette.peak, Math.pow(heightRatio, TERRAIN.peakColorSharpness));
 
         const slope = 1 - Math.abs(normals.getY(index));
 
@@ -275,6 +275,7 @@ function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
     if (!drawing) return new CanvasTexture(canvas);
 
     const pixels = drawing.createImageData(size, size);
+    const packedPixels = new Uint32Array(pixels.data.buffer);
     const [mudRed, mudGreen, mudBlue] = TERRAIN_DETAIL.mudMultiplier;
     const [dustRed, dustGreen, dustBlue] = TERRAIN_DETAIL.dustMultiplier;
 
@@ -286,17 +287,12 @@ function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
             grainRange.normalize(rawGrain[texel] ?? 0)
         );
 
-        const offset = texel * 4;
-        pixels.data[offset] = Math.round(
-            255 * clamp(lerp(mudRed, dustRed, dustAmount) * grit, 0, 1)
-        );
-        pixels.data[offset + 1] = Math.round(
-            255 * clamp(lerp(mudGreen, dustGreen, dustAmount) * grit, 0, 1)
-        );
-        pixels.data[offset + 2] = Math.round(
-            255 * clamp(lerp(mudBlue, dustBlue, dustAmount) * grit, 0, 1)
-        );
-        pixels.data[offset + 3] = 255;
+        const red = Math.round(255 * clamp(lerp(mudRed, dustRed, dustAmount) * grit, 0, 1));
+        const green = Math.round(255 * clamp(lerp(mudGreen, dustGreen, dustAmount) * grit, 0, 1));
+        const blue = Math.round(255 * clamp(lerp(mudBlue, dustBlue, dustAmount) * grit, 0, 1));
+
+        // Packs R/G/B/A into one little-endian write instead of four byte writes into pixels.data.
+        packedPixels[texel] = 0xff000000 | (blue << 16) | (green << 8) | red;
     }
 
     drawing.putImageData(pixels, 0, 0);

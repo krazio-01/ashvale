@@ -22,6 +22,7 @@ export const TERRAIN = {
     peakShaping: 1.5,
     colorNoiseStrength: 0.08,
     carveColorSharpness: 0.75,
+    peakColorSharpness: 0.7,
     bucketSize: 220,
 };
 

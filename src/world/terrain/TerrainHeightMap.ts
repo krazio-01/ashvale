@@ -66,7 +66,8 @@ export class TerrainHeightMap {
                     heightField.elevationAt(localX, localZ + slopeReach) -
                     heightField.elevationAt(localX, localZ - slopeReach);
 
-                this.steepnesses[index] = Math.hypot(riseAcross, riseAlong) / (2 * slopeReach);
+                this.steepnesses[index] =
+                    Math.sqrt(riseAcross * riseAcross + riseAlong * riseAlong) / (2 * slopeReach);
             }
         }
     }
@@ -85,6 +86,17 @@ export class TerrainHeightMap {
 
     steepnessAt(localX: number, localZ: number): number {
         return this.interpolate(this.steepnesses, localX, localZ);
+    }
+
+    sampleAt(localX: number, localZ: number, sample: IHeightMapSample): IHeightMapSample {
+        const weights = this.computeInterpolationWeights(localX, localZ);
+
+        sample.elevation = this.interpolateWithWeights(this.elevations, weights);
+        sample.carveStrength = this.interpolateWithWeights(this.carveStrengths, weights);
+        sample.corridorCarve = this.interpolateWithWeights(this.corridorCarves, weights);
+        sample.steepness = this.interpolateWithWeights(this.steepnesses, weights);
+
+        return sample;
     }
 
     nearestPointIndex(localX: number, localZ: number): number {
@@ -140,21 +152,34 @@ export class TerrainHeightMap {
     }
 
     private interpolate(values: Float32Array, localX: number, localZ: number): number {
+        return this.interpolateWithWeights(values, this.computeInterpolationWeights(localX, localZ));
+    }
+
+    private computeInterpolationWeights(localX: number, localZ: number): IInterpolationWeights {
         const columnPosition = (localX - this.originX) / this.cellSize;
         const rowPosition = (localZ - this.originZ) / this.cellSize;
 
         const column = this.clampCellIndex(Math.floor(columnPosition));
         const row = this.clampCellIndex(Math.floor(rowPosition));
-        const acrossRatio = clamp(columnPosition - column, 0, 1);
-        const downRatio = clamp(rowPosition - row, 0, 1);
-
         const topRow = row * this.pointsPerSide + column;
-        const bottomRow = topRow + this.pointsPerSide;
 
+        return {
+            acrossRatio: clamp(columnPosition - column, 0, 1),
+            downRatio: clamp(rowPosition - row, 0, 1),
+            topRow,
+            bottomRow: topRow + this.pointsPerSide,
+        };
+    }
+
+    private interpolateWithWeights(values: Float32Array, weights: IInterpolationWeights): number {
         return lerp(
-            lerp(values[topRow] ?? 0, values[topRow + 1] ?? 0, acrossRatio),
-            lerp(values[bottomRow] ?? 0, values[bottomRow + 1] ?? 0, acrossRatio),
-            downRatio
+            lerp(values[weights.topRow] ?? 0, values[weights.topRow + 1] ?? 0, weights.acrossRatio),
+            lerp(
+                values[weights.bottomRow] ?? 0,
+                values[weights.bottomRow + 1] ?? 0,
+                weights.acrossRatio
+            ),
+            weights.downRatio
         );
     }
 
@@ -165,4 +190,22 @@ export class TerrainHeightMap {
     private clampPointIndex(value: number): number {
         return clamp(value, 0, this.pointsPerSide - 1);
     }
+}
+
+interface IInterpolationWeights {
+    acrossRatio: number;
+    downRatio: number;
+    topRow: number;
+    bottomRow: number;
+}
+
+export interface IHeightMapSample {
+    elevation: number;
+    carveStrength: number;
+    corridorCarve: number;
+    steepness: number;
+}
+
+export function createHeightMapSample(): IHeightMapSample {
+    return { elevation: 0, carveStrength: 0, corridorCarve: 0, steepness: 0 };
 }
