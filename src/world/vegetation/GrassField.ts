@@ -20,7 +20,7 @@ import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import { GRASS } from "@/constants/placement";
-import { shiftColorHsl } from "@/lib/helpers";
+import { shiftColorHsl, FULL_TURN } from "@/lib/helpers";
 
 const VERTEX_SHADER = /* glsl */ `
     uniform sampler2D terrainField;
@@ -217,7 +217,6 @@ const FRAGMENT_SHADER = /* glsl */ `
     }
 `;
 
-const TAU = Math.PI * 2;
 const cameraWorldPosition = new Vector3();
 
 export class GrassField extends Entity implements IWorldEntity {
@@ -319,7 +318,7 @@ export class GrassField extends Entity implements IWorldEntity {
 }
 
 function advancePhase(phase: number, increment: number): number {
-    return (phase + increment) % TAU;
+    return (phase + increment) % FULL_TURN;
 }
 
 function buildDetailBands(): IGrassDetailBand[] {
@@ -375,7 +374,7 @@ function buildBladeCluster(bladeSegments: number): IBladeCluster {
 
     for (let bladeNumber = 0; bladeNumber < GRASS.bladesPerTuft; bladeNumber += 1) {
         const firstVertex = bladeNumber * verticesPerBlade;
-        const restingYaw = (bladeNumber / GRASS.bladesPerTuft) * TAU;
+        const restingYaw = (bladeNumber / GRASS.bladesPerTuft) * FULL_TURN;
 
         for (let row = 0; row < bladeSegments; row += 1) {
             const heightRatio = row / bladeSegments;
@@ -470,7 +469,7 @@ function bladeUniforms() {
         bladeHeightRange: { value: new Vector2(...GRASS.bladeHeightRange) },
         bladeWidth: { value: GRASS.bladeWidth },
         bladeCurvature: { value: GRASS.bladeCurvature },
-        bladeYawJitter: { value: TAU / GRASS.bladesPerTuft },
+        bladeYawJitter: { value: FULL_TURN / GRASS.bladesPerTuft },
         leanRange: { value: new Vector2(...GRASS.leanRange) },
         windDirection: {
             value: new Vector2(Math.sin(GRASS.wind.heading), Math.cos(GRASS.wind.heading)),

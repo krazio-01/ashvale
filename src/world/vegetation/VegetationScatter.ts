@@ -2,7 +2,7 @@ import { PropRole, type IPropGroup, type IThemeManifest, type IThemeProp } from 
 import { createHeightMapSample, type IHeightMapSample, type TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import type { Vector3Tuple } from "three";
 import { PropGroupCollector } from "@/world/props/PropGroups";
-import { createSeededRandom, lerp, pickRandomSubset, scaleBetween } from "@/lib/helpers";
+import { createSeededRandom, lerp, pickRandomSubset, scaleBetween, FULL_TURN } from "@/lib/helpers";
 import { VEGETATION } from "@/constants/placement";
 import { TERRAIN } from "@/constants/world";
 
@@ -110,7 +110,7 @@ function scatterBand(
         const prop = band.species[Math.floor(nextRandom() * band.species.length)];
         if (!prop) continue;
 
-        const angle = nextRandom() * Math.PI * 2;
+        const angle = nextRandom() * FULL_TURN;
         const radius = Math.sqrt(
             lerp(innerRadius * innerRadius, outerRadius * outerRadius, nextRandom())
         );
@@ -132,7 +132,7 @@ function scatterBand(
                 heightSample.elevation - VEGETATION.groundBite,
                 center[2] + localZ,
             ],
-            rotationY: nextRandom() * Math.PI * 2,
+            rotationY: nextRandom() * FULL_TURN,
             scale,
         });
     }
