@@ -15,6 +15,7 @@ const VIEW_POSITION_FUNCTION = /* glsl */ `
 
 export abstract class ViewPositionEffect extends Effect {
     protected readonly camera: Camera;
+    private readonly inverseProjectionMatrix: Uniform<Matrix4>;
 
     protected constructor(
         name: string,
@@ -31,10 +32,10 @@ export abstract class ViewPositionEffect extends Effect {
         });
 
         this.camera = camera;
+        this.inverseProjectionMatrix = uniforms.get("inverseProjectionMatrix") as Uniform<Matrix4>;
     }
 
     override update(_renderer: WebGLRenderer): void {
-        const inverseProjection = this.uniforms.get("inverseProjectionMatrix");
-        if (inverseProjection) inverseProjection.value.copy(this.camera.projectionMatrixInverse);
+        this.inverseProjectionMatrix.value.copy(this.camera.projectionMatrixInverse);
     }
 }

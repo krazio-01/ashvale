@@ -89,7 +89,11 @@ export interface IOutlineEffectOptions {
 }
 
 export class OutlineEffect extends ViewPositionEffect {
+    private readonly texelSize: Uniform<Vector2>;
+    private readonly scratchBufferSize = new Vector2();
+
     constructor({ camera, foliageMask, outlineColor }: IOutlineEffectOptions) {
+        const texelSizeUniform = new Uniform(new Vector2());
         const uniforms = new Map<string, Uniform<unknown>>([
             ["foliageMask", new Uniform(foliageMask)],
             ["outlineColor", new Uniform(new Color(outlineColor))],
@@ -98,20 +102,18 @@ export class OutlineEffect extends ViewPositionEffect {
             ["fadeEndDistance", new Uniform(OUTLINE.fadeEndDistance)],
             ["opacity", new Uniform(OUTLINE.opacity)],
             ["thickness", new Uniform(OUTLINE.thickness)],
-            ["texelSize", new Uniform(new Vector2())],
+            ["texelSize", texelSizeUniform],
             ["debugView", new Uniform(OUTLINE.debugView ? 1 : 0)],
         ]);
 
         super("OutlineEffect", fragmentShader, uniforms, camera);
+        this.texelSize = texelSizeUniform;
     }
 
     override update(renderer: WebGLRenderer): void {
         super.update(renderer);
 
-        const texelSize = this.uniforms.get("texelSize");
-        if (!texelSize) return;
-
-        const bufferSize = renderer.getDrawingBufferSize(new Vector2());
-        texelSize.value.set(1 / bufferSize.x, 1 / bufferSize.y);
+        renderer.getDrawingBufferSize(this.scratchBufferSize);
+        this.texelSize.value.set(1 / this.scratchBufferSize.x, 1 / this.scratchBufferSize.y);
     }
 }
