@@ -7,9 +7,9 @@ import {
     ROUTE_DESIGN,
 } from "@/constants/realm";
 import { IChapterRegion, IRegionPathway } from "@/types/realm";
+import { FULL_TURN, QUARTER_TURN } from "@/lib/helpers";
 
 const DEFAULT_SIZE_RATIO = 0.5;
-const RIGHT_ANGLE = Math.PI / 2;
 
 export function packChapterRegions(
     directoryPaths: string[],
@@ -224,7 +224,7 @@ function layoutRegionsAlongRoute(
 }
 
 function placeRouteRegions(route: IChapterRegion[], nextRandom: () => number): void {
-    let heading = nextRandom() * Math.PI * 2;
+    let heading = nextRandom() * FULL_TURN;
 
     for (let index = 1; index < route.length; index++) {
         const previousRegion = route[index - 1];
@@ -324,7 +324,7 @@ function placeBesideHost(
         const turnDirection = nextRandom() < 0.5 ? 1 : -1;
         const heading =
             routeHeading +
-            turnDirection * RIGHT_ANGLE +
+            turnDirection * QUARTER_TURN +
             (nextRandom() - 0.5) * ROUTE_DESIGN.maxTurnAngle;
         const spacing = baseSpacing * (1 + attempt * ROUTE_DESIGN.spacingGrowthPerAttempt);
 

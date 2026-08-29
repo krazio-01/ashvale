@@ -16,6 +16,7 @@ export class TerrainHeightField {
     private readonly boundaryWallStartRadius: number;
     private readonly boundaryWallEndRadius: number;
     private readonly boundaryWallHeight: number;
+    private readonly inverseFeatureSize: number;
     private readonly scratchSample = createTerrainSample();
 
     constructor(
@@ -30,6 +31,7 @@ export class TerrainHeightField {
         this.preparedCorridors = corridorPaths.map(prepareCorridor);
         this.mountainNoise = new FractalNoise(seed);
         this.undulationNoise = new FractalNoise(seed + 1);
+        this.inverseFeatureSize = 1 / profile.featureSize;
 
         const neighbourSpacing = measureNeighbourSpacing(regionFloors);
         this.elevationRampDistance = neighbourSpacing * LANDFORM.wildRampRatio;
@@ -44,6 +46,8 @@ export class TerrainHeightField {
     }
 
     sampleInto(localX: number, localZ: number, sample: ITerrainSample): ITerrainSample {
+        const bankWidth = TERRAIN.bankWidth;
+
         let dominantCarveWeight = 0;
         let weightedFloorElevation = 0;
         let totalCarveWeight = 0;
@@ -55,8 +59,9 @@ export class TerrainHeightField {
         for (const region of this.regionFloors) {
             const edgeDistance = distanceOutsideRegionFloor(localX, localZ, region);
             if (edgeDistance < distanceToCarvedGround) distanceToCarvedGround = edgeDistance;
+            if (edgeDistance >= bankWidth) continue;
 
-            const carveWeight = carveWeightFromEdgeDistance(edgeDistance);
+            const carveWeight = 1 - smoothstep(0, bankWidth, edgeDistance);
             if (carveWeight <= 0) continue;
 
             weightedFloorElevation += region.floorElevation * carveWeight;
@@ -65,15 +70,15 @@ export class TerrainHeightField {
             if (carveWeight > dominantCarveWeight) {
                 dominantCarveWeight = carveWeight;
                 sample.floorColorIndex = region.floorColorIndex;
-                sample.isCorridor = false;
             }
         }
 
         for (const corridor of this.preparedCorridors) {
             const edgeDistance = distanceOutsideCorridor(localX, localZ, corridor);
             if (edgeDistance < distanceToCarvedGround) distanceToCarvedGround = edgeDistance;
+            if (edgeDistance >= bankWidth) continue;
 
-            const carveWeight = carveWeightFromEdgeDistance(edgeDistance);
+            const carveWeight = 1 - smoothstep(0, bankWidth, edgeDistance);
             if (carveWeight <= 0) continue;
 
             weightedFloorElevation +=
@@ -143,6 +148,40 @@ export class TerrainHeightField {
         localZ: number,
         distanceToCarvedGround: number
     ): number {
+        const baseGroundElevation = this.baseGroundElevationAt(
+            localX,
+            localZ,
+            distanceToCarvedGround
+        );
+        const distanceFromCenter = Math.sqrt(localX * localX + localZ * localZ);
+        const boundaryWallFloor = this.boundaryWallFloorAt(baseGroundElevation, distanceFromCenter);
+
+        const mountainRampRatio = smoothstep(
+            this.mountainRampStartDistance,
+            this.mountainRampEndDistance,
+            distanceToCarvedGround
+        );
+
+        if (mountainRampRatio <= 0) return Math.max(baseGroundElevation, boundaryWallFloor);
+
+        const fadedMountainElevation = this.mountainElevationAt(
+            localX,
+            localZ,
+            distanceFromCenter,
+            baseGroundElevation,
+            mountainRampRatio
+        );
+
+        const terracedElevation = this.terracedBlendOf(fadedMountainElevation, baseGroundElevation);
+
+        return Math.max(terracedElevation, boundaryWallFloor);
+    }
+
+    private baseGroundElevationAt(
+        localX: number,
+        localZ: number,
+        distanceToCarvedGround: number
+    ): number {
         const elevationRampRatio = smoothstep(
             0,
             this.elevationRampDistance,
@@ -166,32 +205,35 @@ export class TerrainHeightField {
                 0.5) *
             TERRAIN_DETAIL.grainNoiseHeight;
 
-        const baseGroundElevation =
+        return (
             TERRAIN.pathLevel +
             (this.profile.wildElevation + groundUndulationSample * this.profile.wildRelief) *
                 elevationRampRatio +
-            fineDetailOffset;
+            fineDetailOffset
+        );
+    }
 
-        const distanceFromCenter = Math.sqrt(localX * localX + localZ * localZ);
-        const boundaryWallFloor =
+    private boundaryWallFloorAt(baseGroundElevation: number, distanceFromCenter: number): number {
+        return (
             baseGroundElevation +
             this.boundaryWallHeight *
                 smoothstep(
                     this.boundaryWallStartRadius,
                     this.boundaryWallEndRadius,
                     distanceFromCenter
-                );
-
-        const mountainRampRatio = smoothstep(
-            this.mountainRampStartDistance,
-            this.mountainRampEndDistance,
-            distanceToCarvedGround
+                )
         );
+    }
 
-        if (mountainRampRatio <= 0) return Math.max(baseGroundElevation, boundaryWallFloor);
-
-        const mountainNoiseX = localX / this.profile.featureSize;
-        const mountainNoiseZ = localZ / this.profile.featureSize;
+    private mountainElevationAt(
+        localX: number,
+        localZ: number,
+        distanceFromCenter: number,
+        baseGroundElevation: number,
+        mountainRampRatio: number
+    ): number {
+        const mountainNoiseX = localX * this.inverseFeatureSize;
+        const mountainNoiseZ = localZ * this.inverseFeatureSize;
         const mountainShapeNoise = lerp(
             this.mountainNoise.sample(mountainNoiseX, mountainNoiseZ, 5, 0.5),
             this.mountainNoise.sampleRidged(mountainNoiseX, mountainNoiseZ, 4, 0.5),
@@ -204,25 +246,25 @@ export class TerrainHeightField {
                 this.profile.mountainHeight *
                 this.enclosureFactorAt(localX, localZ, distanceFromCenter);
 
-        const fadedMountainElevation = lerp(
+        return lerp(
             baseGroundElevation,
             Math.max(rawMountainElevation, baseGroundElevation),
             mountainRampRatio
         );
+    }
 
+    private terracedBlendOf(fadedMountainElevation: number, baseGroundElevation: number): number {
         const terraceBlend = smoothstep(
             0,
             this.terraceStepHeight * LANDFORM.terraceOnsetRatio,
             fadedMountainElevation - baseGroundElevation
         );
 
-        const terracedElevation = lerp(
+        return lerp(
             fadedMountainElevation,
             this.terracedElevationOf(fadedMountainElevation),
             LANDFORM.terraceStrength * terraceBlend
         );
-
-        return Math.max(terracedElevation, boundaryWallFloor);
     }
 
     private terracedElevationOf(elevation: number): number {
@@ -316,10 +358,6 @@ function prepareCorridor(path: ICorridorPath): IPreparedCorridor {
         halfWidth: path.halfWidth,
         floorElevation: path.floorElevation,
     };
-}
-
-function carveWeightFromEdgeDistance(edgeDistance: number): number {
-    return 1 - smoothstep(0, TERRAIN.bankWidth, edgeDistance);
 }
 
 function distanceOutsideRegionFloor(x: number, z: number, region: IRegionFloor): number {

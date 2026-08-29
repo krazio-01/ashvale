@@ -1,6 +1,9 @@
 import { Color } from "three";
 import type { Vector3Tuple } from "three";
 
+export const FULL_TURN = Math.PI * 2;
+export const QUARTER_TURN = Math.PI / 2;
+
 export function vec3(x: number, y: number, z: number): Vector3Tuple {
     return [x, y, z];
 }
@@ -89,4 +92,17 @@ export function pickRandomSubset<T>(items: T[], count: number, nextRandom: () =>
 
 export function scaleBetween([minimum, maximum]: [number, number], ratio: number): number {
     return minimum + ratio * (maximum - minimum);
+}
+
+export interface ISpanVector {
+    spanX: number;
+    spanZ: number;
+    length: number;
+}
+
+export function spanBetween(fromX: number, fromZ: number, toX: number, toZ: number): ISpanVector {
+    const spanX = toX - fromX;
+    const spanZ = toZ - fromZ;
+
+    return { spanX, spanZ, length: Math.hypot(spanX, spanZ) };
 }

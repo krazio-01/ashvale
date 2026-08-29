@@ -50,9 +50,12 @@ export interface IAtmosphereEffectOptions {
 }
 
 export class AtmosphereEffect extends ViewPositionEffect {
+    private readonly cameraWorldMatrix: Uniform<Matrix4>;
+
     constructor({ camera, sky, fogDensity }: IAtmosphereEffectOptions) {
+        const cameraWorldMatrixUniform = new Uniform(new Matrix4());
         const uniforms = new Map<string, Uniform<unknown>>([
-            ["cameraWorldMatrix", new Uniform(new Matrix4())],
+            ["cameraWorldMatrix", cameraWorldMatrixUniform],
             ["horizonColor", new Uniform(new Color(sky.horizon))],
             ["sunGlowColor", new Uniform(new Color(sky.glow))],
             ["sunDirection", new Uniform(sunDirectionOf(sky))],
@@ -65,14 +68,12 @@ export class AtmosphereEffect extends ViewPositionEffect {
         ]);
 
         super("AtmosphereEffect", fragmentShader, uniforms, camera);
+        this.cameraWorldMatrix = cameraWorldMatrixUniform;
     }
 
     override update(renderer: WebGLRenderer): void {
         super.update(renderer);
 
-        const cameraWorld = this.uniforms.get("cameraWorldMatrix");
-        if (!cameraWorld) return;
-
-        cameraWorld.value.copy(this.camera.matrixWorld);
+        this.cameraWorldMatrix.value.copy(this.camera.matrixWorld);
     }
 }

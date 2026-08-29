@@ -1,5 +1,5 @@
 import RAPIER from "@dimforge/rapier3d-compat";
-import type { Collider, RigidBody } from "@dimforge/rapier3d-compat";
+import type { RigidBody, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Group, InstancedMesh, Object3D } from "three";
 import { Entity } from "@/entities/Entity";
 import { PropRole } from "@/types/theme";
@@ -7,61 +7,78 @@ import type { IPropGroup } from "@/types/theme";
 import type { IModelTemplate, IWorldContext, IWorldEntity } from "@/types/world";
 import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 
+const instanceTransform = new Object3D();
+
 export class PropBatch extends Entity implements IWorldEntity {
     readonly sceneObject = new Group();
 
-    private readonly context: IWorldContext;
+    private readonly physicsWorld: PhysicsWorld;
     private readonly batches: InstancedMesh[] = [];
-    private readonly colliders: Collider[] = [];
     private readonly rigidBody: RigidBody;
 
     constructor(regionId: string, context: IWorldContext, groups: IPropGroup[]) {
         super(`${regionId}-props`);
+        this.sceneObject.matrixAutoUpdate = false;
+        this.sceneObject.updateMatrix();
 
-        this.context = context;
+        this.physicsWorld = context.physicsWorld;
         this.rigidBody = context.physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
 
         for (const group of groups) {
+            if (group.placements.length === 0) continue;
+
             const template = context.assetLibrary.getTemplate(group.modelPath);
             if (!template) continue;
 
             this.addBatches(group, template);
             if (group.hasCollider) this.addColliders(group, template.height);
         }
+
+        this.sceneObject.updateMatrixWorld(true);
+        this.sceneObject.matrixWorldAutoUpdate = false;
+        for (const batch of this.batches) batch.matrixWorldAutoUpdate = false;
     }
 
     update(): void {}
 
     dispose(): void {
-        for (const collider of this.colliders)
-            this.context.physicsWorld.removeCollider(collider, false);
+        this.physicsWorld.removeRigidBody(this.rigidBody);
 
         for (const batch of this.batches) batch.dispose();
 
-        this.context.physicsWorld.removeRigidBody(this.rigidBody);
-        this.colliders.length = 0;
         this.batches.length = 0;
         this.sceneObject.clear();
     }
 
     private addBatches(group: IPropGroup, template: IModelTemplate): void {
-        const transform = new Object3D();
+        const placementCount = group.placements.length;
         const castsShadow = group.role !== PropRole.Scatter;
+        const instanceMatrices = new Float32Array(placementCount * 16);
+
+        for (let index = 0; index < placementCount; index += 1) {
+            const placement = group.placements[index];
+
+            instanceTransform.position.set(
+                placement.position[0],
+                placement.position[1],
+                placement.position[2]
+            );
+            instanceTransform.rotation.y = placement.rotationY;
+            instanceTransform.scale.setScalar(placement.scale);
+            instanceTransform.updateMatrix();
+            instanceTransform.matrix.toArray(instanceMatrices, index * 16);
+        }
 
         for (const part of template.parts) {
-            const batch = new InstancedMesh(part.geometry, part.material, group.placements.length);
+            const batch = new InstancedMesh(part.geometry, part.material, placementCount);
             batch.castShadow = castsShadow;
             batch.receiveShadow = true;
+            batch.matrixAutoUpdate = false;
+            batch.updateMatrix();
             if (part.isFoliage) batch.layers.enable(FOLIAGE_LAYER);
 
-            group.placements.forEach((placement, index) => {
-                transform.position.set(...placement.position);
-                transform.rotation.y = placement.rotationY;
-                transform.scale.setScalar(placement.scale);
-                transform.updateMatrix();
-                batch.setMatrixAt(index, transform.matrix);
-            });
-
+            const instanceMatrixArray = batch.instanceMatrix.array as Float32Array;
+            instanceMatrixArray.set(instanceMatrices);
             batch.instanceMatrix.needsUpdate = true;
             batch.computeBoundingSphere();
 
@@ -82,9 +99,7 @@ export class PropBatch extends Entity implements IWorldEntity {
                 z
             );
 
-            this.colliders.push(
-                this.context.physicsWorld.createCollider(colliderDesc, this.rigidBody)
-            );
+            this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
         }
     }
 }

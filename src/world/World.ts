@@ -13,6 +13,7 @@ export class World {
     private readonly materialLibrary: MaterialLibrary;
     private readonly assetLibrary: AssetLibrary;
     private readonly environment: IThemeEnvironment;
+    private readonly worldContext: IWorldContext;
     private readonly entities = new Set<IWorldEntity>();
     private readonly entitiesAwaitingRemoval = new Set<IWorldEntity>();
     private unsimulatedTime = 0;
@@ -28,6 +29,14 @@ export class World {
         this.environment = environment;
         this.physicsWorld = new RAPIER.World({ x: 0, y: WORLD.gravity, z: 0 });
         this.physicsWorld.timestep = WORLD.fixedTimestep;
+
+        this.worldContext = {
+            physicsWorld: this.physicsWorld,
+            sceneRoot: this.sceneRoot,
+            materialLibrary: this.materialLibrary,
+            assetLibrary: this.assetLibrary,
+            environment: this.environment,
+        };
     }
 
     static async create(manifest: IThemeManifest): Promise<World> {
@@ -46,13 +55,7 @@ export class World {
     }
 
     get context(): IWorldContext {
-        return {
-            physicsWorld: this.physicsWorld,
-            sceneRoot: this.sceneRoot,
-            materialLibrary: this.materialLibrary,
-            assetLibrary: this.assetLibrary,
-            environment: this.environment,
-        };
+        return this.worldContext;
     }
 
     addEntity(entity: IWorldEntity): void {
@@ -69,18 +72,20 @@ export class World {
     update(deltaSeconds: number): void {
         if (this.isDisposed) return;
 
+        const fixedTimestep = WORLD.fixedTimestep;
+        const maximumStepsPerFrame = WORLD.maximumStepsPerFrame;
         const frameDelta = Math.min(deltaSeconds, WORLD.maximumFrameDelta);
+
         this.unsimulatedTime += frameDelta;
 
         let stepsTaken = 0;
-        while (
-            this.unsimulatedTime >= WORLD.fixedTimestep &&
-            stepsTaken < WORLD.maximumStepsPerFrame
-        ) {
+        while (this.unsimulatedTime >= fixedTimestep && stepsTaken < maximumStepsPerFrame) {
             this.physicsWorld.step();
-            this.unsimulatedTime -= WORLD.fixedTimestep;
+            this.unsimulatedTime -= fixedTimestep;
             stepsTaken += 1;
         }
+
+        if (stepsTaken === maximumStepsPerFrame) this.unsimulatedTime = 0;
 
         for (const entity of this.entities) entity.update(frameDelta);
 
@@ -91,11 +96,9 @@ export class World {
         if (this.isDisposed) return;
         this.isDisposed = true;
 
-        for (const entity of this.entities) {
-            this.sceneRoot.remove(entity.sceneObject);
-            entity.dispose();
-        }
+        for (const entity of this.entities) entity.dispose();
 
+        this.sceneRoot.clear();
         this.entities.clear();
         this.entitiesAwaitingRemoval.clear();
         this.assetLibrary.dispose();

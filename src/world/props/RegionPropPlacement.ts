@@ -13,8 +13,10 @@ import {
     hashString,
     pickRandomSubset,
     scaleBetween,
+    FULL_TURN,
 } from "@/lib/helpers";
 import { PropGroupCollector } from "@/world/props/PropGroups";
+import { pickWeightedSpecies } from "@/world/props/PropPlacementUtils";
 
 export function placeRegionProps(
     region: IChapterRegion,
@@ -26,12 +28,22 @@ export function placeRegionProps(
     const bounds = resolvePlacementBounds(region, entrances);
     const furnishing = resolveFurnishingBudget(region, manifest);
 
+    const landmarkSpecies: IThemeProp[] = [];
+    const structureSpecies: IThemeProp[] = [];
+    const scatterSpecies: IThemeProp[] = [];
+
+    for (const prop of manifest.props) {
+        if (prop.role === PropRole.Landmark) landmarkSpecies.push(prop);
+        else if (prop.role === PropRole.Structure) structureSpecies.push(prop);
+        else if (prop.role === PropRole.Scatter) scatterSpecies.push(prop);
+    }
+
     const anchorPoints = spreadAnchorPoints(bounds, furnishing.anchorCount, nextRandom);
     const placedProps: IPlacedProp[] = [];
 
     placeAnchoredSpecies(placedProps, {
         species: pickRandomSubset(
-            manifest.props.filter((prop) => prop.role === PropRole.Landmark),
+            landmarkSpecies,
             PROP_PLACEMENT.landmarkSpeciesPerRegion,
             nextRandom
         ),
@@ -39,14 +51,14 @@ export function placeRegionProps(
         bounds,
         anchorPoints,
         spreadRadius: bounds.clusterRadius,
-        entranceClearanceFactor: 1,
+        entranceClearanceFactor: PROP_PLACEMENT.standingEntranceClearanceFactor,
         avoidsOtherProps: true,
         nextRandom,
     });
 
     placeAnchoredSpecies(placedProps, {
         species: pickRandomSubset(
-            manifest.props.filter((prop) => prop.role === PropRole.Structure),
+            structureSpecies,
             PROP_PLACEMENT.structureSpeciesPerRegion,
             nextRandom
         ),
@@ -54,14 +66,14 @@ export function placeRegionProps(
         bounds,
         anchorPoints,
         spreadRadius: bounds.clusterRadius,
-        entranceClearanceFactor: 1,
+        entranceClearanceFactor: PROP_PLACEMENT.standingEntranceClearanceFactor,
         avoidsOtherProps: true,
         nextRandom,
     });
 
     placeGroundClutter(placedProps, {
         species: pickRandomSubset(
-            manifest.props.filter((prop) => prop.role === PropRole.Scatter),
+            scatterSpecies,
             PROP_PLACEMENT.clutterSpeciesPerRegion,
             nextRandom
         ),
@@ -113,10 +125,13 @@ function resolveEntranceMouth(
     const stepsToBoundary = Math.min(stepsToVerticalEdge, stepsToHorizontalEdge);
 
     const corridorHalfWidth = entrance.corridorWidth / 2;
+    const offsetX = entrance.directionX * stepsToBoundary;
+    const offsetZ = entrance.directionZ * stepsToBoundary;
 
     return {
-        offsetX: entrance.directionX * stepsToBoundary,
-        offsetZ: entrance.directionZ * stepsToBoundary,
+        offsetX,
+        offsetZ,
+        laneLengthSquared: offsetX * offsetX + offsetZ * offsetZ,
         mouthClearRadius: corridorHalfWidth * PROP_PLACEMENT.entranceMouthClearanceRatio,
         laneHalfWidth: corridorHalfWidth * PROP_PLACEMENT.entranceLaneWidthRatio,
     };
@@ -164,8 +179,8 @@ function spreadAnchorPoints(
     const anchorPoints: IAnchorPoint[] = [];
 
     for (let index = 0; index < count; index += 1) {
-        const candidate = findOpenSpot(bounds, 0, 1, nextRandom, () => {
-            const angle = nextRandom() * Math.PI * 2;
+        const candidate = findOpenSpot(bounds, 0, 1, () => {
+            const angle = nextRandom() * FULL_TURN;
             const edgeBias = Math.pow(nextRandom(), PROP_PLACEMENT.edgeBiasExponent);
 
             return {
@@ -195,7 +210,7 @@ function placeAnchoredSpecies(placedProps: IPlacedProp[], options: IAnchoredSpec
     if (species.length === 0 || anchorPoints.length === 0) return;
 
     for (let index = 0; index < count; index += 1) {
-        const prop = species[Math.floor(nextRandom() * species.length)];
+        const prop = pickWeightedSpecies(species, nextRandom);
         const anchor = anchorPoints[Math.floor(nextRandom() * anchorPoints.length)];
         if (!prop || !anchor) continue;
 
@@ -206,18 +221,21 @@ function placeAnchoredSpecies(placedProps: IPlacedProp[], options: IAnchoredSpec
             bounds,
             footprintRadius,
             entranceClearanceFactor,
-            nextRandom,
-            () => scatterAround(anchor, spreadRadius, nextRandom)
+            () => scatterAround(anchor, spreadRadius, nextRandom),
+            avoidsOtherProps
+                ? (candidate) =>
+                      isClearOfStandingProps(
+                          bounds.originX + candidate.offsetX,
+                          bounds.originZ + candidate.offsetZ,
+                          footprintRadius,
+                          placedProps
+                      )
+                : undefined
         );
 
         if (!spot) continue;
 
-        const placement = buildPlacement(bounds, spot, scale, nextRandom);
-
-        if (avoidsOtherProps && !isClearOfStandingProps(placement, footprintRadius, placedProps))
-            continue;
-
-        placedProps.push({ prop, placement });
+        placedProps.push({ prop, placement: buildPlacement(bounds, spot, scale, nextRandom) });
     }
 }
 
@@ -228,7 +246,7 @@ function placeGroundClutter(placedProps: IPlacedProp[], options: IGroundClutterO
     const standingProps = placedProps.filter(({ prop }) => prop.role !== PropRole.Scatter);
 
     for (let index = 0; index < count; index += 1) {
-        const prop = species[Math.floor(nextRandom() * species.length)];
+        const prop = pickWeightedSpecies(species, nextRandom);
         if (!prop) continue;
 
         const scale = scaleBetween(prop.scaleRange, nextRandom());
@@ -238,38 +256,14 @@ function placeGroundClutter(placedProps: IPlacedProp[], options: IGroundClutterO
             nextRandom() < PROP_PLACEMENT.clutterHuddledAgainstPropRatio &&
             standingProps.length > 0;
 
-        const spot = huddlesAgainstProp
-            ? findOpenSpot(
-                  bounds,
-                  footprintRadius,
-                  PROP_PLACEMENT.clutterEntranceClearanceFactor,
-                  nextRandom,
-                  () => {
-                      const host = standingProps[Math.floor(nextRandom() * standingProps.length)];
-                      if (!host) return null;
-
-                      return scatterAround(
-                          {
-                              offsetX: host.placement.position[0] - bounds.originX,
-                              offsetZ: host.placement.position[2] - bounds.originZ,
-                          },
-                          PROP_PLACEMENT.clutterHuddleRadius,
-                          nextRandom
-                      );
-                  }
-              )
-            : findOpenSpot(
-                  bounds,
-                  footprintRadius,
-                  PROP_PLACEMENT.clutterEntranceClearanceFactor,
-                  nextRandom,
-                  () => {
-                      const anchor = anchorPoints[Math.floor(nextRandom() * anchorPoints.length)];
-                      if (!anchor) return null;
-
-                      return scatterAround(anchor, bounds.clusterRadius, nextRandom);
-                  }
-              );
+        const spot = findOpenSpot(
+            bounds,
+            footprintRadius,
+            PROP_PLACEMENT.clutterEntranceClearanceFactor,
+            huddlesAgainstProp
+                ? () => proposeSpotBesideStandingProp(bounds, standingProps, nextRandom)
+                : () => proposeSpotAroundAnchor(bounds, anchorPoints, nextRandom)
+        );
 
         if (!spot) continue;
 
@@ -277,77 +271,120 @@ function placeGroundClutter(placedProps: IPlacedProp[], options: IGroundClutterO
     }
 }
 
+function proposeSpotBesideStandingProp(
+    bounds: IPlacementBounds,
+    standingProps: IPlacedProp[],
+    nextRandom: () => number
+): IAnchorPoint | null {
+    const host = standingProps[Math.floor(nextRandom() * standingProps.length)];
+    if (!host) return null;
+
+    return scatterAround(
+        {
+            offsetX: host.placement.position[0] - bounds.originX,
+            offsetZ: host.placement.position[2] - bounds.originZ,
+        },
+        PROP_PLACEMENT.clutterHuddleRadius,
+        nextRandom
+    );
+}
+
+function proposeSpotAroundAnchor(
+    bounds: IPlacementBounds,
+    anchorPoints: IAnchorPoint[],
+    nextRandom: () => number
+): IAnchorPoint | null {
+    const anchor = anchorPoints[Math.floor(nextRandom() * anchorPoints.length)];
+    if (!anchor) return null;
+
+    return scatterAround(anchor, bounds.clusterRadius, nextRandom);
+}
+
 function findOpenSpot(
     bounds: IPlacementBounds,
     footprintRadius: number,
     entranceClearanceFactor: number,
-    nextRandom: () => number,
-    proposeSpot: () => IAnchorPoint | null
+    proposeSpot: () => IAnchorPoint | null,
+    isSpotAcceptable?: (spot: IAnchorPoint) => boolean
 ): IAnchorPoint | null {
+    const insetHalfWidth = Math.max(1, bounds.halfWidth - footprintRadius);
+    const insetHalfDepth = Math.max(1, bounds.halfDepth - footprintRadius);
+    const arenaClearanceSquared = (bounds.combatArenaRadius + footprintRadius) ** 2;
+
     for (const relaxation of PROP_PLACEMENT.clearanceRelaxationSteps) {
+        const mouthClearances = resolveMouthClearances(
+            bounds.entranceMouths,
+            footprintRadius,
+            entranceClearanceFactor * relaxation
+        );
+
         for (let attempt = 0; attempt < PROP_PLACEMENT.placementAttempts; attempt += 1) {
             const candidate = proposeSpot();
             if (!candidate) continue;
 
-            const clamped = clampInsideBounds(bounds, candidate, footprintRadius);
+            candidate.offsetX = clamp(candidate.offsetX, -insetHalfWidth, insetHalfWidth);
+            candidate.offsetZ = clamp(candidate.offsetZ, -insetHalfDepth, insetHalfDepth);
 
-            if (isSpotOpen(bounds, clamped, footprintRadius, entranceClearanceFactor * relaxation))
-                return clamped;
+            if (!isSpotOpen(candidate, arenaClearanceSquared, mouthClearances)) continue;
+            if (isSpotAcceptable && !isSpotAcceptable(candidate)) continue;
+
+            return candidate;
         }
     }
 
     return null;
 }
 
-function isSpotOpen(
-    bounds: IPlacementBounds,
-    spot: IAnchorPoint,
+function resolveMouthClearances(
+    entranceMouths: IEntranceMouth[],
     footprintRadius: number,
     entranceClearanceFactor: number
-): boolean {
-    const distanceFromCentre = Math.hypot(spot.offsetX, spot.offsetZ);
-    if (distanceFromCentre < bounds.combatArenaRadius + footprintRadius) return false;
+): IMouthClearance[] {
+    return entranceMouths.map((mouth) => ({
+        offsetX: mouth.offsetX,
+        offsetZ: mouth.offsetZ,
+        laneLengthSquared: mouth.laneLengthSquared,
+        clearRadiusSquared:
+            (mouth.mouthClearRadius * entranceClearanceFactor + footprintRadius) ** 2,
+        laneHalfWidthSquared:
+            (mouth.laneHalfWidth * entranceClearanceFactor + footprintRadius) ** 2,
+    }));
+}
 
-    for (const mouth of bounds.entranceMouths) {
-        const clearRadius = mouth.mouthClearRadius * entranceClearanceFactor + footprintRadius;
-        if (Math.hypot(spot.offsetX - mouth.offsetX, spot.offsetZ - mouth.offsetZ) < clearRadius)
+function isSpotOpen(
+    spot: IAnchorPoint,
+    arenaClearanceSquared: number,
+    mouthClearances: IMouthClearance[]
+): boolean {
+    const distanceFromCentreSquared = spot.offsetX * spot.offsetX + spot.offsetZ * spot.offsetZ;
+    if (distanceFromCentreSquared < arenaClearanceSquared) return false;
+
+    for (const mouth of mouthClearances) {
+        const gapToMouthX = spot.offsetX - mouth.offsetX;
+        const gapToMouthZ = spot.offsetZ - mouth.offsetZ;
+        if (gapToMouthX * gapToMouthX + gapToMouthZ * gapToMouthZ < mouth.clearRadiusSquared)
             return false;
 
-        const laneHalfWidth = mouth.laneHalfWidth * entranceClearanceFactor + footprintRadius;
-        if (distanceToLane(spot, mouth) < laneHalfWidth) return false;
+        if (squaredDistanceToLane(spot, mouth) < mouth.laneHalfWidthSquared) return false;
     }
 
     return true;
 }
 
-function distanceToLane(spot: IAnchorPoint, mouth: IEntranceMouth): number {
-    const laneLengthSquared = mouth.offsetX * mouth.offsetX + mouth.offsetZ * mouth.offsetZ;
-    if (laneLengthSquared === 0) return Math.hypot(spot.offsetX, spot.offsetZ);
+function squaredDistanceToLane(spot: IAnchorPoint, mouth: IMouthClearance): number {
+    if (mouth.laneLengthSquared === 0)
+        return spot.offsetX * spot.offsetX + spot.offsetZ * spot.offsetZ;
 
     const projection = clamp(
-        (spot.offsetX * mouth.offsetX + spot.offsetZ * mouth.offsetZ) / laneLengthSquared,
+        (spot.offsetX * mouth.offsetX + spot.offsetZ * mouth.offsetZ) / mouth.laneLengthSquared,
         0,
         1
     );
 
-    return Math.hypot(
-        spot.offsetX - mouth.offsetX * projection,
-        spot.offsetZ - mouth.offsetZ * projection
-    );
-}
+    const gapX = spot.offsetX - mouth.offsetX * projection;
+    const gapZ = spot.offsetZ - mouth.offsetZ * projection;
 
-function clampInsideBounds(
-    bounds: IPlacementBounds,
-    spot: IAnchorPoint,
-    footprintRadius: number
-): IAnchorPoint {
-    const insetHalfWidth = Math.max(1, bounds.halfWidth - footprintRadius);
-    const insetHalfDepth = Math.max(1, bounds.halfDepth - footprintRadius);
-
-    return {
-        offsetX: clamp(spot.offsetX, -insetHalfWidth, insetHalfWidth),
-        offsetZ: clamp(spot.offsetZ, -insetHalfDepth, insetHalfDepth),
-    };
+    return gapX * gapX + gapZ * gapZ;
 }
 
 function scatterAround(
@@ -355,7 +392,7 @@ function scatterAround(
     spreadRadius: number,
     nextRandom: () => number
 ): IAnchorPoint {
-    const angle = nextRandom() * Math.PI * 2;
+    const angle = nextRandom() * FULL_TURN;
     const distance = Math.sqrt(nextRandom()) * spreadRadius;
 
     return {
@@ -372,25 +409,26 @@ function buildPlacement(
 ): IPropPlacement {
     return {
         position: [bounds.originX + spot.offsetX, 0, bounds.originZ + spot.offsetZ],
-        rotationY: nextRandom() * Math.PI * 2,
+        rotationY: nextRandom() * FULL_TURN,
         scale,
     };
 }
 
 function isClearOfStandingProps(
-    candidate: IPropPlacement,
+    candidateWorldX: number,
+    candidateWorldZ: number,
     candidateRadius: number,
     placedProps: IPlacedProp[]
 ): boolean {
+    const minimumDistanceSquared = (candidateRadius + PROP_PLACEMENT.separationGap) ** 2;
+
     for (const { prop, placement } of placedProps) {
         if (prop.role === PropRole.Scatter) continue;
 
-        const distance = Math.hypot(
-            candidate.position[0] - placement.position[0],
-            candidate.position[2] - placement.position[2]
-        );
+        const gapX = candidateWorldX - placement.position[0];
+        const gapZ = candidateWorldZ - placement.position[2];
 
-        if (distance < candidateRadius + PROP_PLACEMENT.separationGap) return false;
+        if (gapX * gapX + gapZ * gapZ < minimumDistanceSquared) return false;
     }
 
     return true;
@@ -420,8 +458,17 @@ interface IPlacementBounds {
 interface IEntranceMouth {
     offsetX: number;
     offsetZ: number;
+    laneLengthSquared: number;
     mouthClearRadius: number;
     laneHalfWidth: number;
+}
+
+interface IMouthClearance {
+    offsetX: number;
+    offsetZ: number;
+    laneLengthSquared: number;
+    clearRadiusSquared: number;
+    laneHalfWidthSquared: number;
 }
 
 interface IFurnishingBudget {

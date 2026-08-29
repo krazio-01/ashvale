@@ -19,62 +19,94 @@ import { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainHeightField";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
-import type { IChapterRegion } from "@/types/realm";
+import type { IChapterRegion, IRegionPathway } from "@/types/realm";
 import type { IThemeManifest } from "@/types/theme";
 import { SPAWNING } from "@/constants/characters";
 import { TERRAIN } from "@/constants/world";
-import { hashString } from "@/lib/helpers";
+import { FULL_TURN, hashString } from "@/lib/helpers";
+
+const EMPTY_ENTRANCES: IRegionEntrance[] = [];
 
 export function spawnChapterWorld(world: World, camera: Camera, chapter: ChapterResponse): void {
     const manifest = resolveThemeManifest(chapter.theme, chapter.season);
     const positionsByRegionId = new Map<string, Vector3Tuple>();
 
-    for (const region of chapter.regions)
+    const regions = chapter.regions;
+    for (let i = 0, len = regions.length; i < len; i++) {
+        const region = regions[i];
         positionsByRegionId.set(region.regionId, region.worldPosition);
+    }
 
     const entrancesByRegionId = mapEntrancesToRegions(chapter, positionsByRegionId);
     const terrain = spawnTerrain(world, camera, chapter, manifest, positionsByRegionId);
 
-    for (const region of chapter.regions) {
+    spawnRegionEntities(world, chapter, manifest, terrain, entrancesByRegionId);
+    spawnPlayer(world, camera, chapter, positionsByRegionId, terrain);
+    spawnBoss(world, chapter, positionsByRegionId, terrain);
+}
+
+function spawnRegionEntities(
+    world: World,
+    chapter: ChapterResponse,
+    manifest: IThemeManifest,
+    terrain: ITerrainContext,
+    entrancesByRegionId: Map<string, IRegionEntrance[]>
+): void {
+    const regions = chapter.regions;
+
+    for (let i = 0, len = regions.length; i < len; i++) {
+        const region = regions[i];
+        const entrances = entrancesByRegionId.get(region.regionId) || EMPTY_ENTRANCES;
+
         world.addEntity(
             new PropBatch(
                 region.regionId,
                 world.context,
-                placeRegionProps(
-                    region,
-                    manifest,
-                    terrain.groundHeightAt,
-                    entrancesByRegionId.get(region.regionId) ?? []
-                )
+                placeRegionProps(region, manifest, terrain.groundHeightAt, entrances)
             )
         );
 
-        if (region.regionId !== chapter.bossRegionId)
+        if (region.regionId !== chapter.bossRegionId) {
             spawnRegionEnemies(world, region, terrain.groundHeightAt);
+        }
     }
+}
 
+function spawnPlayer(
+    world: World,
+    camera: Camera,
+    chapter: ChapterResponse,
+    positionsByRegionId: Map<string, Vector3Tuple>,
+    terrain: ITerrainContext
+): void {
     const spawnPosition = positionsByRegionId.get(chapter.spawnRegionId);
-    if (spawnPosition) {
-        world.addEntity(
-            new Player("player", world.context, camera, [
-                spawnPosition[0],
-                terrain.groundHeightAt(spawnPosition[0], spawnPosition[2]) +
-                    SPAWNING.playerSpawnHeight,
-                spawnPosition[2],
-            ])
-        );
-    }
+    if (!spawnPosition) return;
 
+    world.addEntity(
+        new Player("player", world.context, camera, [
+            spawnPosition[0],
+            terrain.groundHeightAt(spawnPosition[0], spawnPosition[2]) + SPAWNING.playerSpawnHeight,
+            spawnPosition[2],
+        ])
+    );
+}
+
+function spawnBoss(
+    world: World,
+    chapter: ChapterResponse,
+    positionsByRegionId: Map<string, Vector3Tuple>,
+    terrain: ITerrainContext
+): void {
     const bossPosition = positionsByRegionId.get(chapter.bossRegionId);
-    if (chapter.boss && bossPosition) {
-        world.addEntity(
-            new CharacterBody(bossModel(), world.context, [
-                bossPosition[0],
-                terrain.groundHeightAt(bossPosition[0], bossPosition[2]) + SPAWNING.bossSpawnHeight,
-                bossPosition[2],
-            ])
-        );
-    }
+    if (!chapter.boss || !bossPosition) return;
+
+    world.addEntity(
+        new CharacterBody(bossModel(), world.context, [
+            bossPosition[0],
+            terrain.groundHeightAt(bossPosition[0], bossPosition[2]) + SPAWNING.bossSpawnHeight,
+            bossPosition[2],
+        ])
+    );
 }
 
 function mapEntrancesToRegions(
@@ -82,15 +114,10 @@ function mapEntrancesToRegions(
     positionsByRegionId: Map<string, Vector3Tuple>
 ): Map<string, IRegionEntrance[]> {
     const entrancesByRegionId = new Map<string, IRegionEntrance[]>();
+    const pathways = chapter.pathways;
 
-    const append = (regionId: string, entrance: IRegionEntrance) => {
-        const existing = entrancesByRegionId.get(regionId);
-
-        if (existing) existing.push(entrance);
-        else entrancesByRegionId.set(regionId, [entrance]);
-    };
-
-    for (const pathway of chapter.pathways) {
+    for (let i = 0, len = pathways.length; i < len; i++) {
+        const pathway = pathways[i];
         const fromPosition = positionsByRegionId.get(pathway.fromRegionId);
         const toPosition = positionsByRegionId.get(pathway.toRegionId);
 
@@ -98,21 +125,27 @@ function mapEntrancesToRegions(
 
         const spanX = toPosition[0] - fromPosition[0];
         const spanZ = toPosition[2] - fromPosition[2];
-        const spanLength = Math.hypot(spanX, spanZ);
+        const spanLength = Math.sqrt(spanX * spanX + spanZ * spanZ);
 
         if (spanLength === 0) continue;
 
-        append(pathway.fromRegionId, {
-            directionX: spanX / spanLength,
-            directionZ: spanZ / spanLength,
-            corridorWidth: pathway.corridorWidth,
-        });
+        const dirX = spanX / spanLength;
+        const dirZ = spanZ / spanLength;
+        const corridorWidth = pathway.corridorWidth;
 
-        append(pathway.toRegionId, {
-            directionX: -spanX / spanLength,
-            directionZ: -spanZ / spanLength,
-            corridorWidth: pathway.corridorWidth,
-        });
+        let fromEntrances = entrancesByRegionId.get(pathway.fromRegionId);
+        if (!fromEntrances) {
+            fromEntrances = [];
+            entrancesByRegionId.set(pathway.fromRegionId, fromEntrances);
+        }
+        fromEntrances.push({ directionX: dirX, directionZ: dirZ, corridorWidth });
+
+        let toEntrances = entrancesByRegionId.get(pathway.toRegionId);
+        if (!toEntrances) {
+            toEntrances = [];
+            entrancesByRegionId.set(pathway.toRegionId, toEntrances);
+        }
+        toEntrances.push({ directionX: -dirX, directionZ: -dirZ, corridorWidth });
     }
 
     return entrancesByRegionId;
@@ -128,31 +161,20 @@ function spawnRegionEnemies(
         SPAWNING.maximumEnemiesPerRegion
     );
 
-    for (let index = 0; index < enemyCount; index += 1)
-        world.addEntity(
-            spawnEnemyBody(
-                region,
-                world.context,
-                enemyPosition(region, index, enemyCount, groundHeightAt)
-            )
-        );
-}
-
-function enemyPosition(
-    region: IChapterRegion,
-    index: number,
-    count: number,
-    groundHeightAt: GroundHeightLookup
-): Vector3Tuple {
     const [width, depth] = region.floorSize;
     const [x, , z] = region.worldPosition;
+
     const radius = Math.min(width, depth) * SPAWNING.enemyRingRadiusFactor;
-    const angle = (index / count) * Math.PI * 2;
+    const angleStep = FULL_TURN / enemyCount;
 
-    const enemyX = x + Math.cos(angle) * radius;
-    const enemyZ = z + Math.sin(angle) * radius;
+    for (let i = 0; i < enemyCount; i++) {
+        const angle = i * angleStep;
+        const enemyX = x + Math.cos(angle) * radius;
+        const enemyZ = z + Math.sin(angle) * radius;
+        const enemyY = groundHeightAt(enemyX, enemyZ) + SPAWNING.enemySpawnHeight;
 
-    return [enemyX, groundHeightAt(enemyX, enemyZ) + SPAWNING.enemySpawnHeight, enemyZ];
+        world.addEntity(spawnEnemyBody(region, world.context, [enemyX, enemyY, enemyZ]));
+    }
 }
 
 function spawnTerrain(
@@ -162,67 +184,18 @@ function spawnTerrain(
     manifest: IThemeManifest,
     positionsByRegionId: Map<string, Vector3Tuple>
 ): ITerrainContext {
-    const regions = chapter.regions;
-    let centerX = 0;
-    let centerZ = 0;
-
-    for (const region of regions) {
-        centerX += region.worldPosition[0];
-        centerZ += region.worldPosition[2];
-    }
-
-    centerX /= regions.length;
-    centerZ /= regions.length;
-
-    let furthestDistance = 0;
-    const regionFloors: IRegionFloor[] = [];
-    const regionFootprints: IRegionFootprint[] = [];
-
-    for (const region of regions) {
-        const [x, y, z] = region.worldPosition;
-        const [width, depth] = region.floorSize;
-
-        const footprint = {
-            centerX: x - centerX,
-            centerZ: z - centerZ,
-            halfWidth: width / 2,
-            halfDepth: depth / 2,
-        };
-
-        regionFootprints.push(footprint);
-        regionFloors.push({
-            ...footprint,
-            floorElevation: y,
-            floorColorIndex: region.nestingDepth,
-        });
-
-        const distance = Math.hypot(x - centerX, z - centerZ) + Math.max(width, depth) / 2;
-        if (distance > furthestDistance) furthestDistance = distance;
-    }
-
-    const corridorPaths: ICorridorPath[] = [];
-    const corridorSpans: ICorridorSpan[] = [];
-
-    for (const pathway of chapter.pathways) {
-        const fromPosition = positionsByRegionId.get(pathway.fromRegionId);
-        const toPosition = positionsByRegionId.get(pathway.toRegionId);
-
-        if (!fromPosition || !toPosition) continue;
-
-        const span = {
-            fromX: fromPosition[0] - centerX,
-            fromZ: fromPosition[2] - centerZ,
-            toX: toPosition[0] - centerX,
-            toZ: toPosition[2] - centerZ,
-            halfWidth: pathway.corridorWidth / 2,
-        };
-
-        corridorSpans.push(span);
-        corridorPaths.push({
-            ...span,
-            floorElevation: (fromPosition[1] + toPosition[1]) / 2,
-        });
-    }
+    const [centerX, centerZ] = computeChapterCenter(chapter.regions);
+    const { regionFloors, regionFootprints, furthestDistance } = buildRegionGeometry(
+        chapter.regions,
+        centerX,
+        centerZ
+    );
+    const { corridorPaths, corridorSpans } = buildCorridorGeometry(
+        chapter.pathways,
+        positionsByRegionId,
+        centerX,
+        centerZ
+    );
 
     const playRadius = furthestDistance + TERRAIN.playMargin;
     const center: Vector3Tuple = [centerX, 0, centerZ];
@@ -244,10 +217,10 @@ function spawnTerrain(
     world.addEntity(new TerrainMesh(world.context, center, heightMap, seed));
     world.addEntity(new GrassField(world.context, camera, center, heightMap));
 
-    scatterVegetation(manifest, heightMap, playRadius, center, seed + 3).forEach(
-        (groups, bucketIndex) =>
-            world.addEntity(new PropBatch(`wild-${bucketIndex}`, world.context, groups))
-    );
+    const vegetationBuckets = scatterVegetation(manifest, heightMap, playRadius, center, seed + 3);
+    for (let i = 0, len = vegetationBuckets.length; i < len; i++) {
+        world.addEntity(new PropBatch(`wild-${i}`, world.context, vegetationBuckets[i]));
+    }
 
     const corridorGroups = placeCorridorProps(
         manifest,
@@ -258,13 +231,122 @@ function spawnTerrain(
         seed + 7
     );
 
-    if (corridorGroups.length > 0)
+    if (corridorGroups.length > 0) {
         world.addEntity(new PropBatch("corridor-anchors", world.context, corridorGroups));
+    }
 
     return {
         groundHeightAt: (worldX, worldZ) =>
             heightMap.elevationAt(worldX - centerX, worldZ - centerZ),
     };
+}
+
+function computeChapterCenter(regions: IChapterRegion[]): [number, number] {
+    let centerX = 0;
+    let centerZ = 0;
+    const len = regions.length;
+
+    if (len === 0) return [0, 0];
+
+    for (let i = 0; i < len; i++) {
+        const pos = regions[i].worldPosition;
+        centerX += pos[0];
+        centerZ += pos[2];
+    }
+
+    return [centerX / len, centerZ / len];
+}
+
+function buildRegionGeometry(
+    regions: IChapterRegion[],
+    centerX: number,
+    centerZ: number
+): IRegionGeometry {
+    const len = regions.length;
+    let furthestDistance = 0;
+
+    const regionFloors = new Array<IRegionFloor>(len);
+    const regionFootprints = new Array<IRegionFootprint>(len);
+
+    for (let i = 0; i < len; i++) {
+        const region = regions[i];
+        const [x, y, z] = region.worldPosition;
+        const [width, depth] = region.floorSize;
+
+        const localX = x - centerX;
+        const localZ = z - centerZ;
+        const halfWidth = width / 2;
+        const halfDepth = depth / 2;
+
+        regionFootprints[i] = {
+            centerX: localX,
+            centerZ: localZ,
+            halfWidth,
+            halfDepth,
+        };
+
+        regionFloors[i] = {
+            centerX: localX,
+            centerZ: localZ,
+            halfWidth,
+            halfDepth,
+            floorElevation: y,
+            floorColorIndex: region.nestingDepth,
+        };
+
+        const distance = Math.sqrt(localX * localX + localZ * localZ) + Math.max(width, depth) / 2;
+        if (distance > furthestDistance) furthestDistance = distance;
+    }
+
+    return { regionFloors, regionFootprints, furthestDistance };
+}
+
+function buildCorridorGeometry(
+    pathways: IRegionPathway[],
+    positionsByRegionId: Map<string, Vector3Tuple>,
+    centerX: number,
+    centerZ: number
+): ICorridorGeometry {
+    const corridorPaths: ICorridorPath[] = [];
+    const corridorSpans: ICorridorSpan[] = [];
+
+    for (let i = 0, len = pathways.length; i < len; i++) {
+        const pathway = pathways[i];
+        const fromPosition = positionsByRegionId.get(pathway.fromRegionId);
+        const toPosition = positionsByRegionId.get(pathway.toRegionId);
+
+        if (!fromPosition || !toPosition) continue;
+
+        const fromX = fromPosition[0] - centerX;
+        const fromZ = fromPosition[2] - centerZ;
+        const toX = toPosition[0] - centerX;
+        const toZ = toPosition[2] - centerZ;
+        const halfWidth = pathway.corridorWidth / 2;
+
+        corridorSpans.push({ fromX, fromZ, toX, toZ, halfWidth });
+
+        corridorPaths.push({
+            fromX,
+            fromZ,
+            toX,
+            toZ,
+            halfWidth,
+            floorElevation: (fromPosition[1] + toPosition[1]) / 2,
+        });
+    }
+
+    return { corridorPaths, corridorSpans };
+}
+
+interface IRegionGeometry {
+    regionFloors: IRegionFloor[];
+    regionFootprints: IRegionFootprint[];
+    furthestDistance: number;
+}
+
+interface ICorridorGeometry {
+    corridorPaths: ICorridorPath[];
+    corridorSpans: ICorridorSpan[];
 }
 
 interface ITerrainContext {
