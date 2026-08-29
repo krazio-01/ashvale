@@ -16,11 +16,12 @@ export class AssetLibrary {
     ): Promise<AssetLibrary> {
         const loader = new GLTFLoader();
         const library = new AssetLibrary();
+        const uniqueModelPaths = [...new Set(manifest.props.map((prop) => prop.modelPath))];
 
         const loadedModels = await Promise.all(
-            manifest.props.map(async (prop) => ({
-                modelPath: prop.modelPath,
-                scene: (await loader.loadAsync(prop.modelPath)).scene,
+            uniqueModelPaths.map(async (modelPath) => ({
+                modelPath,
+                scene: (await loader.loadAsync(modelPath)).scene,
             }))
         );
 
@@ -44,6 +45,7 @@ export class AssetLibrary {
 
 function flattenForInstancing(root: Object3D, materialLibrary: MaterialLibrary): IModelTemplate {
     const parts: IModelPart[] = [];
+    const bounds = new Box3();
 
     root.updateWorldMatrix(false, true);
     root.traverse((object) => {
@@ -55,6 +57,9 @@ function flattenForInstancing(root: Object3D, materialLibrary: MaterialLibrary):
         const partIsFoliage = isFoliage(object.material);
         if (partIsFoliage) applyCanopyNormals(geometry);
 
+        geometry.computeBoundingBox();
+        if (geometry.boundingBox) bounds.union(geometry.boundingBox);
+
         parts.push({
             geometry,
             material: toToonMaterial(object.material, materialLibrary),
@@ -62,7 +67,7 @@ function flattenForInstancing(root: Object3D, materialLibrary: MaterialLibrary):
         });
     });
 
-    return { parts, height: measureHeight(parts) };
+    return { parts, height: bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y };
 }
 
 function isFoliage(source: Material | Material[]): boolean {
@@ -74,18 +79,27 @@ function isFoliage(source: Material | Material[]): boolean {
 function applyCanopyNormals(geometry: BufferGeometry): void {
     geometry.computeBoundingSphere();
     const canopyCenter = geometry.boundingSphere?.center ?? new Vector3();
+    const centerX = canopyCenter.x;
+    const centerY = canopyCenter.y;
+    const centerZ = canopyCenter.z;
 
     const positions = geometry.getAttribute("position");
     const normals = geometry.getAttribute("normal");
-    const radial = new Vector3();
+    const positionArray = positions.array as Float32Array;
+    const normalArray = normals.array as Float32Array;
 
     for (let index = 0; index < positions.count; index += 1) {
-        radial
-            .set(positions.getX(index), positions.getY(index), positions.getZ(index))
-            .sub(canopyCenter)
-            .normalize();
+        const offset = index * 3;
+        const radialX = (positionArray[offset] ?? 0) - centerX;
+        const radialY = (positionArray[offset + 1] ?? 0) - centerY;
+        const radialZ = (positionArray[offset + 2] ?? 0) - centerZ;
 
-        normals.setXYZ(index, radial.x, radial.y, radial.z);
+        const inverseLength =
+            1 / (Math.sqrt(radialX * radialX + radialY * radialY + radialZ * radialZ) || 1);
+
+        normalArray[offset] = radialX * inverseLength;
+        normalArray[offset + 1] = radialY * inverseLength;
+        normalArray[offset + 2] = radialZ * inverseLength;
     }
 
     normals.needsUpdate = true;
@@ -104,15 +118,4 @@ function toToonMaterial(
     );
 
     return toonMaterials.length === 1 ? toonMaterials[0] : toonMaterials;
-}
-
-function measureHeight(parts: IModelPart[]): number {
-    const bounds = new Box3();
-
-    for (const part of parts) {
-        part.geometry.computeBoundingBox();
-        if (part.geometry.boundingBox) bounds.union(part.geometry.boundingBox);
-    }
-
-    return bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y;
 }
