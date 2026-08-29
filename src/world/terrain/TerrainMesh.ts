@@ -1,5 +1,5 @@
 import RAPIER from "@dimforge/rapier3d-compat";
-import type { Collider, RigidBody } from "@dimforge/rapier3d-compat";
+import type { RigidBody } from "@dimforge/rapier3d-compat";
 import {
     BufferAttribute,
     CanvasTexture,
@@ -15,21 +15,8 @@ import type { ITerrainProfile } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import { GROUND, TERRAIN, TERRAIN_DETAIL } from "@/constants/world";
-import { clamp, lerp, smoothstep } from "@/lib/helpers";
+import { clamp, lerp, QUARTER_TURN, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
-
-interface IRunningRange {
-    include(value: number): void;
-    normalize(value: number): number;
-}
-
-interface IGroundPalette {
-    wild: Color;
-    rock: Color;
-    peak: Color;
-    route: Color;
-    floorAtDepth(nestingDepth: number): Color;
-}
 
 export class TerrainMesh extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;
@@ -38,7 +25,6 @@ export class TerrainMesh extends Entity implements IWorldEntity {
     private readonly geometry: PlaneGeometry;
     private readonly material: MeshLambertMaterial;
     private readonly rigidBody: RigidBody;
-    private readonly collider: Collider;
 
     constructor(
         context: IWorldContext,
@@ -57,19 +43,22 @@ export class TerrainMesh extends Entity implements IWorldEntity {
             heightMap.cellsPerSide,
             heightMap.cellsPerSide
         );
-        this.geometry.rotateX(-Math.PI / 2);
+        this.geometry.rotateX(-QUARTER_TURN);
 
         const positions = this.geometry.getAttribute("position");
-        const gridPoints = new Int32Array(positions.count);
+        const positionArray = positions.array as Float32Array;
+        const vertexCount = positions.count;
+        const gridPoints = new Int32Array(vertexCount);
 
-        for (let index = 0; index < positions.count; index += 1) {
+        for (let index = 0; index < vertexCount; index += 1) {
+            const offset = index * 3;
             const pointIndex = heightMap.nearestPointIndex(
-                positions.getX(index),
-                positions.getZ(index)
+                positionArray[offset] ?? 0,
+                positionArray[offset + 2] ?? 0
             );
 
             gridPoints[index] = pointIndex;
-            positions.setY(index, heightMap.elevationAtPoint(pointIndex));
+            positionArray[offset + 1] = heightMap.elevationAtPoint(pointIndex);
         }
 
         positions.needsUpdate = true;
@@ -100,12 +89,12 @@ export class TerrainMesh extends Entity implements IWorldEntity {
         );
 
         const indices = this.geometry.getIndex();
+        const indexArray = indices?.array ?? [];
+        const colliderIndices =
+            indexArray instanceof Uint32Array ? indexArray : new Uint32Array(indexArray);
 
-        this.collider = context.physicsWorld.createCollider(
-            RAPIER.ColliderDesc.trimesh(
-                new Float32Array(positions.array),
-                new Uint32Array(indices ? indices.array : [])
-            ),
+        context.physicsWorld.createCollider(
+            RAPIER.ColliderDesc.trimesh(positionArray, colliderIndices),
             this.rigidBody
         );
     }
@@ -113,7 +102,6 @@ export class TerrainMesh extends Entity implements IWorldEntity {
     update(): void {}
 
     dispose(): void {
-        this.context.physicsWorld.removeCollider(this.collider, false);
         this.context.physicsWorld.removeRigidBody(this.rigidBody);
         this.geometry.dispose();
         this.material.map?.dispose();
@@ -170,62 +158,69 @@ function paintVertexColors(
 ): void {
     const positions = geometry.getAttribute("position");
     const normals = geometry.getAttribute("normal");
+    const positionArray = positions.array as Float32Array;
+    const normalArray = normals.array as Float32Array;
     const vertexCount = positions.count;
     const colors = new Float32Array(vertexCount * 3);
-    const blended = new Color();
     const wildTop = TERRAIN.pathLevel + profile.wildElevation;
+    const mountainSpan = Math.max(profile.mountainHeight, 1);
+
+    const wildRed = palette.wild.r;
+    const wildGreen = palette.wild.g;
+    const wildBlue = palette.wild.b;
+    const peakRed = palette.peak.r;
+    const peakGreen = palette.peak.g;
+    const peakBlue = palette.peak.b;
+    const rockRed = palette.rock.r;
+    const rockGreen = palette.rock.g;
+    const rockBlue = palette.rock.b;
 
     for (let index = 0; index < vertexCount; index += 1) {
+        const offset = index * 3;
         const pointIndex = gridPoints[index] ?? 0;
         const carveStrength = heightMap.carveStrengthAtPoint(pointIndex);
 
         const heightRatio = clamp(
-            (positions.getY(index) - wildTop) / Math.max(profile.mountainHeight, 1),
+            ((positionArray[offset + 1] ?? 0) - wildTop) / mountainSpan,
             0,
             1
         );
+        const peakBlend = Math.pow(heightRatio, TERRAIN.peakColorSharpness);
 
-        blended.copy(palette.wild).lerp(palette.peak, Math.pow(heightRatio, TERRAIN.peakColorSharpness));
+        let red = wildRed + (peakRed - wildRed) * peakBlend;
+        let green = wildGreen + (peakGreen - wildGreen) * peakBlend;
+        let blue = wildBlue + (peakBlue - wildBlue) * peakBlend;
 
-        const slope = 1 - Math.abs(normals.getY(index));
-
-        blended.lerp(
-            palette.rock,
-            smoothstep(TERRAIN_DETAIL.rockSlopeStart, TERRAIN_DETAIL.rockSlopeEnd, slope)
+        const slope = 1 - Math.abs(normalArray[offset + 1] ?? 0);
+        const rockBlend = smoothstep(
+            TERRAIN_DETAIL.rockSlopeStart,
+            TERRAIN_DETAIL.rockSlopeEnd,
+            slope
         );
+
+        red += (rockRed - red) * rockBlend;
+        green += (rockGreen - green) * rockBlend;
+        blue += (rockBlue - blue) * rockBlend;
 
         if (carveStrength > 0) {
             const flatColor = heightMap.isCorridorAtPoint(pointIndex)
                 ? palette.route
                 : palette.floorAtDepth(heightMap.floorColorIndexAtPoint(pointIndex));
 
-            blended.lerp(flatColor, Math.pow(carveStrength, TERRAIN.carveColorSharpness));
+            const carveBlend = Math.pow(carveStrength, TERRAIN.carveColorSharpness);
+            red += (flatColor.r - red) * carveBlend;
+            green += (flatColor.g - green) * carveBlend;
+            blue += (flatColor.b - blue) * carveBlend;
         }
 
         const shade = 1 - slope * profile.slopeShade;
 
-        colors[index * 3] = blended.r * shade;
-        colors[index * 3 + 1] = blended.g * shade;
-        colors[index * 3 + 2] = blended.b * shade;
+        colors[offset] = red * shade;
+        colors[offset + 1] = green * shade;
+        colors[offset + 2] = blue * shade;
     }
 
     geometry.setAttribute("color", new BufferAttribute(colors, 3));
-}
-
-function createRunningRange(): IRunningRange {
-    let minSeen = Infinity;
-    let maxSeen = -Infinity;
-
-    return {
-        include(value: number): void {
-            if (value < minSeen) minSeen = value;
-            if (value > maxSeen) maxSeen = value;
-        },
-        normalize(value: number): number {
-            const span = maxSeen - minSeen;
-            return span > 1e-6 ? (value - minSeen) / span : 0.5;
-        },
-    };
 }
 
 function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
@@ -236,8 +231,11 @@ function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
 
     const rawGrain = new Float32Array(texelCount);
     const rawBlotch = new Float32Array(texelCount);
-    const grainRange = createRunningRange();
-    const blotchRange = createRunningRange();
+
+    let smallestGrain = Infinity;
+    let largestGrain = -Infinity;
+    let smallestBlotch = Infinity;
+    let largestBlotch = -Infinity;
 
     for (let pixelZ = 0; pixelZ < size; pixelZ += 1) {
         for (let pixelX = 0; pixelX < size; pixelX += 1) {
@@ -262,10 +260,16 @@ function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
 
             rawGrain[texel] = grain;
             rawBlotch[texel] = mudClump;
-            grainRange.include(grain);
-            blotchRange.include(mudClump);
+
+            if (grain < smallestGrain) smallestGrain = grain;
+            if (grain > largestGrain) largestGrain = grain;
+            if (mudClump < smallestBlotch) smallestBlotch = mudClump;
+            if (mudClump > largestBlotch) largestBlotch = mudClump;
         }
     }
+
+    const grainNormalizer = buildRangeNormalizer(smallestGrain, largestGrain);
+    const blotchNormalizer = buildRangeNormalizer(smallestBlotch, largestBlotch);
 
     const canvas = document.createElement("canvas");
     canvas.width = size;
@@ -280,18 +284,21 @@ function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
     const [dustRed, dustGreen, dustBlue] = TERRAIN_DETAIL.dustMultiplier;
 
     for (let texel = 0; texel < texelCount; texel += 1) {
-        const dustAmount = blotchRange.normalize(rawBlotch[texel] ?? 0);
+        const dustAmount =
+            ((rawBlotch[texel] ?? 0) - blotchNormalizer.offset) * blotchNormalizer.scale +
+            blotchNormalizer.fallback;
+
         const grit = lerp(
             1 - TERRAIN_DETAIL.grainStrength,
             1 + TERRAIN_DETAIL.grainStrength,
-            grainRange.normalize(rawGrain[texel] ?? 0)
+            ((rawGrain[texel] ?? 0) - grainNormalizer.offset) * grainNormalizer.scale +
+                grainNormalizer.fallback
         );
 
         const red = Math.round(255 * clamp(lerp(mudRed, dustRed, dustAmount) * grit, 0, 1));
         const green = Math.round(255 * clamp(lerp(mudGreen, dustGreen, dustAmount) * grit, 0, 1));
         const blue = Math.round(255 * clamp(lerp(mudBlue, dustBlue, dustAmount) * grit, 0, 1));
 
-        // Packs R/G/B/A into one little-endian write instead of four byte writes into pixels.data.
         packedPixels[texel] = 0xff000000 | (blue << 16) | (green << 8) | red;
     }
 
@@ -306,4 +313,26 @@ function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
     );
 
     return texture;
+}
+
+function buildRangeNormalizer(smallest: number, largest: number): IRangeNormalizer {
+    const span = largest - smallest;
+
+    if (span > 1e-6) return { offset: smallest, scale: 1 / span, fallback: 0 };
+
+    return { offset: 0, scale: 0, fallback: 0.5 };
+}
+
+interface IGroundPalette {
+    wild: Color;
+    rock: Color;
+    peak: Color;
+    route: Color;
+    floorAtDepth(nestingDepth: number): Color;
+}
+
+interface IRangeNormalizer {
+    offset: number;
+    scale: number;
+    fallback: number;
 }
