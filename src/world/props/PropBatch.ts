@@ -17,6 +17,10 @@ export class PropBatch extends Entity implements IWorldEntity {
 
     constructor(regionId: string, context: IWorldContext, groups: IPropGroup[]) {
         super(`${regionId}-props`);
+        this.sceneObject.matrixAutoUpdate = false;
+        this.sceneObject.updateMatrix();
+        this.sceneObject.updateMatrixWorld(true);
+        this.sceneObject.matrixWorldAutoUpdate = false;
 
         this.context = context;
         this.rigidBody = context.physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
@@ -52,6 +56,8 @@ export class PropBatch extends Entity implements IWorldEntity {
             const batch = new InstancedMesh(part.geometry, part.material, group.placements.length);
             batch.castShadow = castsShadow;
             batch.receiveShadow = true;
+            batch.matrixAutoUpdate = false;
+            batch.updateMatrix();
             if (part.isFoliage) batch.layers.enable(FOLIAGE_LAYER);
 
             group.placements.forEach((placement, index) => {
@@ -67,6 +73,8 @@ export class PropBatch extends Entity implements IWorldEntity {
 
             this.batches.push(batch);
             this.sceneObject.add(batch);
+            batch.updateMatrixWorld(true);
+            batch.matrixWorldAutoUpdate = false;
         }
     }
 

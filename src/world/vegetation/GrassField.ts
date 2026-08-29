@@ -241,6 +241,10 @@ export class GrassField extends Entity implements IWorldEntity {
         this.camera = camera;
         this.fieldTexture = heightMap.createShaderTexture();
         this.sceneObject.position.set(center[0], 0, center[2]);
+        this.sceneObject.matrixAutoUpdate = false;
+        this.sceneObject.updateMatrix();
+        this.sceneObject.updateMatrixWorld(true);
+        this.sceneObject.matrixWorldAutoUpdate = false;
 
         const bands = buildDetailBands();
         const fieldRadius = bands[bands.length - 1]?.outerRadius ?? 0;
@@ -276,9 +280,13 @@ export class GrassField extends Entity implements IWorldEntity {
             mesh.frustumCulled = false;
             mesh.castShadow = false;
             mesh.receiveShadow = false;
+            mesh.matrixAutoUpdate = false;
+            mesh.updateMatrix();
 
             this.geometries.push(geometry);
             this.sceneObject.add(mesh);
+            mesh.updateMatrixWorld(true);
+            mesh.matrixWorldAutoUpdate = false;
         }
     }
 

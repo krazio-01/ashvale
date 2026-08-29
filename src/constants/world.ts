@@ -8,9 +8,9 @@ export const WORLD = {
 };
 
 export const TERRAIN = {
-    targetCellSize: 3,
-    minimumResolution: 96,
-    maximumResolution: 400,
+    targetCellSize: 4,
+    minimumResolution: 64,
+    maximumResolution: 256,
     playMargin: 30,
     transition: 90,
     spread: 160,

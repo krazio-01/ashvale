@@ -39,14 +39,14 @@ export const GRASS = {
 };
 
 export const VEGETATION = {
-    treeDensity: 0.00042,
-    fillerDensity: 0.00036,
-    groundCoverDensity: 0.00135,
+    treeDensity: 0.00021,
+    fillerDensity: 0.00018,
+    groundCoverDensity: 0.00067,
     treeSpeciesPerBand: 5,
     fillerSpeciesPerBand: 4,
     groundCoverSpeciesPerBand: 6,
     outerDensityFactor: 0.55,
-    maximumPerBand: 3000,
+    maximumPerBand: 1500,
     treeSlopeLimit: 0.7,
     fillerSlopeLimit: 1.1,
     grassSlopeLimit: 0.8,

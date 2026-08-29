@@ -90,6 +90,10 @@ export class TerrainMesh extends Entity implements IWorldEntity {
         this.sceneObject = new Mesh(this.geometry, this.material);
         this.sceneObject.position.set(center[0], 0, center[2]);
         this.sceneObject.receiveShadow = true;
+        this.sceneObject.matrixAutoUpdate = false;
+        this.sceneObject.updateMatrix();
+        this.sceneObject.updateMatrixWorld(true);
+        this.sceneObject.matrixWorldAutoUpdate = false;
 
         this.rigidBody = context.physicsWorld.createRigidBody(
             RAPIER.RigidBodyDesc.fixed().setTranslation(center[0], 0, center[2])
