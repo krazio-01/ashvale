@@ -13,13 +13,12 @@ import type { IWeapon } from "@/types/entities";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import { CAMERA, PALETTE, PLAYER } from "@/constants/characters";
 import { WORLD } from "@/constants/world";
-import { clamp } from "@/lib/helpers";
+import { clamp, FULL_TURN } from "@/lib/helpers";
 
 const forwardDirection = new Vector3();
 const rightDirection = new Vector3();
 const moveDirection = new Vector3();
 const orbitDirection = new Vector3();
-const smoothedPivot = new Vector3();
 const mouseDelta = { x: 0, y: 0 };
 
 export class Player extends Character implements IWorldEntity {
@@ -35,6 +34,7 @@ export class Player extends Character implements IWorldEntity {
     private readonly collider: Collider;
     private readonly controller: KinematicCharacterController;
     private readonly cameraSightRay: Ray;
+    private readonly smoothedPivot = new Vector3();
     private verticalVelocity = 0;
     private facingYaw = 0;
     private orbitYaw = 0;
@@ -84,16 +84,17 @@ export class Player extends Character implements IWorldEntity {
     }
 
     update(deltaSeconds: number): void {
+        const translation = this.rigidBody.translation();
+
         this.applyMouseLook();
-        this.applyMovement(deltaSeconds);
-        this.syncSceneObject(deltaSeconds);
-        this.followWithCamera(deltaSeconds);
+        this.applyMovement(deltaSeconds, translation);
+        this.syncSceneObject(deltaSeconds, translation);
+        this.followWithCamera(deltaSeconds, translation);
     }
 
     dispose(): void {
         this.input.dispose();
         this.context.physicsWorld.removeCharacterController(this.controller);
-        this.context.physicsWorld.removeCollider(this.collider, false);
         this.context.physicsWorld.removeRigidBody(this.rigidBody);
         this.geometry.dispose();
     }
@@ -109,7 +110,7 @@ export class Player extends Character implements IWorldEntity {
         );
     }
 
-    private applyMovement(deltaSeconds: number): void {
+    private applyMovement(deltaSeconds: number, translation: IBodyTranslation): void {
         forwardDirection.set(-Math.sin(this.orbitYaw), 0, -Math.cos(this.orbitYaw));
         rightDirection.set(-forwardDirection.z, 0, forwardDirection.x);
 
@@ -141,7 +142,6 @@ export class Player extends Character implements IWorldEntity {
         });
 
         const resolvedMovement = this.controller.computedMovement();
-        const translation = this.rigidBody.translation();
 
         this.rigidBody.setNextKinematicTranslation({
             x: translation.x + resolvedMovement.x,
@@ -150,48 +150,45 @@ export class Player extends Character implements IWorldEntity {
         });
     }
 
-    private syncSceneObject(deltaSeconds: number): void {
-        const translation = this.rigidBody.translation();
+    private syncSceneObject(deltaSeconds: number, translation: IBodyTranslation): void {
         this.sceneObject.position.set(translation.x, translation.y, translation.z);
 
         const turnFactor = 1 - Math.exp(-PLAYER.turnSmoothing * deltaSeconds);
         this.sceneObject.rotation.y += this.shortestAngleTo(this.facingYaw) * turnFactor;
     }
 
-    private followWithCamera(deltaSeconds: number): void {
-        const translation = this.rigidBody.translation();
+    private followWithCamera(deltaSeconds: number, translation: IBodyTranslation): void {
+        const pivotHeight = translation.y + CAMERA.pivotHeight;
 
         if (!this.pivotInitialized) {
-            smoothedPivot.set(translation.x, translation.y + CAMERA.pivotHeight, translation.z);
+            this.smoothedPivot.set(translation.x, pivotHeight, translation.z);
             this.pivotInitialized = true;
         } else {
             const pivotFactor = 1 - Math.exp(-CAMERA.pivotSmoothing * deltaSeconds);
-            smoothedPivot.x += (translation.x - smoothedPivot.x) * pivotFactor;
-            smoothedPivot.y += (translation.y + CAMERA.pivotHeight - smoothedPivot.y) * pivotFactor;
-            smoothedPivot.z += (translation.z - smoothedPivot.z) * pivotFactor;
+            this.smoothedPivot.x += (translation.x - this.smoothedPivot.x) * pivotFactor;
+            this.smoothedPivot.y += (pivotHeight - this.smoothedPivot.y) * pivotFactor;
+            this.smoothedPivot.z += (translation.z - this.smoothedPivot.z) * pivotFactor;
         }
 
         const pitchHorizontalScale = Math.cos(this.orbitPitch);
-        orbitDirection
-            .set(
-                Math.sin(this.orbitYaw) * pitchHorizontalScale,
-                Math.sin(this.orbitPitch),
-                Math.cos(this.orbitYaw) * pitchHorizontalScale
-            )
-            .normalize();
+        orbitDirection.set(
+            Math.sin(this.orbitYaw) * pitchHorizontalScale,
+            Math.sin(this.orbitPitch),
+            Math.cos(this.orbitYaw) * pitchHorizontalScale
+        );
 
         this.resolveCameraDistance(deltaSeconds);
 
         this.camera.position
-            .copy(smoothedPivot)
+            .copy(this.smoothedPivot)
             .addScaledVector(orbitDirection, this.currentFollowDistance);
-        this.camera.lookAt(smoothedPivot);
+        this.camera.lookAt(this.smoothedPivot);
     }
 
     private resolveCameraDistance(deltaSeconds: number): void {
-        this.cameraSightRay.origin.x = smoothedPivot.x;
-        this.cameraSightRay.origin.y = smoothedPivot.y;
-        this.cameraSightRay.origin.z = smoothedPivot.z;
+        this.cameraSightRay.origin.x = this.smoothedPivot.x;
+        this.cameraSightRay.origin.y = this.smoothedPivot.y;
+        this.cameraSightRay.origin.z = this.smoothedPivot.z;
         this.cameraSightRay.dir.x = orbitDirection.x;
         this.cameraSightRay.dir.y = orbitDirection.y;
         this.cameraSightRay.dir.z = orbitDirection.z;
@@ -220,7 +217,13 @@ export class Player extends Character implements IWorldEntity {
     }
 
     private shortestAngleTo(targetYaw: number): number {
-        const difference = (targetYaw - this.sceneObject.rotation.y) % (Math.PI * 2);
-        return ((difference + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+        const difference = (targetYaw - this.sceneObject.rotation.y) % FULL_TURN;
+        return ((difference + Math.PI * 3) % FULL_TURN) - Math.PI;
     }
+}
+
+interface IBodyTranslation {
+    x: number;
+    y: number;
+    z: number;
 }
