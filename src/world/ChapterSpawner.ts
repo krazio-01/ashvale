@@ -19,11 +19,11 @@ import { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainHeightField";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
-import type { IChapterRegion } from "@/types/realm";
+import type { IChapterRegion, IRegionPathway } from "@/types/realm";
 import type { IThemeManifest } from "@/types/theme";
 import { SPAWNING } from "@/constants/characters";
 import { TERRAIN } from "@/constants/world";
-import { hashString } from "@/lib/helpers";
+import { hashString, spanBetween } from "@/lib/helpers";
 
 export function spawnChapterWorld(world: World, camera: Camera, chapter: ChapterResponse): void {
     const manifest = resolveThemeManifest(chapter.theme, chapter.season);
@@ -35,6 +35,18 @@ export function spawnChapterWorld(world: World, camera: Camera, chapter: Chapter
     const entrancesByRegionId = mapEntrancesToRegions(chapter, positionsByRegionId);
     const terrain = spawnTerrain(world, camera, chapter, manifest, positionsByRegionId);
 
+    spawnRegionEntities(world, chapter, manifest, terrain, entrancesByRegionId);
+    spawnPlayer(world, camera, chapter, positionsByRegionId, terrain);
+    spawnBoss(world, chapter, positionsByRegionId, terrain);
+}
+
+function spawnRegionEntities(
+    world: World,
+    chapter: ChapterResponse,
+    manifest: IThemeManifest,
+    terrain: ITerrainContext,
+    entrancesByRegionId: Map<string, IRegionEntrance[]>
+): void {
     for (const region of chapter.regions) {
         world.addEntity(
             new PropBatch(
@@ -52,29 +64,43 @@ export function spawnChapterWorld(world: World, camera: Camera, chapter: Chapter
         if (region.regionId !== chapter.bossRegionId)
             spawnRegionEnemies(world, region, terrain.groundHeightAt);
     }
+}
 
+function spawnPlayer(
+    world: World,
+    camera: Camera,
+    chapter: ChapterResponse,
+    positionsByRegionId: Map<string, Vector3Tuple>,
+    terrain: ITerrainContext
+): void {
     const spawnPosition = positionsByRegionId.get(chapter.spawnRegionId);
-    if (spawnPosition) {
-        world.addEntity(
-            new Player("player", world.context, camera, [
-                spawnPosition[0],
-                terrain.groundHeightAt(spawnPosition[0], spawnPosition[2]) +
-                    SPAWNING.playerSpawnHeight,
-                spawnPosition[2],
-            ])
-        );
-    }
+    if (!spawnPosition) return;
 
+    world.addEntity(
+        new Player("player", world.context, camera, [
+            spawnPosition[0],
+            terrain.groundHeightAt(spawnPosition[0], spawnPosition[2]) + SPAWNING.playerSpawnHeight,
+            spawnPosition[2],
+        ])
+    );
+}
+
+function spawnBoss(
+    world: World,
+    chapter: ChapterResponse,
+    positionsByRegionId: Map<string, Vector3Tuple>,
+    terrain: ITerrainContext
+): void {
     const bossPosition = positionsByRegionId.get(chapter.bossRegionId);
-    if (chapter.boss && bossPosition) {
-        world.addEntity(
-            new CharacterBody(bossModel(), world.context, [
-                bossPosition[0],
-                terrain.groundHeightAt(bossPosition[0], bossPosition[2]) + SPAWNING.bossSpawnHeight,
-                bossPosition[2],
-            ])
-        );
-    }
+    if (!chapter.boss || !bossPosition) return;
+
+    world.addEntity(
+        new CharacterBody(bossModel(), world.context, [
+            bossPosition[0],
+            terrain.groundHeightAt(bossPosition[0], bossPosition[2]) + SPAWNING.bossSpawnHeight,
+            bossPosition[2],
+        ])
+    );
 }
 
 function mapEntrancesToRegions(
@@ -96,9 +122,12 @@ function mapEntrancesToRegions(
 
         if (!fromPosition || !toPosition) continue;
 
-        const spanX = toPosition[0] - fromPosition[0];
-        const spanZ = toPosition[2] - fromPosition[2];
-        const spanLength = Math.hypot(spanX, spanZ);
+        const { spanX, spanZ, length: spanLength } = spanBetween(
+            fromPosition[0],
+            fromPosition[2],
+            toPosition[0],
+            toPosition[2]
+        );
 
         if (spanLength === 0) continue;
 
@@ -162,67 +191,18 @@ function spawnTerrain(
     manifest: IThemeManifest,
     positionsByRegionId: Map<string, Vector3Tuple>
 ): ITerrainContext {
-    const regions = chapter.regions;
-    let centerX = 0;
-    let centerZ = 0;
-
-    for (const region of regions) {
-        centerX += region.worldPosition[0];
-        centerZ += region.worldPosition[2];
-    }
-
-    centerX /= regions.length;
-    centerZ /= regions.length;
-
-    let furthestDistance = 0;
-    const regionFloors: IRegionFloor[] = [];
-    const regionFootprints: IRegionFootprint[] = [];
-
-    for (const region of regions) {
-        const [x, y, z] = region.worldPosition;
-        const [width, depth] = region.floorSize;
-
-        const footprint = {
-            centerX: x - centerX,
-            centerZ: z - centerZ,
-            halfWidth: width / 2,
-            halfDepth: depth / 2,
-        };
-
-        regionFootprints.push(footprint);
-        regionFloors.push({
-            ...footprint,
-            floorElevation: y,
-            floorColorIndex: region.nestingDepth,
-        });
-
-        const distance = Math.hypot(x - centerX, z - centerZ) + Math.max(width, depth) / 2;
-        if (distance > furthestDistance) furthestDistance = distance;
-    }
-
-    const corridorPaths: ICorridorPath[] = [];
-    const corridorSpans: ICorridorSpan[] = [];
-
-    for (const pathway of chapter.pathways) {
-        const fromPosition = positionsByRegionId.get(pathway.fromRegionId);
-        const toPosition = positionsByRegionId.get(pathway.toRegionId);
-
-        if (!fromPosition || !toPosition) continue;
-
-        const span = {
-            fromX: fromPosition[0] - centerX,
-            fromZ: fromPosition[2] - centerZ,
-            toX: toPosition[0] - centerX,
-            toZ: toPosition[2] - centerZ,
-            halfWidth: pathway.corridorWidth / 2,
-        };
-
-        corridorSpans.push(span);
-        corridorPaths.push({
-            ...span,
-            floorElevation: (fromPosition[1] + toPosition[1]) / 2,
-        });
-    }
+    const [centerX, centerZ] = computeChapterCenter(chapter.regions);
+    const { regionFloors, regionFootprints, furthestDistance } = buildRegionGeometry(
+        chapter.regions,
+        centerX,
+        centerZ
+    );
+    const { corridorPaths, corridorSpans } = buildCorridorGeometry(
+        chapter.pathways,
+        positionsByRegionId,
+        centerX,
+        centerZ
+    );
 
     const playRadius = furthestDistance + TERRAIN.playMargin;
     const center: Vector3Tuple = [centerX, 0, centerZ];
@@ -265,6 +245,96 @@ function spawnTerrain(
         groundHeightAt: (worldX, worldZ) =>
             heightMap.elevationAt(worldX - centerX, worldZ - centerZ),
     };
+}
+
+function computeChapterCenter(regions: IChapterRegion[]): [number, number] {
+    let centerX = 0;
+    let centerZ = 0;
+
+    for (const region of regions) {
+        centerX += region.worldPosition[0];
+        centerZ += region.worldPosition[2];
+    }
+
+    return [centerX / regions.length, centerZ / regions.length];
+}
+
+function buildRegionGeometry(
+    regions: IChapterRegion[],
+    centerX: number,
+    centerZ: number
+): IRegionGeometry {
+    let furthestDistance = 0;
+    const regionFloors: IRegionFloor[] = [];
+    const regionFootprints: IRegionFootprint[] = [];
+
+    for (const region of regions) {
+        const [x, y, z] = region.worldPosition;
+        const [width, depth] = region.floorSize;
+
+        const footprint = {
+            centerX: x - centerX,
+            centerZ: z - centerZ,
+            halfWidth: width / 2,
+            halfDepth: depth / 2,
+        };
+
+        regionFootprints.push(footprint);
+        regionFloors.push({
+            ...footprint,
+            floorElevation: y,
+            floorColorIndex: region.nestingDepth,
+        });
+
+        const distance = Math.hypot(x - centerX, z - centerZ) + Math.max(width, depth) / 2;
+        if (distance > furthestDistance) furthestDistance = distance;
+    }
+
+    return { regionFloors, regionFootprints, furthestDistance };
+}
+
+function buildCorridorGeometry(
+    pathways: IRegionPathway[],
+    positionsByRegionId: Map<string, Vector3Tuple>,
+    centerX: number,
+    centerZ: number
+): ICorridorGeometry {
+    const corridorPaths: ICorridorPath[] = [];
+    const corridorSpans: ICorridorSpan[] = [];
+
+    for (const pathway of pathways) {
+        const fromPosition = positionsByRegionId.get(pathway.fromRegionId);
+        const toPosition = positionsByRegionId.get(pathway.toRegionId);
+
+        if (!fromPosition || !toPosition) continue;
+
+        const span = {
+            fromX: fromPosition[0] - centerX,
+            fromZ: fromPosition[2] - centerZ,
+            toX: toPosition[0] - centerX,
+            toZ: toPosition[2] - centerZ,
+            halfWidth: pathway.corridorWidth / 2,
+        };
+
+        corridorSpans.push(span);
+        corridorPaths.push({
+            ...span,
+            floorElevation: (fromPosition[1] + toPosition[1]) / 2,
+        });
+    }
+
+    return { corridorPaths, corridorSpans };
+}
+
+interface IRegionGeometry {
+    regionFloors: IRegionFloor[];
+    regionFootprints: IRegionFootprint[];
+    furthestDistance: number;
+}
+
+interface ICorridorGeometry {
+    corridorPaths: ICorridorPath[];
+    corridorSpans: ICorridorSpan[];
 }
 
 interface ITerrainContext {
