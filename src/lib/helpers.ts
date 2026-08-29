@@ -90,3 +90,16 @@ export function pickRandomSubset<T>(items: T[], count: number, nextRandom: () =>
 export function scaleBetween([minimum, maximum]: [number, number], ratio: number): number {
     return minimum + ratio * (maximum - minimum);
 }
+
+export interface ISpanVector {
+    spanX: number;
+    spanZ: number;
+    length: number;
+}
+
+export function spanBetween(fromX: number, fromZ: number, toX: number, toZ: number): ISpanVector {
+    const spanX = toX - fromX;
+    const spanZ = toZ - fromZ;
+
+    return { spanX, spanZ, length: Math.hypot(spanX, spanZ) };
+}

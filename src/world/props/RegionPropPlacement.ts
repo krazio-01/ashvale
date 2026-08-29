@@ -15,6 +15,7 @@ import {
     scaleBetween,
 } from "@/lib/helpers";
 import { PropGroupCollector } from "@/world/props/PropGroups";
+import { attemptPlacement, pickWeightedSpecies } from "@/world/props/PropPlacementUtils";
 
 export function placeRegionProps(
     region: IChapterRegion,
@@ -39,7 +40,7 @@ export function placeRegionProps(
         bounds,
         anchorPoints,
         spreadRadius: bounds.clusterRadius,
-        entranceClearanceFactor: 1,
+        entranceClearanceFactor: PROP_PLACEMENT.standingEntranceClearanceFactor,
         avoidsOtherProps: true,
         nextRandom,
     });
@@ -54,7 +55,7 @@ export function placeRegionProps(
         bounds,
         anchorPoints,
         spreadRadius: bounds.clusterRadius,
-        entranceClearanceFactor: 1,
+        entranceClearanceFactor: PROP_PLACEMENT.standingEntranceClearanceFactor,
         avoidsOtherProps: true,
         nextRandom,
     });
@@ -164,7 +165,7 @@ function spreadAnchorPoints(
     const anchorPoints: IAnchorPoint[] = [];
 
     for (let index = 0; index < count; index += 1) {
-        const candidate = findOpenSpot(bounds, 0, 1, nextRandom, () => {
+        const candidate = findOpenSpot(bounds, 0, 1, () => {
             const angle = nextRandom() * Math.PI * 2;
             const edgeBias = Math.pow(nextRandom(), PROP_PLACEMENT.edgeBiasExponent);
 
@@ -195,19 +196,15 @@ function placeAnchoredSpecies(placedProps: IPlacedProp[], options: IAnchoredSpec
     if (species.length === 0 || anchorPoints.length === 0) return;
 
     for (let index = 0; index < count; index += 1) {
-        const prop = species[Math.floor(nextRandom() * species.length)];
+        const prop = pickWeightedSpecies(species, nextRandom);
         const anchor = anchorPoints[Math.floor(nextRandom() * anchorPoints.length)];
         if (!prop || !anchor) continue;
 
         const scale = scaleBetween(prop.scaleRange, nextRandom());
         const footprintRadius = prop.footprintRadius * scale;
 
-        const spot = findOpenSpot(
-            bounds,
-            footprintRadius,
-            entranceClearanceFactor,
-            nextRandom,
-            () => scatterAround(anchor, spreadRadius, nextRandom)
+        const spot = findOpenSpot(bounds, footprintRadius, entranceClearanceFactor, () =>
+            scatterAround(anchor, spreadRadius, nextRandom)
         );
 
         if (!spot) continue;
@@ -228,7 +225,7 @@ function placeGroundClutter(placedProps: IPlacedProp[], options: IGroundClutterO
     const standingProps = placedProps.filter(({ prop }) => prop.role !== PropRole.Scatter);
 
     for (let index = 0; index < count; index += 1) {
-        const prop = species[Math.floor(nextRandom() * species.length)];
+        const prop = pickWeightedSpecies(species, nextRandom);
         if (!prop) continue;
 
         const scale = scaleBetween(prop.scaleRange, nextRandom());
@@ -239,37 +236,8 @@ function placeGroundClutter(placedProps: IPlacedProp[], options: IGroundClutterO
             standingProps.length > 0;
 
         const spot = huddlesAgainstProp
-            ? findOpenSpot(
-                  bounds,
-                  footprintRadius,
-                  PROP_PLACEMENT.clutterEntranceClearanceFactor,
-                  nextRandom,
-                  () => {
-                      const host = standingProps[Math.floor(nextRandom() * standingProps.length)];
-                      if (!host) return null;
-
-                      return scatterAround(
-                          {
-                              offsetX: host.placement.position[0] - bounds.originX,
-                              offsetZ: host.placement.position[2] - bounds.originZ,
-                          },
-                          PROP_PLACEMENT.clutterHuddleRadius,
-                          nextRandom
-                      );
-                  }
-              )
-            : findOpenSpot(
-                  bounds,
-                  footprintRadius,
-                  PROP_PLACEMENT.clutterEntranceClearanceFactor,
-                  nextRandom,
-                  () => {
-                      const anchor = anchorPoints[Math.floor(nextRandom() * anchorPoints.length)];
-                      if (!anchor) return null;
-
-                      return scatterAround(anchor, bounds.clusterRadius, nextRandom);
-                  }
-              );
+            ? findClutterSpotNearStandingProp(bounds, footprintRadius, standingProps, nextRandom)
+            : findClutterSpotNearAnchor(bounds, footprintRadius, anchorPoints, nextRandom);
 
         if (!spot) continue;
 
@@ -277,23 +245,72 @@ function placeGroundClutter(placedProps: IPlacedProp[], options: IGroundClutterO
     }
 }
 
+function findClutterSpotNearStandingProp(
+    bounds: IPlacementBounds,
+    footprintRadius: number,
+    standingProps: IPlacedProp[],
+    nextRandom: () => number
+): IAnchorPoint | null {
+    return findOpenSpot(
+        bounds,
+        footprintRadius,
+        PROP_PLACEMENT.clutterEntranceClearanceFactor,
+        () => {
+            const host = standingProps[Math.floor(nextRandom() * standingProps.length)];
+            if (!host) return null;
+
+            return scatterAround(
+                {
+                    offsetX: host.placement.position[0] - bounds.originX,
+                    offsetZ: host.placement.position[2] - bounds.originZ,
+                },
+                PROP_PLACEMENT.clutterHuddleRadius,
+                nextRandom
+            );
+        }
+    );
+}
+
+function findClutterSpotNearAnchor(
+    bounds: IPlacementBounds,
+    footprintRadius: number,
+    anchorPoints: IAnchorPoint[],
+    nextRandom: () => number
+): IAnchorPoint | null {
+    return findOpenSpot(
+        bounds,
+        footprintRadius,
+        PROP_PLACEMENT.clutterEntranceClearanceFactor,
+        () => {
+            const anchor = anchorPoints[Math.floor(nextRandom() * anchorPoints.length)];
+            if (!anchor) return null;
+
+            return scatterAround(anchor, bounds.clusterRadius, nextRandom);
+        }
+    );
+}
+
 function findOpenSpot(
     bounds: IPlacementBounds,
     footprintRadius: number,
     entranceClearanceFactor: number,
-    nextRandom: () => number,
     proposeSpot: () => IAnchorPoint | null
 ): IAnchorPoint | null {
     for (const relaxation of PROP_PLACEMENT.clearanceRelaxationSteps) {
-        for (let attempt = 0; attempt < PROP_PLACEMENT.placementAttempts; attempt += 1) {
-            const candidate = proposeSpot();
-            if (!candidate) continue;
-
+        const spot = attemptPlacement(PROP_PLACEMENT.placementAttempts, proposeSpot, (candidate) => {
             const clamped = clampInsideBounds(bounds, candidate, footprintRadius);
 
-            if (isSpotOpen(bounds, clamped, footprintRadius, entranceClearanceFactor * relaxation))
-                return clamped;
-        }
+            return isSpotOpen(
+                bounds,
+                clamped,
+                footprintRadius,
+                entranceClearanceFactor * relaxation
+            )
+                ? clamped
+                : null;
+        });
+
+        if (spot) return spot;
     }
 
     return null;

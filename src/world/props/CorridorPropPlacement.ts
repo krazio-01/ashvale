@@ -1,8 +1,20 @@
 import { PropRole, type IPropGroup, type IThemeManifest, type IThemeProp } from "@/types/theme";
-import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+import {
+    createHeightMapSample,
+    type IHeightMapSample,
+    type TerrainHeightMap,
+} from "@/world/terrain/TerrainHeightMap";
 import type { Vector3Tuple } from "three";
 import { PropGroupCollector } from "@/world/props/PropGroups";
-import { clamp, createSeededRandom, lerp, pickRandomSubset, scaleBetween } from "@/lib/helpers";
+import { attemptPlacement, pickWeightedSpecies } from "@/world/props/PropPlacementUtils";
+import {
+    clamp,
+    createSeededRandom,
+    lerp,
+    pickRandomSubset,
+    scaleBetween,
+    spanBetween,
+} from "@/lib/helpers";
 import { CORRIDOR_PROPS, VEGETATION } from "@/constants/placement";
 
 export function placeCorridorProps(
@@ -14,6 +26,7 @@ export function placeCorridorProps(
     seed: number
 ): IPropGroup[] {
     const nextRandom = createSeededRandom(seed);
+    const heightSample = createHeightMapSample();
 
     const species = pickRandomSubset(
         manifest.props.filter(
@@ -36,15 +49,19 @@ export function placeCorridorProps(
                 center,
                 nextRandom,
                 collector,
+                heightSample,
             });
 
     return collector.toGroups();
 }
 
 function spreadAnchorsAlong(corridor: ICorridorSpan, nextRandom: () => number): IAnchorSpot[] {
-    const spanX = corridor.toX - corridor.fromX;
-    const spanZ = corridor.toZ - corridor.fromZ;
-    const spanLength = Math.hypot(spanX, spanZ);
+    const { spanX, spanZ, length: spanLength } = spanBetween(
+        corridor.fromX,
+        corridor.fromZ,
+        corridor.toX,
+        corridor.toZ
+    );
 
     if (spanLength === 0) return [];
 
@@ -84,58 +101,71 @@ function spreadAnchorsAlong(corridor: ICorridorSpan, nextRandom: () => number): 
 }
 
 function placeClusterAt(anchor: IAnchorSpot, options: IClusterOptions): void {
-    const { species, heightMap, regionFootprints, center, nextRandom, collector } = options;
+    const { nextRandom } = options;
 
     const propCount = Math.round(
         lerp(CORRIDOR_PROPS.propsPerAnchor[0], CORRIDOR_PROPS.propsPerAnchor[1], nextRandom())
     );
 
-    for (let index = 0; index < propCount; index += 1) {
-        const prop = species[Math.floor(nextRandom() * species.length)];
-        if (!prop) continue;
+    for (let index = 0; index < propCount; index += 1) placeSingleProp(anchor, options);
+}
 
-        const spot = findOpenSpot(anchor, heightMap, regionFootprints, nextRandom);
-        if (!spot) continue;
+function placeSingleProp(anchor: IAnchorSpot, options: IClusterOptions): void {
+    const { species, heightMap, regionFootprints, center, nextRandom, collector, heightSample } =
+        options;
 
-        const scale =
-            scaleBetween(prop.scaleRange, nextRandom()) *
-            lerp(CORRIDOR_PROPS.scaleBoost[0], CORRIDOR_PROPS.scaleBoost[1], nextRandom());
+    const prop = pickWeightedSpecies(species, nextRandom);
+    if (!prop) return;
 
-        collector.add(prop, {
-            position: [
-                center[0] + spot.localX,
-                heightMap.elevationAt(spot.localX, spot.localZ) - VEGETATION.groundBite,
-                center[2] + spot.localZ,
-            ],
-            rotationY: nextRandom() * Math.PI * 2,
-            scale,
-        });
-    }
+    const spot = findOpenSpot(anchor, heightMap, regionFootprints, nextRandom, heightSample);
+    if (!spot) return;
+
+    const scale =
+        scaleBetween(prop.scaleRange, nextRandom()) *
+        lerp(CORRIDOR_PROPS.scaleBoost[0], CORRIDOR_PROPS.scaleBoost[1], nextRandom());
+
+    heightMap.sampleAt(spot.localX, spot.localZ, heightSample);
+
+    collector.add(prop, {
+        position: [
+            center[0] + spot.localX,
+            heightSample.elevation - VEGETATION.groundBite,
+            center[2] + spot.localZ,
+        ],
+        rotationY: nextRandom() * Math.PI * 2,
+        scale,
+    });
 }
 
 function findOpenSpot(
     anchor: IAnchorSpot,
     heightMap: TerrainHeightMap,
     regionFootprints: IRegionFootprint[],
-    nextRandom: () => number
+    nextRandom: () => number,
+    heightSample: IHeightMapSample
 ): IAnchorSpot | null {
-    for (let attempt = 0; attempt < CORRIDOR_PROPS.placementAttempts; attempt += 1) {
-        const angle = nextRandom() * Math.PI * 2;
-        const distance = Math.sqrt(nextRandom()) * CORRIDOR_PROPS.clusterRadius;
+    return attemptPlacement(
+        CORRIDOR_PROPS.placementAttempts,
+        () => {
+            const angle = nextRandom() * Math.PI * 2;
+            const distance = Math.sqrt(nextRandom()) * CORRIDOR_PROPS.clusterRadius;
 
-        const localX = anchor.localX + Math.cos(angle) * distance;
-        const localZ = anchor.localZ + Math.sin(angle) * distance;
+            return {
+                localX: anchor.localX + Math.cos(angle) * distance,
+                localZ: anchor.localZ + Math.sin(angle) * distance,
+            };
+        },
+        (candidate) => {
+            if (isInsideAnyRegion(candidate.localX, candidate.localZ, regionFootprints))
+                return null;
 
-        if (isInsideAnyRegion(localX, localZ, regionFootprints)) continue;
+            heightMap.sampleAt(candidate.localX, candidate.localZ, heightSample);
+            if (heightSample.carveStrength > CORRIDOR_PROPS.carveRejectThreshold) return null;
+            if (heightSample.steepness > CORRIDOR_PROPS.slopeLimit) return null;
 
-        if (heightMap.carveStrengthAt(localX, localZ) > CORRIDOR_PROPS.carveRejectThreshold)
-            continue;
-        if (heightMap.steepnessAt(localX, localZ) > CORRIDOR_PROPS.slopeLimit) continue;
-
-        return { localX, localZ };
-    }
-
-    return null;
+            return candidate;
+        }
+    );
 }
 
 function isInsideAnyRegion(
@@ -182,4 +212,5 @@ interface IClusterOptions {
     center: Vector3Tuple;
     nextRandom: () => number;
     collector: PropGroupCollector;
+    heightSample: IHeightMapSample;
 }

@@ -1,5 +1,5 @@
 import RAPIER from "@dimforge/rapier3d-compat";
-import type { Collider, RigidBody } from "@dimforge/rapier3d-compat";
+import type { Collider, RigidBody, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Group, InstancedMesh, Object3D } from "three";
 import { Entity } from "@/entities/Entity";
 import { PropRole } from "@/types/theme";
@@ -10,7 +10,7 @@ import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 export class PropBatch extends Entity implements IWorldEntity {
     readonly sceneObject = new Group();
 
-    private readonly context: IWorldContext;
+    private readonly physicsWorld: PhysicsWorld;
     private readonly batches: InstancedMesh[] = [];
     private readonly colliders: Collider[] = [];
     private readonly rigidBody: RigidBody;
@@ -22,7 +22,7 @@ export class PropBatch extends Entity implements IWorldEntity {
         this.sceneObject.updateMatrixWorld(true);
         this.sceneObject.matrixWorldAutoUpdate = false;
 
-        this.context = context;
+        this.physicsWorld = context.physicsWorld;
         this.rigidBody = context.physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
 
         for (const group of groups) {
@@ -38,11 +38,11 @@ export class PropBatch extends Entity implements IWorldEntity {
 
     dispose(): void {
         for (const collider of this.colliders)
-            this.context.physicsWorld.removeCollider(collider, false);
+            this.physicsWorld.removeCollider(collider, false);
 
         for (const batch of this.batches) batch.dispose();
 
-        this.context.physicsWorld.removeRigidBody(this.rigidBody);
+        this.physicsWorld.removeRigidBody(this.rigidBody);
         this.colliders.length = 0;
         this.batches.length = 0;
         this.sceneObject.clear();
@@ -90,9 +90,7 @@ export class PropBatch extends Entity implements IWorldEntity {
                 z
             );
 
-            this.colliders.push(
-                this.context.physicsWorld.createCollider(colliderDesc, this.rigidBody)
-            );
+            this.colliders.push(this.physicsWorld.createCollider(colliderDesc, this.rigidBody));
         }
     }
 }

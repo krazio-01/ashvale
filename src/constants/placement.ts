@@ -73,6 +73,7 @@ export const PROP_PLACEMENT = {
     edgeBiasExponent: 0.4,
     entranceMouthClearanceRatio: 1.9,
     entranceLaneWidthRatio: 1.1,
+    standingEntranceClearanceFactor: 1,
     clutterEntranceClearanceFactor: 0.45,
     clutterHuddledAgainstPropRatio: 0.4,
     clutterHuddleRadius: 3,
