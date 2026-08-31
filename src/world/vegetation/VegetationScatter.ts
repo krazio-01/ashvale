@@ -1,17 +1,21 @@
 import { PropRole, type IPropGroup, type IThemeManifest, type IThemeProp } from "@/types/theme";
-import { createHeightMapSample, type IHeightMapSample, type TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+import {
+    createHeightMapSample,
+    type IHeightMapSample,
+    type TerrainHeightMap,
+} from "@/world/terrain/TerrainHeightMap";
 import type { Vector3Tuple } from "three";
 import { PropGroupCollector } from "@/world/props/PropGroups";
 import { createSeededRandom, lerp, pickRandomSubset, scaleBetween, FULL_TURN } from "@/lib/helpers";
 import { VEGETATION } from "@/constants/placement";
-import { TERRAIN } from "@/constants/world";
+import { TERRAIN, WORLD_EDGE } from "@/constants/world";
 
 const BUCKET_KEY_OFFSET = 1 << 20;
 
 export function scatterVegetation(
     manifest: IThemeManifest,
     heightMap: TerrainHeightMap,
-    playRadius: number,
+    scatterRadius: number,
     center: Vector3Tuple,
     seed: number
 ): IPropGroup[][] {
@@ -35,55 +39,25 @@ export function scatterVegetation(
         nextRandom
     );
 
-    const innerEdge = playRadius + VEGETATION.edgePadding;
-    const slopeStart = playRadius + TERRAIN.transition;
-
     const bands: IVegetationBand[] = [
         {
             species: groundCover,
-            radiusRange: [0, playRadius],
+            radiusRange: [0, scatterRadius],
             density: VEGETATION.groundCoverDensity,
-            densityFactor: 1,
             slopeLimit: VEGETATION.grassSlopeLimit,
             scaleBoostRange: [1, 1],
         },
         {
             species: fillers,
-            radiusRange: [0, playRadius],
+            radiusRange: [0, scatterRadius],
             density: VEGETATION.fillerDensity,
-            densityFactor: 1,
             slopeLimit: VEGETATION.fillerSlopeLimit,
             scaleBoostRange: [1, 1.2],
         },
         {
             species: trees,
-            radiusRange: [0, playRadius],
+            radiusRange: [0, scatterRadius],
             density: VEGETATION.treeDensity,
-            densityFactor: 1,
-            slopeLimit: VEGETATION.treeSlopeLimit,
-            scaleBoostRange: [1, 1.3],
-        },
-        {
-            species: groundCover,
-            radiusRange: [innerEdge, slopeStart],
-            density: VEGETATION.groundCoverDensity,
-            densityFactor: VEGETATION.outerDensityFactor,
-            slopeLimit: VEGETATION.grassSlopeLimit,
-            scaleBoostRange: [1, 1],
-        },
-        {
-            species: fillers,
-            radiusRange: [innerEdge, slopeStart + TERRAIN.spread * 0.5],
-            density: VEGETATION.fillerDensity,
-            densityFactor: VEGETATION.outerDensityFactor,
-            slopeLimit: VEGETATION.fillerSlopeLimit,
-            scaleBoostRange: [1, 1.3],
-        },
-        {
-            species: trees,
-            radiusRange: [innerEdge, slopeStart + TERRAIN.spread * 0.7],
-            density: VEGETATION.treeDensity,
-            densityFactor: VEGETATION.outerDensityFactor,
             slopeLimit: VEGETATION.treeSlopeLimit,
             scaleBoostRange: VEGETATION.treeScaleBoost,
         },
@@ -104,7 +78,7 @@ function scatterBand(
 
     const { heightMap, center, nextRandom, heightSample } = world;
     const [innerRadius, outerRadius] = band.radiusRange;
-    const count = countForAnnulus(innerRadius, outerRadius, band.density, band.densityFactor);
+    const count = countForAnnulus(innerRadius, outerRadius, band.density);
 
     for (let index = 0; index < count; index += 1) {
         const prop = band.species[Math.floor(nextRandom() * band.species.length)];
@@ -119,6 +93,7 @@ function scatterBand(
         const localZ = Math.sin(angle) * radius;
 
         heightMap.sampleAt(localX, localZ, heightSample);
+        if (heightSample.footprintDistance > WORLD_EDGE.groundApron) continue;
         if (heightSample.carveStrength > VEGETATION.carveRejectThreshold) continue;
         if (heightSample.steepness > band.slopeLimit) continue;
 
@@ -138,15 +113,10 @@ function scatterBand(
     }
 }
 
-function countForAnnulus(
-    innerRadius: number,
-    outerRadius: number,
-    density: number,
-    densityFactor: number
-): number {
+function countForAnnulus(innerRadius: number, outerRadius: number, density: number): number {
     const annulusArea = Math.PI * (outerRadius * outerRadius - innerRadius * innerRadius);
 
-    return Math.min(Math.round(annulusArea * density * densityFactor), VEGETATION.maximumPerBand);
+    return Math.min(Math.round(annulusArea * density), VEGETATION.maximumPerBand);
 }
 
 function collectorFor(
@@ -172,7 +142,6 @@ interface IVegetationBand {
     species: IThemeProp[];
     radiusRange: [number, number];
     density: number;
-    densityFactor: number;
     slopeLimit: number;
     scaleBoostRange: [number, number];
 }

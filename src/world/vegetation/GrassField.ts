@@ -20,6 +20,7 @@ import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import { GRASS } from "@/constants/placement";
+import { WORLD_EDGE } from "@/constants/world";
 import { shiftColorHsl, FULL_TURN } from "@/lib/helpers";
 
 const VERTEX_SHADER = /* glsl */ `
@@ -44,6 +45,7 @@ const VERTEX_SHADER = /* glsl */ `
 
     uniform vec2 steepGroundBand;
     uniform vec2 carvedPathBand;
+    uniform float groundApron;
 
     uniform vec2 windDirection;
     uniform float windHeading;
@@ -91,8 +93,8 @@ const VERTEX_SHADER = /* glsl */ `
         return (ground - fieldOrigin) / fieldCellSize;
     }
 
-    vec3 sampleTerrainField(vec2 pointCoord) {
-        return texture2D(terrainField, (pointCoord + 0.5) / fieldPointsPerSide).rgb;
+    vec4 sampleTerrainField(vec2 pointCoord) {
+        return texture2D(terrainField, (pointCoord + 0.5) / fieldPointsPerSide);
     }
 
     float insideTerrainField(vec2 pointCoord) {
@@ -102,11 +104,12 @@ const VERTEX_SHADER = /* glsl */ `
             * step(0.0, pointCoord.y) * step(pointCoord.y, lastPoint);
     }
 
-    float openGroundAt(vec3 field) {
+    float openGroundAt(vec4 field) {
         float offSteepGround = 1.0 - smoothstep(steepGroundBand.x, steepGroundBand.y, field.b);
         float offCarvedPath = 1.0 - smoothstep(carvedPathBand.x, carvedPathBand.y, field.g);
+        float onWalkableGround = 1.0 - step(groundApron, field.a);
 
-        return offSteepGround * offCarvedPath;
+        return offSteepGround * offCarvedPath * onWalkableGround;
     }
 
     vec2 bendAlongArc(float heightRatio, float bendAngle, float bladeLength) {
@@ -127,7 +130,7 @@ const VERTEX_SHADER = /* glsl */ `
 
         vec2 tuftGround = (tuftCell + tuftRandom.xy) * tuftSpacing;
         vec2 fieldPointCoord = fieldPointCoordAt(tuftGround);
-        vec3 field = sampleTerrainField(fieldPointCoord);
+        vec4 field = sampleTerrainField(fieldPointCoord);
 
         float rootedHere = insideTerrainField(fieldPointCoord)
             * step(tuftRandom.z, openGroundAt(field));
@@ -459,6 +462,7 @@ function terrainUniforms(fieldTexture: DataTexture, heightMap: TerrainHeightMap)
         carvedPathBand: {
             value: new Vector2(GRASS.carvedPathLimit * 0.3, GRASS.carvedPathLimit),
         },
+        groundApron: { value: WORLD_EDGE.groundApron },
     };
 }
 
