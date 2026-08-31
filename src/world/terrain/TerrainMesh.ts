@@ -2,11 +2,11 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import type { RigidBody } from "@dimforge/rapier3d-compat";
 import {
     BufferAttribute,
+    BufferGeometry,
     CanvasTexture,
     Color,
     Mesh,
     MeshLambertMaterial,
-    PlaneGeometry,
     RepeatWrapping,
     type Vector3Tuple,
 } from "three";
@@ -14,15 +14,16 @@ import { Entity } from "@/entities/Entity";
 import type { ITerrainProfile } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+import { WALKABLE_REACH } from "@/world/terrain/TerrainHeightField";
 import { GROUND, TERRAIN, TERRAIN_DETAIL } from "@/constants/world";
-import { clamp, lerp, QUARTER_TURN, smoothstep } from "@/lib/helpers";
+import { clamp, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
 
 export class TerrainMesh extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;
 
     private readonly context: IWorldContext;
-    private readonly geometry: PlaneGeometry;
+    private readonly geometry: BufferGeometry;
     private readonly material: MeshLambertMaterial;
     private readonly rigidBody: RigidBody;
 
@@ -36,37 +37,15 @@ export class TerrainMesh extends Entity implements IWorldEntity {
         this.context = context;
 
         const profile = context.environment.terrain;
+        const island = buildIslandGeometry(heightMap);
 
-        this.geometry = new PlaneGeometry(
-            heightMap.span,
-            heightMap.span,
-            heightMap.cellsPerSide,
-            heightMap.cellsPerSide
-        );
-        this.geometry.rotateX(-QUARTER_TURN);
-
-        const positions = this.geometry.getAttribute("position");
-        const positionArray = positions.array as Float32Array;
-        const vertexCount = positions.count;
-        const gridPoints = new Int32Array(vertexCount);
-
-        for (let index = 0; index < vertexCount; index += 1) {
-            const offset = index * 3;
-            const pointIndex = heightMap.nearestPointIndex(
-                positionArray[offset] ?? 0,
-                positionArray[offset + 2] ?? 0
-            );
-
-            gridPoints[index] = pointIndex;
-            positionArray[offset + 1] = heightMap.elevationAtPoint(pointIndex);
-        }
-
-        positions.needsUpdate = true;
+        this.geometry = island.geometry;
         this.geometry.computeVertexNormals();
+
         paintVertexColors(
             this.geometry,
             heightMap,
-            gridPoints,
+            island.pointIndices,
             profile,
             deriveGroundPalette(profile)
         );
@@ -88,13 +67,8 @@ export class TerrainMesh extends Entity implements IWorldEntity {
             RAPIER.RigidBodyDesc.fixed().setTranslation(center[0], 0, center[2])
         );
 
-        const indices = this.geometry.getIndex();
-        const indexArray = indices?.array ?? [];
-        const colliderIndices =
-            indexArray instanceof Uint32Array ? indexArray : new Uint32Array(indexArray);
-
         context.physicsWorld.createCollider(
-            RAPIER.ColliderDesc.trimesh(positionArray, colliderIndices),
+            RAPIER.ColliderDesc.trimesh(island.positions, island.indices),
             this.rigidBody
         );
     }
@@ -107,6 +81,52 @@ export class TerrainMesh extends Entity implements IWorldEntity {
         this.material.map?.dispose();
         this.material.dispose();
     }
+}
+
+function buildIslandGeometry(heightMap: TerrainHeightMap): IIslandGeometry {
+    const pointsPerSide = heightMap.pointsPerSide;
+    const vertexIndexByPoint = new Int32Array(pointsPerSide * pointsPerSide).fill(-1);
+
+    const positionValues: number[] = [];
+    const pointIndexValues: number[] = [];
+
+    for (let row = 0; row < pointsPerSide; row += 1) {
+        const localZ = heightMap.originZ + row * heightMap.cellSize;
+
+        for (let column = 0; column < pointsPerSide; column += 1) {
+            const localX = heightMap.originX + column * heightMap.cellSize;
+            const pointIndex = row * pointsPerSide + column;
+            if (heightMap.footprintDistanceAtPoint(pointIndex) > WALKABLE_REACH) continue;
+
+            vertexIndexByPoint[pointIndex] = pointIndexValues.length;
+            pointIndexValues.push(pointIndex);
+            positionValues.push(localX, heightMap.elevationAtPoint(pointIndex), localZ);
+        }
+    }
+
+    const indexValues: number[] = [];
+
+    for (let row = 0; row < pointsPerSide - 1; row += 1) {
+        for (let column = 0; column < pointsPerSide - 1; column += 1) {
+            const nearLeft = vertexIndexByPoint[row * pointsPerSide + column] ?? -1;
+            const nearRight = vertexIndexByPoint[row * pointsPerSide + column + 1] ?? -1;
+            const farLeft = vertexIndexByPoint[(row + 1) * pointsPerSide + column] ?? -1;
+            const farRight = vertexIndexByPoint[(row + 1) * pointsPerSide + column + 1] ?? -1;
+
+            if (nearLeft < 0 || nearRight < 0 || farLeft < 0 || farRight < 0) continue;
+
+            indexValues.push(nearLeft, farLeft, nearRight, nearRight, farLeft, farRight);
+        }
+    }
+
+    const positions = new Float32Array(positionValues);
+    const indices = new Uint32Array(indexValues);
+    const geometry = new BufferGeometry();
+
+    geometry.setAttribute("position", new BufferAttribute(positions, 3));
+    geometry.setIndex(new BufferAttribute(indices, 1));
+
+    return { geometry, positions, indices, pointIndices: new Int32Array(pointIndexValues) };
 }
 
 function deriveGroundPalette(profile: ITerrainProfile): IGroundPalette {
@@ -150,9 +170,9 @@ function deriveGroundPalette(profile: ITerrainProfile): IGroundPalette {
 }
 
 function paintVertexColors(
-    geometry: PlaneGeometry,
+    geometry: BufferGeometry,
     heightMap: TerrainHeightMap,
-    gridPoints: Int32Array,
+    pointIndices: Int32Array,
     profile: ITerrainProfile,
     palette: IGroundPalette
 ): void {
@@ -177,7 +197,7 @@ function paintVertexColors(
 
     for (let index = 0; index < vertexCount; index += 1) {
         const offset = index * 3;
-        const pointIndex = gridPoints[index] ?? 0;
+        const pointIndex = pointIndices[index] ?? 0;
         const carveStrength = heightMap.carveStrengthAtPoint(pointIndex);
 
         const heightRatio = clamp(
@@ -321,6 +341,13 @@ function buildRangeNormalizer(smallest: number, largest: number): IRangeNormaliz
     if (span > 1e-6) return { offset: smallest, scale: 1 / span, fallback: 0 };
 
     return { offset: 0, scale: 0, fallback: 0.5 };
+}
+
+interface IIslandGeometry {
+    geometry: BufferGeometry;
+    positions: Float32Array;
+    indices: Uint32Array;
+    pointIndices: Int32Array;
 }
 
 interface IGroundPalette {

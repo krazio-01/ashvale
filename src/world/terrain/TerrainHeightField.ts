@@ -1,48 +1,22 @@
-import type { ITerrainProfile } from "@/types/theme";
-import { LANDFORM, TERRAIN, TERRAIN_DETAIL } from "@/constants/world";
+import { LANDFORM, TERRAIN, TERRAIN_DETAIL, WORLD_EDGE } from "@/constants/world";
 import { clamp, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
 
+export const WALKABLE_REACH = WORLD_EDGE.groundApron + WORLD_EDGE.lipWidth;
+
 export class TerrainHeightField {
-    private readonly profile: ITerrainProfile;
     private readonly regionFloors: IRegionFloor[];
     private readonly preparedCorridors: IPreparedCorridor[];
-    private readonly mountainNoise: FractalNoise;
     private readonly undulationNoise: FractalNoise;
     private readonly elevationRampDistance: number;
-    private readonly mountainRampStartDistance: number;
-    private readonly mountainRampEndDistance: number;
-    private readonly terraceStepHeight: number;
-    private readonly boundaryWallStartRadius: number;
-    private readonly boundaryWallEndRadius: number;
-    private readonly boundaryWallHeight: number;
-    private readonly inverseFeatureSize: number;
     private readonly scratchSample = createTerrainSample();
 
-    constructor(
-        profile: ITerrainProfile,
-        playRadius: number,
-        regionFloors: IRegionFloor[],
-        corridorPaths: ICorridorPath[],
-        seed: number
-    ) {
-        this.profile = profile;
+    constructor(regionFloors: IRegionFloor[], corridorPaths: ICorridorPath[], seed: number) {
         this.regionFloors = regionFloors;
         this.preparedCorridors = corridorPaths.map(prepareCorridor);
-        this.mountainNoise = new FractalNoise(seed);
-        this.undulationNoise = new FractalNoise(seed + 1);
-        this.inverseFeatureSize = 1 / profile.featureSize;
-
-        const neighbourSpacing = measureNeighbourSpacing(regionFloors);
-        this.elevationRampDistance = neighbourSpacing * LANDFORM.wildRampRatio;
-        this.mountainRampStartDistance = neighbourSpacing * LANDFORM.mountainRampStartRatio;
-        this.mountainRampEndDistance = neighbourSpacing * LANDFORM.mountainRampEndRatio;
-        this.terraceStepHeight = profile.mountainHeight / LANDFORM.terraceBandCount;
-
-        const outerRadius = playRadius + TERRAIN.transition + TERRAIN.spread;
-        this.boundaryWallStartRadius = outerRadius * LANDFORM.rampartStartRatio;
-        this.boundaryWallEndRadius = outerRadius;
-        this.boundaryWallHeight = profile.mountainHeight * LANDFORM.rampartHeightRatio;
+        this.undulationNoise = new FractalNoise(seed);
+        this.elevationRampDistance =
+            measureNeighbourSpacing(regionFloors) * LANDFORM.openGroundRampRatio;
     }
 
     sampleInto(localX: number, localZ: number, sample: ITerrainSample): ITerrainSample {
@@ -92,14 +66,16 @@ export class TerrainHeightField {
         }
 
         sample.carveStrength = dominantCarveWeight;
-        sample.elevation = this.resolveElevationAt(
-            localX,
-            localZ,
-            distanceToCarvedGround,
-            weightedFloorElevation,
-            totalCarveWeight,
-            dominantCarveWeight
-        );
+        sample.footprintDistance = distanceToCarvedGround;
+        sample.elevation =
+            this.resolveElevationAt(
+                localX,
+                localZ,
+                distanceToCarvedGround,
+                weightedFloorElevation,
+                totalCarveWeight,
+                dominantCarveWeight
+            ) + edgeDropAt(distanceToCarvedGround);
 
         return sample;
     }
@@ -117,7 +93,7 @@ export class TerrainHeightField {
         dominantCarveWeight: number
     ): number {
         if (totalCarveWeight <= 0)
-            return this.wildGroundElevationAt(localX, localZ, distanceToCarvedGround);
+            return this.openGroundElevationAt(localX, localZ, distanceToCarvedGround);
 
         const carvedFloorElevation =
             weightedFloorElevation / totalCarveWeight +
@@ -126,7 +102,7 @@ export class TerrainHeightField {
         if (dominantCarveWeight >= 1) return carvedFloorElevation;
 
         return lerp(
-            this.wildGroundElevationAt(localX, localZ, distanceToCarvedGround),
+            this.openGroundElevationAt(localX, localZ, distanceToCarvedGround),
             carvedFloorElevation,
             dominantCarveWeight
         );
@@ -143,41 +119,7 @@ export class TerrainHeightField {
         return (undulationSample - 0.5) * 2 * LANDFORM.floorReliefHeight;
     }
 
-    private wildGroundElevationAt(
-        localX: number,
-        localZ: number,
-        distanceToCarvedGround: number
-    ): number {
-        const baseGroundElevation = this.baseGroundElevationAt(
-            localX,
-            localZ,
-            distanceToCarvedGround
-        );
-        const distanceFromCenter = Math.sqrt(localX * localX + localZ * localZ);
-        const boundaryWallFloor = this.boundaryWallFloorAt(baseGroundElevation, distanceFromCenter);
-
-        const mountainRampRatio = smoothstep(
-            this.mountainRampStartDistance,
-            this.mountainRampEndDistance,
-            distanceToCarvedGround
-        );
-
-        if (mountainRampRatio <= 0) return Math.max(baseGroundElevation, boundaryWallFloor);
-
-        const fadedMountainElevation = this.mountainElevationAt(
-            localX,
-            localZ,
-            distanceFromCenter,
-            baseGroundElevation,
-            mountainRampRatio
-        );
-
-        const terracedElevation = this.terracedBlendOf(fadedMountainElevation, baseGroundElevation);
-
-        return Math.max(terracedElevation, boundaryWallFloor);
-    }
-
-    private baseGroundElevationAt(
+    private openGroundElevationAt(
         localX: number,
         localZ: number,
         distanceToCarvedGround: number
@@ -188,12 +130,13 @@ export class TerrainHeightField {
             distanceToCarvedGround
         );
 
-        const groundUndulationSample = this.undulationNoise.sample(
-            localX * TERRAIN.wildReliefScale,
-            localZ * TERRAIN.wildReliefScale,
+        const gentleRollSample = this.undulationNoise.sample(
+            localX * LANDFORM.openGroundReliefScale,
+            localZ * LANDFORM.openGroundReliefScale,
             3,
             0.5
         );
+        const gentleRoll = (gentleRollSample - 0.5) * 2 * LANDFORM.openGroundReliefHeight;
 
         const fineDetailOffset =
             (this.undulationNoise.sample(
@@ -205,103 +148,27 @@ export class TerrainHeightField {
                 0.5) *
             TERRAIN_DETAIL.grainNoiseHeight;
 
-        return (
-            TERRAIN.pathLevel +
-            (this.profile.wildElevation + groundUndulationSample * this.profile.wildRelief) *
-                elevationRampRatio +
-            fineDetailOffset
-        );
-    }
-
-    private boundaryWallFloorAt(baseGroundElevation: number, distanceFromCenter: number): number {
-        return (
-            baseGroundElevation +
-            this.boundaryWallHeight *
-                smoothstep(
-                    this.boundaryWallStartRadius,
-                    this.boundaryWallEndRadius,
-                    distanceFromCenter
-                )
-        );
-    }
-
-    private mountainElevationAt(
-        localX: number,
-        localZ: number,
-        distanceFromCenter: number,
-        baseGroundElevation: number,
-        mountainRampRatio: number
-    ): number {
-        const mountainNoiseX = localX * this.inverseFeatureSize;
-        const mountainNoiseZ = localZ * this.inverseFeatureSize;
-        const mountainShapeNoise = lerp(
-            this.mountainNoise.sample(mountainNoiseX, mountainNoiseZ, 5, 0.5),
-            this.mountainNoise.sampleRidged(mountainNoiseX, mountainNoiseZ, 4, 0.5),
-            this.profile.ruggedness
-        );
-
-        const rawMountainElevation =
-            baseGroundElevation +
-            Math.pow(mountainShapeNoise, TERRAIN.peakShaping) *
-                this.profile.mountainHeight *
-                this.enclosureFactorAt(localX, localZ, distanceFromCenter);
-
-        return lerp(
-            baseGroundElevation,
-            Math.max(rawMountainElevation, baseGroundElevation),
-            mountainRampRatio
-        );
-    }
-
-    private terracedBlendOf(fadedMountainElevation: number, baseGroundElevation: number): number {
-        const terraceBlend = smoothstep(
-            0,
-            this.terraceStepHeight * LANDFORM.terraceOnsetRatio,
-            fadedMountainElevation - baseGroundElevation
-        );
-
-        return lerp(
-            fadedMountainElevation,
-            this.terracedElevationOf(fadedMountainElevation),
-            LANDFORM.terraceStrength * terraceBlend
-        );
-    }
-
-    private terracedElevationOf(elevation: number): number {
-        const stepLevel = (elevation - TERRAIN.pathLevel) / this.terraceStepHeight;
-        const stepBand = Math.floor(stepLevel);
-        const riserBlend = smoothstep(
-            0.5 - LANDFORM.terraceRiserWidth,
-            0.5 + LANDFORM.terraceRiserWidth,
-            stepLevel - stepBand
-        );
-
-        return TERRAIN.pathLevel + (stepBand + riserBlend) * this.terraceStepHeight;
-    }
-
-    private enclosureFactorAt(localX: number, localZ: number, distanceFromCenter: number): number {
-        if (distanceFromCenter <= 0) return 1;
-
-        const bearingScale = LANDFORM.vistaGapScale / distanceFromCenter;
-        const vistaGapSample = this.undulationNoise.sample(
-            localX * bearingScale,
-            localZ * bearingScale,
-            2,
-            0.5
-        );
-
-        const [gapOpensBelow, gapClosesAbove] = LANDFORM.vistaGapRange;
-
-        return lerp(
-            1 - LANDFORM.vistaGapDepth,
-            1,
-            smoothstep(gapOpensBelow, gapClosesAbove, vistaGapSample)
-        );
+        return TERRAIN.pathLevel + gentleRoll * elevationRampRatio + fineDetailOffset;
     }
 }
 
 export function createTerrainSample(): ITerrainSample {
-    return { elevation: 0, carveStrength: 0, floorColorIndex: 0, isCorridor: false };
+    return {
+        elevation: 0,
+        carveStrength: 0,
+        floorColorIndex: 0,
+        isCorridor: false,
+        footprintDistance: 0,
+    };
+}
+
+/* the last stretch of apron eases into a dive that fog swallows */
+function edgeDropAt(footprintDistance: number): number {
+    const rolloverRatio = smoothstep(WORLD_EDGE.groundApron, WALKABLE_REACH, footprintDistance);
+
+    if (rolloverRatio <= 0) return 0;
+
+    return -Math.pow(rolloverRatio, WORLD_EDGE.dropCurve) * WORLD_EDGE.dropDepth;
 }
 
 function measureNeighbourSpacing(regionFloors: IRegionFloor[]): number {
@@ -410,6 +277,7 @@ export interface ITerrainSample {
     carveStrength: number;
     floorColorIndex: number;
     isCorridor: boolean;
+    footprintDistance: number;
 }
 
 interface IPreparedCorridor {

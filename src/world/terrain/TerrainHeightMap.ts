@@ -23,6 +23,7 @@ export class TerrainHeightMap {
     private readonly carveStrengths: Float32Array;
     private readonly corridorCarves: Float32Array;
     private readonly floorColorIndices: Uint8Array;
+    private readonly footprintDistances: Float32Array;
 
     constructor(heightField: TerrainHeightField, outerRadius: number) {
         this.span = outerRadius * 2;
@@ -42,6 +43,7 @@ export class TerrainHeightMap {
         this.carveStrengths = new Float32Array(pointCount);
         this.corridorCarves = new Float32Array(pointCount);
         this.floorColorIndices = new Uint8Array(pointCount);
+        this.footprintDistances = new Float32Array(pointCount);
 
         const sample = createTerrainSample();
         const slopeReach = TERRAIN.macroSlopeGrainWavelengths / TERRAIN_DETAIL.grainNoiseScale / 2;
@@ -58,6 +60,7 @@ export class TerrainHeightMap {
                 this.carveStrengths[index] = sample.carveStrength;
                 this.corridorCarves[index] = sample.isCorridor ? sample.carveStrength : 0;
                 this.floorColorIndices[index] = Math.min(sample.floorColorIndex, 255);
+                this.footprintDistances[index] = sample.footprintDistance;
 
                 const riseAcross =
                     heightField.elevationAt(localX + slopeReach, localZ) -
@@ -95,6 +98,7 @@ export class TerrainHeightMap {
         sample.carveStrength = this.interpolateWithWeights(this.carveStrengths, weights);
         sample.corridorCarve = this.interpolateWithWeights(this.corridorCarves, weights);
         sample.steepness = this.interpolateWithWeights(this.steepnesses, weights);
+        sample.footprintDistance = this.interpolateWithWeights(this.footprintDistances, weights);
 
         return sample;
     }
@@ -122,6 +126,10 @@ export class TerrainHeightMap {
         return this.floorColorIndices[pointIndex] ?? 0;
     }
 
+    footprintDistanceAtPoint(pointIndex: number): number {
+        return this.footprintDistances[pointIndex] ?? Infinity;
+    }
+
     createShaderTexture(): DataTexture {
         const channels = new Uint16Array(this.elevations.length * 4);
 
@@ -131,6 +139,7 @@ export class TerrainHeightMap {
             channels[channelStart] = DataUtils.toHalfFloat(this.elevations[index] ?? 0);
             channels[channelStart + 1] = DataUtils.toHalfFloat(this.corridorCarves[index] ?? 0);
             channels[channelStart + 2] = DataUtils.toHalfFloat(this.steepnesses[index] ?? 0);
+            channels[channelStart + 3] = DataUtils.toHalfFloat(this.footprintDistances[index] ?? 0);
         }
 
         const texture = new DataTexture(
@@ -152,7 +161,10 @@ export class TerrainHeightMap {
     }
 
     private interpolate(values: Float32Array, localX: number, localZ: number): number {
-        return this.interpolateWithWeights(values, this.computeInterpolationWeights(localX, localZ));
+        return this.interpolateWithWeights(
+            values,
+            this.computeInterpolationWeights(localX, localZ)
+        );
     }
 
     private computeInterpolationWeights(localX: number, localZ: number): IInterpolationWeights {
@@ -204,8 +216,9 @@ export interface IHeightMapSample {
     carveStrength: number;
     corridorCarve: number;
     steepness: number;
+    footprintDistance: number;
 }
 
 export function createHeightMapSample(): IHeightMapSample {
-    return { elevation: 0, carveStrength: 0, corridorCarve: 0, steepness: 0 };
+    return { elevation: 0, carveStrength: 0, corridorCarve: 0, steepness: 0, footprintDistance: 0 };
 }

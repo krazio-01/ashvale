@@ -1,5 +1,3 @@
-import { pair } from "@/lib/helpers";
-
 export const WORLD = {
     gravity: -22,
     fixedTimestep: 1 / 60,
@@ -11,16 +9,10 @@ export const TERRAIN = {
     targetCellSize: 4,
     minimumResolution: 64,
     maximumResolution: 256,
-    playMargin: 30,
-    transition: 90,
-    spread: 160,
     pathLevel: 0,
     bankWidth: 12,
     corridorDrop: 0.4,
     macroSlopeGrainWavelengths: 4,
-    wildReliefScale: 0.035,
-    peakShaping: 1.5,
-    colorNoiseStrength: 0.08,
     carveColorSharpness: 0.75,
     peakColorSharpness: 0.7,
     bucketSize: 220,
@@ -30,18 +22,19 @@ export const LANDFORM = {
     floorReliefHeight: 0.5,
     floorReliefScale: 0.028,
     minimumOpennessRatio: 0.5,
-    wildRampRatio: 0.7,
-    mountainRampStartRatio: 0.5,
-    mountainRampEndRatio: 1.6,
-    terraceBandCount: 6,
-    terraceOnsetRatio: 0.5,
-    terraceRiserWidth: 0.13,
-    terraceStrength: 0.85,
-    vistaGapScale: 1.6,
-    vistaGapDepth: 0.55,
-    vistaGapRange: pair(0.34, 0.6),
-    rampartStartRatio: 0.72,
-    rampartHeightRatio: 1,
+    openGroundRampRatio: 0.7,
+    openGroundReliefHeight: 1.6,
+    openGroundReliefScale: 0.05,
+};
+
+export const WORLD_EDGE = {
+    groundApron: 24,
+    lipWidth: 20,
+    dropDepth: 70,
+    dropCurve: 2.6,
+    barrierLipRatio: 0.3,
+    barrierHeight: 30,
+    barrierSink: 6,
 };
 
 export const TERRAIN_DETAIL = {

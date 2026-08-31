@@ -14,7 +14,7 @@ import {
     type IRegionFootprint,
 } from "@/world/props/CorridorPropPlacement";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
-import { TerrainHeightField } from "@/world/terrain/TerrainHeightField";
+import { TerrainHeightField, WALKABLE_REACH } from "@/world/terrain/TerrainHeightField";
 import { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainHeightField";
 import type { World } from "@/world/World";
@@ -22,8 +22,8 @@ import type { ChapterResponse } from "@/responses/realm/RealmResponse";
 import type { IChapterRegion, IRegionPathway } from "@/types/realm";
 import type { IThemeManifest } from "@/types/theme";
 import { SPAWNING } from "@/constants/characters";
-import { TERRAIN } from "@/constants/world";
 import { FULL_TURN, hashString } from "@/lib/helpers";
+import { WalkableEdgeBarrier } from "./terrain/WalkableEdgeBarrier";
 
 const EMPTY_ENTRANCES: IRegionEntrance[] = [];
 
@@ -197,30 +197,27 @@ function spawnTerrain(
         centerZ
     );
 
-    const playRadius = furthestDistance + TERRAIN.playMargin;
+    const mappedRadius = furthestDistance + WALKABLE_REACH;
     const center: Vector3Tuple = [centerX, 0, centerZ];
     const seed = hashString(`${chapter.title}-${chapter.chapterIndex}`);
 
-    const heightField = new TerrainHeightField(
-        manifest.environment.terrain,
-        playRadius,
-        regionFloors,
-        corridorPaths,
-        seed
-    );
-
-    const heightMap = new TerrainHeightMap(
-        heightField,
-        playRadius + TERRAIN.transition + TERRAIN.spread
-    );
+    const heightField = new TerrainHeightField(regionFloors, corridorPaths, seed);
+    const heightMap = new TerrainHeightMap(heightField, mappedRadius);
 
     world.addEntity(new TerrainMesh(world.context, center, heightMap, seed));
+    world.addEntity(new WalkableEdgeBarrier(world.context, center, heightMap));
     world.addEntity(new GrassField(world.context, camera, center, heightMap));
 
-    const vegetationBuckets = scatterVegetation(manifest, heightMap, playRadius, center, seed + 3);
-    for (let i = 0, len = vegetationBuckets.length; i < len; i++) {
+    const vegetationBuckets = scatterVegetation(
+        manifest,
+        heightMap,
+        mappedRadius,
+        center,
+        seed + 3
+    );
+
+    for (let i = 0, len = vegetationBuckets.length; i < len; i++)
         world.addEntity(new PropBatch(`wild-${i}`, world.context, vegetationBuckets[i]));
-    }
 
     const corridorGroups = placeCorridorProps(
         manifest,
