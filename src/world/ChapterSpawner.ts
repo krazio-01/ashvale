@@ -68,7 +68,13 @@ function spawnRegionEntities(
             new PropBatch(
                 region.regionId,
                 world.context,
-                placeRegionProps(region, manifest, terrain.groundHeightAt, entrances)
+                placeRegionProps(
+                    region,
+                    manifest,
+                    terrain.groundHeightAt,
+                    terrain.groundSteepnessAt,
+                    entrances
+                )
             )
         );
 
@@ -243,6 +249,8 @@ function spawnTerrain(
     return {
         groundHeightAt: (worldX, worldZ) =>
             heightMap.elevationAt(worldX - centerX, worldZ - centerZ),
+        groundSteepnessAt: (worldX, worldZ) =>
+            heightMap.steepnessAt(worldX - centerX, worldZ - centerZ),
     };
 }
 
@@ -379,6 +387,7 @@ interface ICorridorGeometry {
 
 interface ITerrainContext {
     groundHeightAt: GroundHeightLookup;
+    groundSteepnessAt: GroundHeightLookup;
 }
 
 type GroundHeightLookup = (worldX: number, worldZ: number) => number;

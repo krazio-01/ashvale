@@ -6,8 +6,14 @@ import {
 } from "@/world/terrain/TerrainHeightMap";
 import type { Vector3Tuple } from "three";
 import { PropGroupCollector } from "@/world/props/PropGroups";
-import { pickWeightedSpecies } from "@/world/props/PropPlacementUtils";
-import { clamp, createSeededRandom, pickRandomSubset, scaleBetween, FULL_TURN } from "@/lib/helpers";
+import { pickWeightedSpecies, hasClearFootprint } from "@/world/props/PropPlacementUtils";
+import {
+    clamp,
+    createSeededRandom,
+    pickRandomSubset,
+    scaleBetween,
+    FULL_TURN,
+} from "@/lib/helpers";
 import { CORRIDOR_PROPS, VEGETATION } from "@/constants/placement";
 
 export function placeCorridorProps(
@@ -124,7 +130,15 @@ function placeSingleProp(anchor: IAnchorSpot, options: IClusterOptions): void {
     const prop = pickWeightedSpecies(species, nextRandom);
     if (!prop) return;
 
-    const spot = findOpenSpot(anchor, heightMap, expandedRegions, nextRandom, heightSample);
+    const clearanceRadius = prop.footprintRadius * prop.scaleRange[1];
+    const spot = findOpenSpot(
+        anchor,
+        heightMap,
+        expandedRegions,
+        nextRandom,
+        heightSample,
+        clearanceRadius
+    );
     if (!spot) return;
 
     const scaleBase = CORRIDOR_PROPS.scaleBoost[0];
@@ -144,12 +158,17 @@ function placeSingleProp(anchor: IAnchorSpot, options: IClusterOptions): void {
     });
 }
 
+const rimSample = createHeightMapSample();
+
+/* rim points use a separate scratch sample so this doesn't clobber heightSample, which
+   still needs to hold the final accepted spot's own reading for placement */
 function findOpenSpot(
     anchor: IAnchorSpot,
     heightMap: TerrainHeightMap,
     expandedRegions: IExpandedRegionFootprint[],
     nextRandom: () => number,
-    heightSample: IHeightMapSample
+    heightSample: IHeightMapSample,
+    clearanceRadius: number
 ): IAnchorSpot | null {
     const { placementAttempts, clusterRadius, carveRejectThreshold, slopeLimit } = CORRIDOR_PROPS;
 
@@ -164,7 +183,13 @@ function findOpenSpot(
 
         heightMap.sampleAt(localX, localZ, heightSample);
         if (heightSample.carveStrength > carveRejectThreshold) continue;
-        if (heightSample.steepness > slopeLimit) continue;
+
+        const steepnessAt = (x: number, z: number): number => {
+            heightMap.sampleAt(x, z, rimSample);
+            return rimSample.steepness;
+        };
+
+        if (!hasClearFootprint(localX, localZ, clearanceRadius, steepnessAt, slopeLimit)) continue;
 
         return { localX, localZ };
     }
@@ -187,8 +212,6 @@ function isInsideAnyRegion(
 
     return false;
 }
-
-// -- INTERFACES --
 
 export interface ICorridorSpan {
     fromX: number;

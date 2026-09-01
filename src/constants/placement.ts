@@ -93,6 +93,7 @@ export const PROP_PLACEMENT = {
     clearanceRelaxationSteps: [1, 0.6, 0.35],
     separationGap: 1,
     placementAttempts: 10,
+    slopeLimit: 0.9,
 };
 
 export const CORRIDOR_PROPS = {
