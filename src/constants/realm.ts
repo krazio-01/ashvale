@@ -33,10 +33,15 @@ export const REGION_DESIGN = {
 export const ROUTE_DESIGN = {
     sideRoomCount: 2,
     minimumRouteRegions: 3,
-    maxTurnAngle: Math.PI / 3,
+    minTurnAngle: Math.PI / 4,
+    maxTurnAngle: Math.PI * 0.62,
     placementAttempts: 12,
     spacingGrowthPerAttempt: 0.25,
     corridorClearance: 5,
+    terraceStepHeight: 9,
+    terraceLevelRange: [-2, 2],
+    terraceLevelSteps: [-2, -1, 1, 2],
+    sideRoomLevelDrop: 1,
 };
 
 export const CORRIDOR_DESIGN = {
