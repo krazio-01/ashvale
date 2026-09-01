@@ -16,16 +16,17 @@ import {
     FULL_TURN,
 } from "@/lib/helpers";
 import { PropGroupCollector } from "@/world/props/PropGroups";
-import { pickWeightedSpecies } from "@/world/props/PropPlacementUtils";
+import { hasClearFootprint, pickWeightedSpecies } from "@/world/props/PropPlacementUtils";
 
 export function placeRegionProps(
     region: IChapterRegion,
     manifest: IThemeManifest,
     groundHeightAt: GroundHeightLookup,
+    groundSteepnessAt: GroundHeightLookup,
     entrances: IRegionEntrance[]
 ): IPropGroup[] {
     const nextRandom = createSeededRandom(hashString(region.regionId));
-    const bounds = resolvePlacementBounds(region, entrances);
+    const bounds = resolvePlacementBounds(region, entrances, groundSteepnessAt);
     const furnishing = resolveFurnishingBudget(region, manifest);
 
     const landmarkSpecies: IThemeProp[] = [];
@@ -93,7 +94,8 @@ export function placeRegionProps(
 
 function resolvePlacementBounds(
     region: IChapterRegion,
-    entrances: IRegionEntrance[]
+    entrances: IRegionEntrance[],
+    groundSteepnessAt: GroundHeightLookup
 ): IPlacementBounds {
     const [width, depth] = region.floorSize;
     const halfWidth = width / 2;
@@ -107,6 +109,7 @@ function resolvePlacementBounds(
         halfDepth,
         combatArenaRadius: shortestSpan * PROP_PLACEMENT.combatArenaRatio,
         clusterRadius: shortestSpan * PROP_PLACEMENT.clusterRadiusRatio,
+        groundSteepnessAt,
         entranceMouths: entrances.map((entrance) =>
             resolveEntranceMouth(entrance, halfWidth, halfDepth)
         ),
@@ -328,6 +331,20 @@ function findOpenSpot(
             if (!isSpotOpen(candidate, arenaClearanceSquared, mouthClearances)) continue;
             if (isSpotAcceptable && !isSpotAcceptable(candidate)) continue;
 
+            if (!isSpotOpen(candidate, arenaClearanceSquared, mouthClearances)) continue;
+            if (isSpotAcceptable && !isSpotAcceptable(candidate)) continue;
+
+            if (
+                !hasClearFootprint(
+                    bounds.originX + candidate.offsetX,
+                    bounds.originZ + candidate.offsetZ,
+                    footprintRadius,
+                    bounds.groundSteepnessAt,
+                    PROP_PLACEMENT.slopeLimit
+                )
+            )
+                continue;
+
             return candidate;
         }
     }
@@ -452,6 +469,7 @@ interface IPlacementBounds {
     halfDepth: number;
     combatArenaRadius: number;
     clusterRadius: number;
+    groundSteepnessAt: GroundHeightLookup;
     entranceMouths: IEntranceMouth[];
 }
 

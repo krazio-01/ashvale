@@ -56,6 +56,19 @@ export const VEGETATION = {
     groundBite: 0.02,
 };
 
+export const LEDGE = {
+    stepRiseOfJumpApex: 0.7,
+    maxAlongCorridorRatio: 0.3,
+    safeRiseOfJumpApex: 0.95,
+    rocksPerStep: 3,
+    rockWidthOfCorridorHalfWidth: 0.22,
+    rockWidthJitter: 0.45,
+    lateralSpreadOfCorridorHalfWidth: 0.75,
+    alongSpreadOfRockWidth: 1.6,
+    riseJitter: 0.18,
+    buriedDepth: 1.5,
+};
+
 export const PROP_PLACEMENT = {
     landmarkDensity: 0.00028,
     structureDensity: 0.0012,
@@ -80,6 +93,7 @@ export const PROP_PLACEMENT = {
     clearanceRelaxationSteps: [1, 0.6, 0.35],
     separationGap: 1,
     placementAttempts: 10,
+    slopeLimit: 0.9,
 };
 
 export const CORRIDOR_PROPS = {

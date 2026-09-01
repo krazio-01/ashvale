@@ -10,6 +10,7 @@ export class TerrainHeightField {
     private readonly undulationNoise: FractalNoise;
     private readonly elevationRampDistance: number;
     private readonly scratchSample = createTerrainSample();
+    private readonly scratchGround = createGroundAccumulator();
 
     constructor(regionFloors: IRegionFloor[], corridorPaths: ICorridorPath[], seed: number) {
         this.regionFloors = regionFloors;
@@ -20,62 +21,46 @@ export class TerrainHeightField {
     }
 
     sampleInto(localX: number, localZ: number, sample: ITerrainSample): ITerrainSample {
-        const bankWidth = TERRAIN.bankWidth;
-
-        let dominantCarveWeight = 0;
-        let weightedFloorElevation = 0;
-        let totalCarveWeight = 0;
-        let distanceToCarvedGround = Infinity;
+        const ground = resetGroundAccumulator(this.scratchGround);
 
         sample.floorColorIndex = 0;
         sample.isCorridor = false;
 
         for (const region of this.regionFloors) {
-            const edgeDistance = distanceOutsideRegionFloor(localX, localZ, region);
-            if (edgeDistance < distanceToCarvedGround) distanceToCarvedGround = edgeDistance;
-            if (edgeDistance >= bankWidth) continue;
+            const carveWeight = accumulateFeature(
+                ground,
+                region.floorElevation,
+                distanceOutsideRegionFloor(localX, localZ, region),
+                false
+            );
 
-            const carveWeight = 1 - smoothstep(0, bankWidth, edgeDistance);
-            if (carveWeight <= 0) continue;
-
-            weightedFloorElevation += region.floorElevation * carveWeight;
-            totalCarveWeight += carveWeight;
-
-            if (carveWeight > dominantCarveWeight) {
-                dominantCarveWeight = carveWeight;
+            if (carveWeight > ground.dominantCarveWeight) {
+                ground.dominantCarveWeight = carveWeight;
                 sample.floorColorIndex = region.floorColorIndex;
+                sample.isCorridor = false;
             }
         }
 
         for (const corridor of this.preparedCorridors) {
-            const edgeDistance = distanceOutsideCorridor(localX, localZ, corridor);
-            if (edgeDistance < distanceToCarvedGround) distanceToCarvedGround = edgeDistance;
-            if (edgeDistance >= bankWidth) continue;
+            const travelRatio = corridorTravelRatioAt(localX, localZ, corridor);
+            const carveWeight = accumulateFeature(
+                ground,
+                corridorElevationAt(corridor, travelRatio) - TERRAIN.corridorDrop,
+                distanceOutsideCorridorAt(localX, localZ, corridor, travelRatio),
+                true
+            );
 
-            const carveWeight = 1 - smoothstep(0, bankWidth, edgeDistance);
-            if (carveWeight <= 0) continue;
-
-            weightedFloorElevation +=
-                (corridor.floorElevation - TERRAIN.corridorDrop) * carveWeight;
-            totalCarveWeight += carveWeight;
-
-            if (carveWeight > dominantCarveWeight) {
-                dominantCarveWeight = carveWeight;
+            if (carveWeight > ground.dominantCarveWeight) {
+                ground.dominantCarveWeight = carveWeight;
                 sample.isCorridor = true;
             }
         }
 
-        sample.carveStrength = dominantCarveWeight;
-        sample.footprintDistance = distanceToCarvedGround;
+        sample.carveStrength = ground.dominantCarveWeight;
+        sample.footprintDistance = ground.nearestEdgeDistance;
         sample.elevation =
-            this.resolveElevationAt(
-                localX,
-                localZ,
-                distanceToCarvedGround,
-                weightedFloorElevation,
-                totalCarveWeight,
-                dominantCarveWeight
-            ) + edgeDropAt(distanceToCarvedGround);
+            this.resolveElevationAt(localX, localZ, ground) +
+            edgeDropAt(ground.nearestEdgeDistance);
 
         return sample;
     }
@@ -84,27 +69,19 @@ export class TerrainHeightField {
         return this.sampleInto(localX, localZ, this.scratchSample).elevation;
     }
 
-    private resolveElevationAt(
-        localX: number,
-        localZ: number,
-        distanceToCarvedGround: number,
-        weightedFloorElevation: number,
-        totalCarveWeight: number,
-        dominantCarveWeight: number
-    ): number {
-        if (totalCarveWeight <= 0)
-            return this.openGroundElevationAt(localX, localZ, distanceToCarvedGround);
+    private resolveElevationAt(localX: number, localZ: number, ground: IGroundAccumulator): number {
+        if (ground.totalCarveWeight <= 0) return this.openGroundElevationAt(localX, localZ, ground);
 
         const carvedFloorElevation =
-            weightedFloorElevation / totalCarveWeight +
-            this.floorUndulationAt(localX, localZ) * dominantCarveWeight;
+            ground.weightedFloorElevation / ground.totalCarveWeight +
+            this.floorUndulationAt(localX, localZ) * ground.dominantCarveWeight;
 
-        if (dominantCarveWeight >= 1) return carvedFloorElevation;
+        if (ground.dominantCarveWeight >= 1) return carvedFloorElevation;
 
         return lerp(
-            this.openGroundElevationAt(localX, localZ, distanceToCarvedGround),
+            this.openGroundElevationAt(localX, localZ, ground),
             carvedFloorElevation,
-            dominantCarveWeight
+            ground.dominantCarveWeight
         );
     }
 
@@ -119,15 +96,24 @@ export class TerrainHeightField {
         return (undulationSample - 0.5) * 2 * LANDFORM.floorReliefHeight;
     }
 
+    /* the boundary is only forced hard when a corridor is genuinely the nearest thing —
+       that is the one obstacle worth protecting. Region-vs-region open ground, where
+       nothing deliberate is happening, blends smoothly so no unintended cliff appears */
     private openGroundElevationAt(
         localX: number,
         localZ: number,
-        distanceToCarvedGround: number
+        ground: IGroundAccumulator
     ): number {
+        const surroundingElevation = ground.nearestFeatureIsCorridor
+            ? ground.nearestFloorElevation
+            : ground.totalInfluenceWeight > 0
+              ? ground.influenceWeightedElevation / ground.totalInfluenceWeight
+              : ground.nearestFloorElevation;
+
         const elevationRampRatio = smoothstep(
             0,
             this.elevationRampDistance,
-            distanceToCarvedGround
+            ground.nearestEdgeDistance
         );
 
         const gentleRollSample = this.undulationNoise.sample(
@@ -148,7 +134,7 @@ export class TerrainHeightField {
                 0.5) *
             TERRAIN_DETAIL.grainNoiseHeight;
 
-        return TERRAIN.pathLevel + gentleRoll * elevationRampRatio + fineDetailOffset;
+        return surroundingElevation + gentleRoll * elevationRampRatio + fineDetailOffset;
     }
 }
 
@@ -169,6 +155,57 @@ function edgeDropAt(footprintDistance: number): number {
     if (rolloverRatio <= 0) return 0;
 
     return -Math.pow(rolloverRatio, WORLD_EDGE.dropCurve) * WORLD_EDGE.dropDepth;
+}
+
+function createGroundAccumulator(): IGroundAccumulator {
+    return {
+        dominantCarveWeight: 0,
+        weightedFloorElevation: 0,
+        totalCarveWeight: 0,
+        nearestEdgeDistance: Infinity,
+        nearestFloorElevation: TERRAIN.pathLevel,
+        nearestFeatureIsCorridor: false,
+        influenceWeightedElevation: 0,
+        totalInfluenceWeight: 0,
+    };
+}
+
+function resetGroundAccumulator(ground: IGroundAccumulator): IGroundAccumulator {
+    ground.dominantCarveWeight = 0;
+    ground.weightedFloorElevation = 0;
+    ground.totalCarveWeight = 0;
+    ground.nearestEdgeDistance = Infinity;
+    ground.nearestFloorElevation = TERRAIN.pathLevel;
+    ground.nearestFeatureIsCorridor = false;
+    ground.influenceWeightedElevation = 0;
+    ground.totalInfluenceWeight = 0;
+
+    return ground;
+}
+
+function accumulateFeature(
+    ground: IGroundAccumulator,
+    featureElevation: number,
+    edgeDistance: number,
+    isCorridor: boolean
+): number {
+    if (edgeDistance < ground.nearestEdgeDistance) {
+        ground.nearestEdgeDistance = edgeDistance;
+        ground.nearestFloorElevation = featureElevation;
+        ground.nearestFeatureIsCorridor = isCorridor;
+    }
+
+    const influenceWeight = 1 - smoothstep(0, WALKABLE_REACH, edgeDistance);
+    ground.influenceWeightedElevation += featureElevation * influenceWeight;
+    ground.totalInfluenceWeight += influenceWeight;
+
+    const carveWeight = 1 - smoothstep(0, TERRAIN.bankWidth, edgeDistance);
+    if (carveWeight <= 0) return 0;
+
+    ground.weightedFloorElevation += featureElevation * carveWeight;
+    ground.totalCarveWeight += carveWeight;
+
+    return carveWeight;
 }
 
 function measureNeighbourSpacing(regionFloors: IRegionFloor[]): number {
@@ -215,16 +252,46 @@ function measureNeighbourSpacing(regionFloors: IRegionFloor[]): number {
 function prepareCorridor(path: ICorridorPath): IPreparedCorridor {
     const spanX = path.toX - path.fromX;
     const spanZ = path.toZ - path.fromZ;
+    const spanLengthSquared = spanX * spanX + spanZ * spanZ;
 
     return {
         fromX: path.fromX,
         fromZ: path.fromZ,
         spanX,
         spanZ,
-        spanLengthSquared: spanX * spanX + spanZ * spanZ,
+        spanLengthSquared,
+        spanLength: Math.sqrt(spanLengthSquared),
         halfWidth: path.halfWidth,
-        floorElevation: path.floorElevation,
+        fromElevation: path.fromElevation,
+        toElevation: path.toElevation,
+        climbStyle: path.climbStyle,
     };
+}
+
+/* both terrace levels stay flat and the whole rise happens across one short face,
+   which is too steep to walk and therefore has to be climbed */
+export function corridorStepDistanceOf(spanLength: number): number {
+    return spanLength * TERRAIN.corridorStepRatio;
+}
+
+function corridorElevationAt(corridor: IPreparedCorridor, travelRatio: number): number {
+    if (corridor.fromElevation === corridor.toElevation) return corridor.fromElevation;
+
+    if (corridor.climbStyle === CorridorClimbStyle.Ramp)
+        return lerp(corridor.fromElevation, corridor.toElevation, travelRatio);
+
+    const stepDistance = corridorStepDistanceOf(corridor.spanLength);
+    const halfFace = TERRAIN.corridorStepFaceWidth / 2;
+
+    return lerp(
+        corridor.fromElevation,
+        corridor.toElevation,
+        smoothstep(
+            stepDistance - halfFace,
+            stepDistance + halfFace,
+            travelRatio * corridor.spanLength
+        )
+    );
 }
 
 function distanceOutsideRegionFloor(x: number, z: number, region: IRegionFloor): number {
@@ -234,22 +301,27 @@ function distanceOutsideRegionFloor(x: number, z: number, region: IRegionFloor):
     return Math.sqrt(outsideX * outsideX + outsideZ * outsideZ);
 }
 
-function distanceOutsideCorridor(x: number, z: number, corridor: IPreparedCorridor): number {
-    const offsetX = x - corridor.fromX;
-    const offsetZ = z - corridor.fromZ;
+/* how far along the corridor the closest point lies, which is also how far the
+   ramp between its two end elevations has climbed */
+function corridorTravelRatioAt(x: number, z: number, corridor: IPreparedCorridor): number {
+    if (corridor.spanLengthSquared === 0) return 0;
 
-    const projection =
-        corridor.spanLengthSquared === 0
-            ? 0
-            : clamp(
-                  (offsetX * corridor.spanX + offsetZ * corridor.spanZ) /
-                      corridor.spanLengthSquared,
-                  0,
-                  1
-              );
+    return clamp(
+        ((x - corridor.fromX) * corridor.spanX + (z - corridor.fromZ) * corridor.spanZ) /
+            corridor.spanLengthSquared,
+        0,
+        1
+    );
+}
 
-    const gapX = offsetX - corridor.spanX * projection;
-    const gapZ = offsetZ - corridor.spanZ * projection;
+function distanceOutsideCorridorAt(
+    x: number,
+    z: number,
+    corridor: IPreparedCorridor,
+    travelRatio: number
+): number {
+    const gapX = x - corridor.fromX - corridor.spanX * travelRatio;
+    const gapZ = z - corridor.fromZ - corridor.spanZ * travelRatio;
 
     return Math.max(Math.sqrt(gapX * gapX + gapZ * gapZ) - corridor.halfWidth, 0);
 }
@@ -263,13 +335,25 @@ export interface IRegionFloor {
     floorColorIndex: number;
 }
 
+/* decided once per corridor and shared by both the terrain carve and the staircase
+   prop placement, so the two never disagree about which corridors get an obstacle */
+export enum CorridorClimbStyle {
+    Ramp = "ramp",
+    Straight = "straight",
+    Zigzag = "zigzag",
+    Hidden = "hidden",
+}
+
 export interface ICorridorPath {
     fromX: number;
     fromZ: number;
     toX: number;
     toZ: number;
     halfWidth: number;
-    floorElevation: number;
+    fromElevation: number;
+    toElevation: number;
+    climbStyle: CorridorClimbStyle;
+    lateralSeed: number;
 }
 
 export interface ITerrainSample {
@@ -286,6 +370,20 @@ interface IPreparedCorridor {
     spanX: number;
     spanZ: number;
     spanLengthSquared: number;
+    spanLength: number;
     halfWidth: number;
-    floorElevation: number;
+    fromElevation: number;
+    toElevation: number;
+    climbStyle: CorridorClimbStyle;
+}
+
+interface IGroundAccumulator {
+    dominantCarveWeight: number;
+    weightedFloorElevation: number;
+    totalCarveWeight: number;
+    nearestEdgeDistance: number;
+    nearestFloorElevation: number;
+    nearestFeatureIsCorridor: boolean;
+    influenceWeightedElevation: number;
+    totalInfluenceWeight: number;
 }

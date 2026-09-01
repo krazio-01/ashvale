@@ -98,9 +98,12 @@ function buildIslandGeometry(heightMap: TerrainHeightMap): IIslandGeometry {
             const pointIndex = row * pointsPerSide + column;
             if (heightMap.footprintDistanceAtPoint(pointIndex) > WALKABLE_REACH) continue;
 
+            const elevation = heightMap.elevationAtPoint(pointIndex);
+            if (!Number.isFinite(elevation)) continue;
+
             vertexIndexByPoint[pointIndex] = pointIndexValues.length;
             pointIndexValues.push(pointIndex);
-            positionValues.push(localX, heightMap.elevationAtPoint(pointIndex), localZ);
+            positionValues.push(localX, elevation, localZ);
         }
     }
 

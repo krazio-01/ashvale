@@ -219,12 +219,14 @@ function layoutRegionsAlongRoute(
     const route = [spawnRegion, ...regionsAscendingByFileCount.slice(sideRoomCount)];
 
     placeRouteRegions(route, nextRandom);
+    assignRouteElevations(route, nextRandom);
 
     return [...connectRouteRegions(route), ...placeSideRooms(sideRooms, route, nextRandom)];
 }
 
 function placeRouteRegions(route: IChapterRegion[], nextRandom: () => number): void {
     let heading = nextRandom() * FULL_TURN;
+    let turnDirection = nextRandom() < 0.5 ? 1 : -1;
 
     for (let index = 1; index < route.length; index++) {
         const previousRegion = route[index - 1];
@@ -235,9 +237,12 @@ function placeRouteRegions(route: IChapterRegion[], nextRandom: () => number): v
             currentRegion,
             previousRegion,
             heading,
+            turnDirection,
             route.slice(0, index - 1),
             nextRandom
         );
+
+        turnDirection = -turnDirection;
     }
 }
 
@@ -245,6 +250,7 @@ function placeNextRouteRegion(
     region: IChapterRegion,
     anchorRegion: IChapterRegion,
     heading: number,
+    turnDirection: number,
     regionsToAvoid: IChapterRegion[],
     nextRandom: () => number
 ): number {
@@ -254,15 +260,45 @@ function placeNextRouteRegion(
         resolveFootprintRadius(region);
 
     for (let attempt = 0; attempt < ROUTE_DESIGN.placementAttempts; attempt++) {
-        const candidateHeading = heading + (nextRandom() - 0.5) * 2 * ROUTE_DESIGN.maxTurnAngle;
+        const candidateHeading =
+            heading +
+            turnDirection *
+                scaleBetween(ROUTE_DESIGN.minTurnAngle, ROUTE_DESIGN.maxTurnAngle, nextRandom());
 
         region.worldPosition = resolveOffsetPosition(anchorRegion, candidateHeading, spacing);
-        if (isClearOfRegions(region, regionsToAvoid)) return candidateHeading;
+
+        if (
+            isClearOfRegions(region, regionsToAvoid) &&
+            isCorridorClear(anchorRegion, region, regionsToAvoid)
+        )
+            return candidateHeading;
     }
 
-    region.worldPosition = resolveOffsetPosition(anchorRegion, heading, spacing);
+    const fallbackHeading = heading + turnDirection * ROUTE_DESIGN.minTurnAngle;
+    region.worldPosition = resolveOffsetPosition(anchorRegion, fallbackHeading, spacing);
 
-    return heading;
+    return fallbackHeading;
+}
+
+function assignRouteElevations(route: IChapterRegion[], nextRandom: () => number): void {
+    const [lowestLevel, highestLevel] = ROUTE_DESIGN.terraceLevelRange;
+    const levelSteps = ROUTE_DESIGN.terraceLevelSteps;
+    let level = 0;
+
+    for (let index = 1; index < route.length; index++) {
+        const region = route[index];
+        if (!region) continue;
+
+        const step = levelSteps[Math.floor(nextRandom() * levelSteps.length)] ?? 1;
+        const steppedLevel = level + step;
+
+        level =
+            steppedLevel > (highestLevel ?? 0) || steppedLevel < (lowestLevel ?? 0)
+                ? level - step
+                : steppedLevel;
+
+        region.worldPosition[1] = level * ROUTE_DESIGN.terraceStepHeight;
+    }
 }
 
 function connectRouteRegions(route: IChapterRegion[]): IRegionPathway[] {
@@ -299,6 +335,10 @@ function placeSideRooms(
             placedRegions,
             nextRandom
         );
+
+        sideRoom.worldPosition[1] =
+            hostRegion.worldPosition[1] -
+            ROUTE_DESIGN.sideRoomLevelDrop * ROUTE_DESIGN.terraceStepHeight;
 
         placedRegions.push(sideRoom);
         pathways.push(buildPathway(hostRegion, sideRoom));
