@@ -14,7 +14,11 @@ import {
     type IRegionFootprint,
 } from "@/world/props/CorridorPropPlacement";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
-import { TerrainHeightField, WALKABLE_REACH } from "@/world/terrain/TerrainHeightField";
+import {
+    CorridorClimbStyle,
+    TerrainHeightField,
+    WALKABLE_REACH,
+} from "@/world/terrain/TerrainHeightField";
 import { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainHeightField";
 import type { World } from "@/world/World";
@@ -22,8 +26,10 @@ import type { ChapterResponse } from "@/responses/realm/RealmResponse";
 import type { IChapterRegion, IRegionPathway } from "@/types/realm";
 import type { IThemeManifest } from "@/types/theme";
 import { SPAWNING } from "@/constants/characters";
-import { FULL_TURN, hashString } from "@/lib/helpers";
+import { TERRAIN } from "@/constants/world";
+import { FULL_TURN, createSeededRandom, hashString } from "@/lib/helpers";
 import { WalkableEdgeBarrier } from "./terrain/WalkableEdgeBarrier";
+import { LedgePlatforms } from "./terrain/LedgePlatforms";
 
 const EMPTY_ENTRANCES: IRegionEntrance[] = [];
 
@@ -190,22 +196,24 @@ function spawnTerrain(
         centerX,
         centerZ
     );
+    const seed = hashString(`${chapter.title}-${chapter.chapterIndex}`);
     const { corridorPaths, corridorSpans } = buildCorridorGeometry(
         chapter.pathways,
         positionsByRegionId,
         centerX,
-        centerZ
+        centerZ,
+        createSeededRandom(seed + 17)
     );
 
     const mappedRadius = furthestDistance + WALKABLE_REACH;
     const center: Vector3Tuple = [centerX, 0, centerZ];
-    const seed = hashString(`${chapter.title}-${chapter.chapterIndex}`);
 
     const heightField = new TerrainHeightField(regionFloors, corridorPaths, seed);
     const heightMap = new TerrainHeightMap(heightField, mappedRadius);
 
     world.addEntity(new TerrainMesh(world.context, center, heightMap, seed));
     world.addEntity(new WalkableEdgeBarrier(world.context, center, heightMap));
+    world.addEntity(new LedgePlatforms(world.context, center, corridorPaths));
     world.addEntity(new GrassField(world.context, camera, center, heightMap));
 
     const vegetationBuckets = scatterVegetation(
@@ -302,7 +310,8 @@ function buildCorridorGeometry(
     pathways: IRegionPathway[],
     positionsByRegionId: Map<string, Vector3Tuple>,
     centerX: number,
-    centerZ: number
+    centerZ: number,
+    nextRandom: () => number
 ): ICorridorGeometry {
     const corridorPaths: ICorridorPath[] = [];
     const corridorSpans: ICorridorSpan[] = [];
@@ -328,11 +337,33 @@ function buildCorridorGeometry(
             toX,
             toZ,
             halfWidth,
-            floorElevation: (fromPosition[1] + toPosition[1]) / 2,
+            fromElevation: fromPosition[1],
+            toElevation: toPosition[1],
+            climbStyle: pickClimbStyle(nextRandom),
+            lateralSeed: nextRandom(),
         });
     }
 
     return { corridorPaths, corridorSpans };
+}
+
+function pickClimbStyle(nextRandom: () => number): CorridorClimbStyle {
+    const styles = [
+        CorridorClimbStyle.Ramp,
+        CorridorClimbStyle.Straight,
+        CorridorClimbStyle.Zigzag,
+        CorridorClimbStyle.Hidden,
+    ];
+
+    let remaining = nextRandom();
+
+    for (let i = 0; i < styles.length; i++) {
+        const weight = TERRAIN.climbStyleWeights[i] ?? 0;
+        if (remaining < weight) return styles[i] ?? CorridorClimbStyle.Ramp;
+        remaining -= weight;
+    }
+
+    return CorridorClimbStyle.Ramp;
 }
 
 interface IRegionGeometry {

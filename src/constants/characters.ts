@@ -2,8 +2,8 @@ import { pair, vec3 } from "@/lib/helpers";
 
 export const PLAYER = {
     speed: 7,
-    sprintSpeed: 35,
-    jumpForce: 16,
+    sprintSpeed: 17,
+    jumpForce: 11,
     height: 1.7,
     radius: 0.4,
     maxHealth: 100,
