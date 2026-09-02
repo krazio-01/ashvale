@@ -1,6 +1,7 @@
 import {
     BufferAttribute,
     Camera,
+    CanvasTexture,
     Color,
     DataTexture,
     DoubleSide,
@@ -21,9 +22,16 @@ import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import { GRASS } from "@/constants/placement";
 import { WORLD_EDGE } from "@/constants/world";
-import { shiftColorHsl, FULL_TURN } from "@/lib/helpers";
+import { FULL_TURN, shiftColorHsl } from "@/lib/helpers";
+import {
+    GROUND_MATERIAL_GLSL,
+    groundMaterialUniforms,
+    type IGroundMaterials,
+} from "@/world/terrain/GroundMaterials";
 
 const VERTEX_SHADER = /* glsl */ `
+    ${GROUND_MATERIAL_GLSL}
+
     uniform sampler2D terrainField;
     uniform vec2 fieldOrigin;
     uniform float fieldCellSize;
@@ -42,10 +50,10 @@ const VERTEX_SHADER = /* glsl */ `
     uniform float bladeCurvature;
     uniform float bladeYawJitter;
     uniform vec2 leanRange;
-
+    uniform float crushedHeightRatio;
+    uniform float crushedExtraLean;
     uniform vec2 steepGroundBand;
-    uniform vec2 carvedPathBand;
-    uniform float groundApron;
+    uniform vec2 worldEdgeBand;
 
     uniform vec2 windDirection;
     uniform float windHeading;
@@ -54,7 +62,6 @@ const VERTEX_SHADER = /* glsl */ `
     uniform float windSway;
     uniform float windFlutter;
 
-    uniform float patchNoiseScale;
     uniform float tuftToneWeight;
     uniform vec2 tintRange;
 
@@ -76,17 +83,11 @@ const VERTEX_SHADER = /* glsl */ `
         return fract((scattered.xxy + scattered.yxx) * scattered.zyx);
     }
 
-    float noiseAt(vec2 ground) {
-        vec2 cell = floor(ground);
-        vec2 withinCell = ground - cell;
-        vec2 weight = withinCell * withinCell * (3.0 - 2.0 * withinCell);
+    float withinGrowableGround(float steepness, float footprintDistance) {
+        float offSteepGround = 1.0 - smoothstep(steepGroundBand.x, steepGroundBand.y, steepness);
+        float insideWorldEdge = 1.0 - smoothstep(worldEdgeBand.x, worldEdgeBand.y, footprintDistance);
 
-        float nearLeft = randomTriple(vec3(cell, 101.0)).x;
-        float nearRight = randomTriple(vec3(cell + vec2(1.0, 0.0), 101.0)).x;
-        float farLeft = randomTriple(vec3(cell + vec2(0.0, 1.0), 101.0)).x;
-        float farRight = randomTriple(vec3(cell + vec2(1.0, 1.0), 101.0)).x;
-
-        return mix(mix(nearLeft, nearRight, weight.x), mix(farLeft, farRight, weight.x), weight.y);
+        return offSteepGround * insideWorldEdge;
     }
 
     vec2 fieldPointCoordAt(vec2 ground) {
@@ -102,14 +103,6 @@ const VERTEX_SHADER = /* glsl */ `
 
         return step(0.0, pointCoord.x) * step(pointCoord.x, lastPoint)
             * step(0.0, pointCoord.y) * step(pointCoord.y, lastPoint);
-    }
-
-    float openGroundAt(vec4 field) {
-        float offSteepGround = 1.0 - smoothstep(steepGroundBand.x, steepGroundBand.y, field.b);
-        float offCarvedPath = 1.0 - smoothstep(carvedPathBand.x, carvedPathBand.y, field.g);
-        float onWalkableGround = 1.0 - step(groundApron, field.a);
-
-        return offSteepGround * offCarvedPath * onWalkableGround;
     }
 
     vec2 bendAlongArc(float heightRatio, float bendAngle, float bladeLength) {
@@ -131,9 +124,10 @@ const VERTEX_SHADER = /* glsl */ `
         vec2 tuftGround = (tuftCell + tuftRandom.xy) * tuftSpacing;
         vec2 fieldPointCoord = fieldPointCoordAt(tuftGround);
         vec4 field = sampleTerrainField(fieldPointCoord);
-
-        float rootedHere = insideTerrainField(fieldPointCoord)
-            * step(tuftRandom.z, openGroundAt(field));
+        vec2 growth = groundGrowthOf(groundMaterialShareAt(tuftGround, trailWearAt(field.g)));
+        
+        float grassiness = growth.x * withinGrowableGround(field.b, field.a);
+        float rootedHere = insideTerrainField(fieldPointCoord) * step(tuftRandom.z, grassiness);
 
         float horizonFade = 1.0 - smoothstep(
             fadeStartDistance,
@@ -141,7 +135,7 @@ const VERTEX_SHADER = /* glsl */ `
             length(tuftGround - cameraGround)
         );
         float bladeLength = mix(bladeHeightRange.x, bladeHeightRange.y, bladeShape.x)
-            * rootedHere * horizonFade;
+            * rootedHere * horizonFade * mix(crushedHeightRatio, 1.0, grassiness);
 
         float yaw = bladeYaw + toneRandom.y * TAU + (bladeShape.y - 0.5) * bladeYawJitter;
         vec2 facingDirection = vec2(sin(yaw), cos(yaw));
@@ -153,7 +147,8 @@ const VERTEX_SHADER = /* glsl */ `
         float flutter = sin(windFlutterPhase + bladeMotion.y * TAU) * windFlutter * windWave;
         float bendAngle = mix(leanRange.x, leanRange.y, bladeShape.z)
             + windWave * windSway
-            + flutter;
+            + flutter
+            + (1.0 - grassiness) * crushedExtraLean;
 
         float bendYaw = windHeading + (bladeMotion.z - 0.5) * windBendSpread;
         vec2 bendDirection = vec2(sin(bendYaw), cos(bendYaw));
@@ -179,7 +174,7 @@ const VERTEX_SHADER = /* glsl */ `
             cross(acrossBlade, alongBlade) + acrossBlade * position.x * 2.0 * bladeCurvature
         );
 
-        vPatchTone = noiseAt(rootGround * patchNoiseScale);
+        vPatchTone = mix(growth.y, toneRandom.z, tuftToneWeight);
         vTint = mix(tintRange.x, tintRange.y, mix(vPatchTone, toneRandom.x, tuftToneWeight));
 
         gl_Position = projectionMatrix * modelViewMatrix * vec4(bladeWorld, 1.0);
@@ -236,7 +231,10 @@ export class GrassField extends Entity implements IWorldEntity {
         context: IWorldContext,
         camera: Camera,
         center: Vector3Tuple,
-        heightMap: TerrainHeightMap
+        heightMap: TerrainHeightMap,
+        groundSplat: CanvasTexture,
+        groundDetail: CanvasTexture,
+        materials: IGroundMaterials
     ) {
         super("grass-field");
 
@@ -267,6 +265,7 @@ export class GrassField extends Entity implements IWorldEntity {
             uniforms: {
                 ...this.frameUniforms,
                 ...terrainUniforms(this.fieldTexture, heightMap),
+                ...groundMaterialUniforms(groundSplat, groundDetail, materials),
                 ...bladeUniforms(),
                 ...paletteUniforms(context),
             },
@@ -456,13 +455,6 @@ function terrainUniforms(fieldTexture: DataTexture, heightMap: TerrainHeightMap)
         fieldOrigin: { value: new Vector2(heightMap.originX, heightMap.originZ) },
         fieldCellSize: { value: heightMap.cellSize },
         fieldPointsPerSide: { value: heightMap.pointsPerSide },
-        steepGroundBand: {
-            value: new Vector2(GRASS.steepGroundLimit * 0.65, GRASS.steepGroundLimit),
-        },
-        carvedPathBand: {
-            value: new Vector2(GRASS.carvedPathLimit * 0.3, GRASS.carvedPathLimit),
-        },
-        groundApron: { value: WORLD_EDGE.groundApron },
     };
 }
 
@@ -475,6 +467,15 @@ function bladeUniforms() {
         bladeCurvature: { value: GRASS.bladeCurvature },
         bladeYawJitter: { value: FULL_TURN / GRASS.bladesPerTuft },
         leanRange: { value: new Vector2(...GRASS.leanRange) },
+        crushedHeightRatio: { value: GRASS.growth.crushedHeightRatio },
+        crushedExtraLean: { value: GRASS.growth.crushedExtraLean },
+        steepGroundBand: { value: new Vector2(...GRASS.steepGroundBand) },
+        worldEdgeBand: {
+            value: new Vector2(
+                WORLD_EDGE.groundApron - GRASS.worldEdgeFadeWidth,
+                WORLD_EDGE.groundApron
+            ),
+        },
         windDirection: {
             value: new Vector2(Math.sin(GRASS.wind.heading), Math.cos(GRASS.wind.heading)),
         },
@@ -483,7 +484,6 @@ function bladeUniforms() {
         windWaveLength: { value: GRASS.wind.waveLength },
         windSway: { value: GRASS.wind.sway },
         windFlutter: { value: GRASS.wind.flutter },
-        patchNoiseScale: { value: GRASS.tone.patchNoiseScale },
         tuftToneWeight: { value: GRASS.tone.tuftToneWeight },
         tintRange: { value: new Vector2(...GRASS.tone.tintRange) },
     };
