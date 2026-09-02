@@ -106,3 +106,28 @@ export function spanBetween(fromX: number, fromZ: number, toX: number, toZ: numb
 
     return { spanX, spanZ, length: Math.hypot(spanX, spanZ) };
 }
+
+export function tintKeepingLightness(
+    hex: string,
+    tintHex: string,
+    strength: number,
+    lightnessShift: number
+): string {
+    const source = new Color(hex);
+    const sourceHsl = { h: 0, s: 0, l: 0 };
+    const tintedHsl = { h: 0, s: 0, l: 0 };
+
+    source.getHSL(sourceHsl);
+    source
+        .clone()
+        .lerp(new Color(tintHex), clamp(strength, 0, 1))
+        .getHSL(tintedHsl);
+
+    const tinted = new Color().setHSL(
+        tintedHsl.h,
+        tintedHsl.s,
+        clamp(sourceHsl.l + lightnessShift, 0, 1)
+    );
+
+    return `#${tinted.getHexString()}`;
+}
