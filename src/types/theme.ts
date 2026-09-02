@@ -52,10 +52,17 @@ export interface IThemeLighting {
     hemisphereIntensity: number;
 }
 
+export interface ISoilTint {
+    color: string;
+    strength: number;
+    lightnessShift: number;
+}
+
 export interface ITerrainProfile {
     wildColor: string;
     rockColor: string;
     peakColor: string;
+    soilColor: string;
     wildElevation: number;
     wildRelief: number;
     mountainHeight: number;
@@ -86,6 +93,7 @@ export interface ISeasonTint {
 export interface ISeasonProfile {
     season: ChapterSeason;
     ground: ISeasonColorShift;
+    groundTint: ISoilTint;
     skyTint: ISeasonTint;
     lightTint: ISeasonTint;
     keyIntensityScale: number;

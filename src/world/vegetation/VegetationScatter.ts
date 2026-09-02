@@ -9,6 +9,7 @@ import { PropGroupCollector } from "@/world/props/PropGroups";
 import { createSeededRandom, lerp, pickRandomSubset, scaleBetween, FULL_TURN } from "@/lib/helpers";
 import { VEGETATION } from "@/constants/placement";
 import { TERRAIN, WORLD_EDGE } from "@/constants/world";
+import { trailWearAt } from "../terrain/GroundMaterials";
 
 const BUCKET_KEY_OFFSET = 1 << 20;
 
@@ -93,8 +94,8 @@ function scatterBand(
         const localZ = Math.sin(angle) * radius;
 
         heightMap.sampleAt(localX, localZ, heightSample);
+        if (trailWearAt(heightSample.trailDistance) > VEGETATION.trailWearRejectThreshold) continue;
         if (heightSample.footprintDistance > WORLD_EDGE.groundApron) continue;
-        if (heightSample.carveStrength > VEGETATION.carveRejectThreshold) continue;
         if (heightSample.steepness > band.slopeLimit) continue;
 
         const scale =

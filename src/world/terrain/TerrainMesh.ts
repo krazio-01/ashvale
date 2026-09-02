@@ -7,7 +7,7 @@ import {
     Color,
     Mesh,
     MeshLambertMaterial,
-    RepeatWrapping,
+    type IUniform,
     type Vector3Tuple,
 } from "three";
 import { Entity } from "@/entities/Entity";
@@ -16,8 +16,13 @@ import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
 import { WALKABLE_REACH } from "@/world/terrain/TerrainHeightField";
 import { GROUND, TERRAIN, TERRAIN_DETAIL } from "@/constants/world";
-import { clamp, lerp, smoothstep } from "@/lib/helpers";
-import { FractalNoise } from "@/lib/noise";
+import { clamp, smoothstep } from "@/lib/helpers";
+import {
+    GROUND_MATERIAL_GLSL,
+    groundMaterialUniforms,
+    trailWearAt,
+    type IGroundMaterials,
+} from "@/world/terrain/GroundMaterials";
 
 export class TerrainMesh extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;
@@ -25,16 +30,22 @@ export class TerrainMesh extends Entity implements IWorldEntity {
     private readonly context: IWorldContext;
     private readonly geometry: BufferGeometry;
     private readonly material: MeshLambertMaterial;
+    private readonly groundSplat: CanvasTexture;
+    private readonly groundDetail: CanvasTexture;
     private readonly rigidBody: RigidBody;
 
     constructor(
         context: IWorldContext,
         center: Vector3Tuple,
         heightMap: TerrainHeightMap,
-        seed: number
+        groundSplat: CanvasTexture,
+        groundDetail: CanvasTexture,
+        materials: IGroundMaterials
     ) {
         super("terrain");
         this.context = context;
+        this.groundSplat = groundSplat;
+        this.groundDetail = groundDetail;
 
         const profile = context.environment.terrain;
         const island = buildIslandGeometry(heightMap);
@@ -42,18 +53,11 @@ export class TerrainMesh extends Entity implements IWorldEntity {
         this.geometry = island.geometry;
         this.geometry.computeVertexNormals();
 
-        paintVertexColors(
-            this.geometry,
-            heightMap,
-            island.pointIndices,
-            profile,
-            deriveGroundPalette(profile)
-        );
+        paintGroundOverrides(this.geometry, heightMap, island.pointIndices, profile);
 
-        this.material = new MeshLambertMaterial({
-            vertexColors: true,
-            map: buildGrainTexture(seed, heightMap.span),
-        });
+        this.material = new MeshLambertMaterial({ vertexColors: true });
+
+        applyGroundMaterialBlend(this.material, groundSplat, groundDetail, materials);
 
         this.sceneObject = new Mesh(this.geometry, this.material);
         this.sceneObject.position.set(center[0], 0, center[2]);
@@ -78,8 +82,9 @@ export class TerrainMesh extends Entity implements IWorldEntity {
     dispose(): void {
         this.context.physicsWorld.removeRigidBody(this.rigidBody);
         this.geometry.dispose();
-        this.material.map?.dispose();
         this.material.dispose();
+        this.groundSplat.dispose();
+        this.groundDetail.dispose();
     }
 }
 
@@ -132,52 +137,11 @@ function buildIslandGeometry(heightMap: TerrainHeightMap): IIslandGeometry {
     return { geometry, positions, indices, pointIndices: new Int32Array(pointIndexValues) };
 }
 
-function deriveGroundPalette(profile: ITerrainProfile): IGroundPalette {
-    const wild = new Color(profile.wildColor);
-    const wildHsl = { h: 0, s: 0, l: 0 };
-    wild.getHSL(wildHsl);
-
-    const clearedHue = (((wildHsl.h + GROUND.clearedHueShift) % 1) + 1) % 1;
-    const clearedSaturation = clamp(wildHsl.s * GROUND.clearedSaturationScale, 0, 1);
-    const clearedLightness = clamp(wildHsl.l + GROUND.clearedLightnessGain, 0, 1);
-    const floorsByDepth = new Map<number, Color>();
-
-    return {
-        wild,
-        rock: new Color(profile.rockColor),
-        peak: new Color(profile.peakColor),
-        route: new Color().setHSL(
-            clearedHue,
-            clamp(clearedSaturation * GROUND.routeSaturationScale, 0, 1),
-            clamp(clearedLightness + GROUND.routeLightnessGain, 0, 1)
-        ),
-        floorAtDepth(nestingDepth: number): Color {
-            const cached = floorsByDepth.get(nestingDepth);
-            if (cached) return cached;
-
-            const derived = new Color().setHSL(
-                clearedHue,
-                clearedSaturation,
-                clamp(
-                    clearedLightness - nestingDepth * GROUND.depthLightnessStep,
-                    GROUND.minimumFloorLightness,
-                    1
-                )
-            );
-
-            floorsByDepth.set(nestingDepth, derived);
-
-            return derived;
-        },
-    };
-}
-
-function paintVertexColors(
+function paintGroundOverrides(
     geometry: BufferGeometry,
     heightMap: TerrainHeightMap,
     pointIndices: Int32Array,
-    profile: ITerrainProfile,
-    palette: IGroundPalette
+    profile: ITerrainProfile
 ): void {
     const positions = geometry.getAttribute("position");
     const normals = geometry.getAttribute("normal");
@@ -185,165 +149,124 @@ function paintVertexColors(
     const normalArray = normals.array as Float32Array;
     const vertexCount = positions.count;
     const colors = new Float32Array(vertexCount * 3);
+    const groundBlends = new Float32Array(vertexCount * 3);
     const wildTop = TERRAIN.pathLevel + profile.wildElevation;
     const mountainSpan = Math.max(profile.mountainHeight, 1);
-
-    const wildRed = palette.wild.r;
-    const wildGreen = palette.wild.g;
-    const wildBlue = palette.wild.b;
-    const peakRed = palette.peak.r;
-    const peakGreen = palette.peak.g;
-    const peakBlue = palette.peak.b;
-    const rockRed = palette.rock.r;
-    const rockGreen = palette.rock.g;
-    const rockBlue = palette.rock.b;
+    const rock = new Color(profile.rockColor);
+    const peak = new Color(profile.peakColor);
+    const override: IOverrideTint = { red: 0, green: 0, blue: 0, strength: 0 };
 
     for (let index = 0; index < vertexCount; index += 1) {
         const offset = index * 3;
         const pointIndex = pointIndices[index] ?? 0;
-        const carveStrength = heightMap.carveStrengthAtPoint(pointIndex);
 
         const heightRatio = clamp(
             ((positionArray[offset + 1] ?? 0) - wildTop) / mountainSpan,
             0,
             1
         );
-        const peakBlend = Math.pow(heightRatio, TERRAIN.peakColorSharpness);
-
-        let red = wildRed + (peakRed - wildRed) * peakBlend;
-        let green = wildGreen + (peakGreen - wildGreen) * peakBlend;
-        let blue = wildBlue + (peakBlue - wildBlue) * peakBlend;
-
         const slope = 1 - Math.abs(normalArray[offset + 1] ?? 0);
-        const rockBlend = smoothstep(
-            TERRAIN_DETAIL.rockSlopeStart,
-            TERRAIN_DETAIL.rockSlopeEnd,
-            slope
+
+        override.strength = 0;
+        composeOverride(override, peak, Math.pow(heightRatio, TERRAIN.peakColorSharpness));
+        composeOverride(
+            override,
+            rock,
+            smoothstep(TERRAIN_DETAIL.rockSlopeStart, TERRAIN_DETAIL.rockSlopeEnd, slope)
         );
 
-        red += (rockRed - red) * rockBlend;
-        green += (rockGreen - green) * rockBlend;
-        blue += (rockBlue - blue) * rockBlend;
+        colors[offset] = override.red;
+        colors[offset + 1] = override.green;
+        colors[offset + 2] = override.blue;
 
-        if (carveStrength > 0) {
-            const flatColor = heightMap.isCorridorAtPoint(pointIndex)
-                ? palette.route
-                : palette.floorAtDepth(heightMap.floorColorIndexAtPoint(pointIndex));
-
-            const carveBlend = Math.pow(carveStrength, TERRAIN.carveColorSharpness);
-            red += (flatColor.r - red) * carveBlend;
-            green += (flatColor.g - green) * carveBlend;
-            blue += (flatColor.b - blue) * carveBlend;
-        }
-
-        const shade = 1 - slope * profile.slopeShade;
-
-        colors[offset] = red * shade;
-        colors[offset + 1] = green * shade;
-        colors[offset + 2] = blue * shade;
+        groundBlends[offset] = trailWearAt(heightMap.trailDistanceAtPoint(pointIndex));
+        groundBlends[offset + 1] = override.strength;
+        groundBlends[offset + 2] =
+            (1 - slope * profile.slopeShade) * nestingShadeAt(heightMap, pointIndex);
     }
 
     geometry.setAttribute("color", new BufferAttribute(colors, 3));
+    geometry.setAttribute("groundBlend", new BufferAttribute(groundBlends, 3));
 }
 
-function buildGrainTexture(seed: number, worldSize: number): CanvasTexture {
-    const grainNoise = new FractalNoise(seed + 4);
-    const blotchNoise = new FractalNoise(seed + 5);
-    const size = TERRAIN_DETAIL.textureSize;
-    const texelCount = size * size;
+function nestingShadeAt(heightMap: TerrainHeightMap, pointIndex: number): number {
+    if (heightMap.isCorridorAtPoint(pointIndex)) return 1;
 
-    const rawGrain = new Float32Array(texelCount);
-    const rawBlotch = new Float32Array(texelCount);
+    const carveStrength = heightMap.carveStrengthAtPoint(pointIndex);
+    if (carveStrength <= 0) return 1;
 
-    let smallestGrain = Infinity;
-    let largestGrain = -Infinity;
-    let smallestBlotch = Infinity;
-    let largestBlotch = -Infinity;
-
-    for (let pixelZ = 0; pixelZ < size; pixelZ += 1) {
-        for (let pixelX = 0; pixelX < size; pixelX += 1) {
-            const texel = pixelZ * size + pixelX;
-            const unitX = pixelX / size;
-            const unitZ = pixelZ / size;
-
-            const grain = grainNoise.sampleTileable(
-                unitX,
-                unitZ,
-                TERRAIN_DETAIL.grainTileCount,
-                3,
-                0.55
-            );
-            const mudClump = blotchNoise.sampleTileable(
-                unitX,
-                unitZ,
-                TERRAIN_DETAIL.blotchTileCount,
-                3,
-                0.55
-            );
-
-            rawGrain[texel] = grain;
-            rawBlotch[texel] = mudClump;
-
-            if (grain < smallestGrain) smallestGrain = grain;
-            if (grain > largestGrain) largestGrain = grain;
-            if (mudClump < smallestBlotch) smallestBlotch = mudClump;
-            if (mudClump > largestBlotch) largestBlotch = mudClump;
-        }
-    }
-
-    const grainNormalizer = buildRangeNormalizer(smallestGrain, largestGrain);
-    const blotchNormalizer = buildRangeNormalizer(smallestBlotch, largestBlotch);
-
-    const canvas = document.createElement("canvas");
-    canvas.width = size;
-    canvas.height = size;
-
-    const drawing = canvas.getContext("2d");
-    if (!drawing) return new CanvasTexture(canvas);
-
-    const pixels = drawing.createImageData(size, size);
-    const packedPixels = new Uint32Array(pixels.data.buffer);
-    const [mudRed, mudGreen, mudBlue] = TERRAIN_DETAIL.mudMultiplier;
-    const [dustRed, dustGreen, dustBlue] = TERRAIN_DETAIL.dustMultiplier;
-
-    for (let texel = 0; texel < texelCount; texel += 1) {
-        const dustAmount =
-            ((rawBlotch[texel] ?? 0) - blotchNormalizer.offset) * blotchNormalizer.scale +
-            blotchNormalizer.fallback;
-
-        const grit = lerp(
-            1 - TERRAIN_DETAIL.grainStrength,
-            1 + TERRAIN_DETAIL.grainStrength,
-            ((rawGrain[texel] ?? 0) - grainNormalizer.offset) * grainNormalizer.scale +
-                grainNormalizer.fallback
-        );
-
-        const red = Math.round(255 * clamp(lerp(mudRed, dustRed, dustAmount) * grit, 0, 1));
-        const green = Math.round(255 * clamp(lerp(mudGreen, dustGreen, dustAmount) * grit, 0, 1));
-        const blue = Math.round(255 * clamp(lerp(mudBlue, dustBlue, dustAmount) * grit, 0, 1));
-
-        packedPixels[texel] = 0xff000000 | (blue << 16) | (green << 8) | red;
-    }
-
-    drawing.putImageData(pixels, 0, 0);
-
-    const texture = new CanvasTexture(canvas);
-    texture.wrapS = RepeatWrapping;
-    texture.wrapT = RepeatWrapping;
-    texture.repeat.set(
-        worldSize / TERRAIN_DETAIL.worldRepeat,
-        worldSize / TERRAIN_DETAIL.worldRepeat
+    const depthShade = Math.max(
+        1 - heightMap.nestingDepthAtPoint(pointIndex) * GROUND.depthShadeStep,
+        GROUND.minimumDepthShade
     );
 
-    return texture;
+    return 1 - (1 - depthShade) * carveStrength;
 }
 
-function buildRangeNormalizer(smallest: number, largest: number): IRangeNormalizer {
-    const span = largest - smallest;
+function composeOverride(override: IOverrideTint, color: Color, ratio: number): void {
+    if (ratio <= 0) return;
 
-    if (span > 1e-6) return { offset: smallest, scale: 1 / span, fallback: 0 };
+    if (override.strength <= 0) {
+        override.red = color.r;
+        override.green = color.g;
+        override.blue = color.b;
+        override.strength = ratio;
 
-    return { offset: 0, scale: 0, fallback: 0.5 };
+        return;
+    }
+
+    override.red += (color.r - override.red) * ratio;
+    override.green += (color.g - override.green) * ratio;
+    override.blue += (color.b - override.blue) * ratio;
+    override.strength += (1 - override.strength) * ratio;
+}
+
+function applyGroundMaterialBlend(
+    material: MeshLambertMaterial,
+    groundSplat: CanvasTexture,
+    groundDetail: CanvasTexture,
+    materials: IGroundMaterials
+): void {
+    const blendUniforms: Record<string, IUniform> = groundMaterialUniforms(
+        groundSplat,
+        groundDetail,
+        materials
+    );
+
+    material.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, blendUniforms);
+
+        shader.vertexShader = shader.vertexShader
+            .replace(
+                "#include <common>",
+                `#include <common>
+                attribute vec3 groundBlend;
+                varying vec3 vGroundBlend;
+                varying vec2 vGroundPosition;`
+            )
+            .replace(
+                "#include <begin_vertex>",
+                `#include <begin_vertex>
+                vGroundBlend = groundBlend;
+                vGroundPosition = position.xz;`
+            );
+
+        shader.fragmentShader = shader.fragmentShader
+            .replace(
+                "#include <common>",
+                `#include <common>
+                varying vec3 vGroundBlend;
+                varying vec2 vGroundPosition;
+                ${GROUND_MATERIAL_GLSL}`
+            )
+            .replace(
+                "#include <color_fragment>",
+                `vec4 materialShare = groundMaterialShareAt(vGroundPosition, vGroundBlend.x);
+                vec3 groundColor = groundColorOf(materialShare, vGroundPosition);
+                diffuseColor.rgb *=
+                    mix(groundColor, vColor.rgb, vGroundBlend.y) * vGroundBlend.z;`
+            );
+    };
 }
 
 interface IIslandGeometry {
@@ -353,16 +276,9 @@ interface IIslandGeometry {
     pointIndices: Int32Array;
 }
 
-interface IGroundPalette {
-    wild: Color;
-    rock: Color;
-    peak: Color;
-    route: Color;
-    floorAtDepth(nestingDepth: number): Color;
-}
-
-interface IRangeNormalizer {
-    offset: number;
-    scale: number;
-    fallback: number;
+interface IOverrideTint {
+    red: number;
+    green: number;
+    blue: number;
+    strength: number;
 }

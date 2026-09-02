@@ -1,16 +1,20 @@
 import { pair } from "@/lib/helpers";
 
 export const GRASS = {
-    levelRadii: [15, 32, 68],
+    levelRadii: [15, 45, 150],
     tuftSpacing: 0.38,
-    bladesPerTuft: 3,
-    bladeHeightRange: pair(0.5, 1),
+    bladesPerTuft: 5,
+    bladeHeightRange: pair(0.32, 0.62),
     bladeWidth: 0.1,
     bladeTaperExponent: 0.6,
     bladeCurvature: 0.6,
-    leanRange: pair(0.15, 0.6),
-    steepGroundLimit: 0.9,
-    carvedPathLimit: 0.3,
+    leanRange: pair(0.35, 0.95),
+    steepGroundBand: pair(0.58, 0.9),
+    worldEdgeFadeWidth: 14,
+    growth: {
+        crushedHeightRatio: 0.4,
+        crushedExtraLean: 0.7,
+    },
     wind: {
         heading: 0.95,
         bendSpread: 1.1,
@@ -21,7 +25,6 @@ export const GRASS = {
         flutterSpeed: 5.5,
     },
     tone: {
-        patchNoiseScale: 0.03,
         tuftToneWeight: 0.45,
         tintRange: pair(0.82, 1.1),
         lushHueShift: 0.03,
@@ -52,7 +55,7 @@ export const VEGETATION = {
     grassSlopeLimit: 0.8,
     treeScaleBoost: pair(1.1, 1.7),
     edgePadding: 2,
-    carveRejectThreshold: 0.1,
+    trailWearRejectThreshold: 0.75,
     groundBite: 0.02,
 };
 

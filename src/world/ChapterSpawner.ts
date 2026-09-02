@@ -30,6 +30,11 @@ import { TERRAIN } from "@/constants/world";
 import { FULL_TURN, createSeededRandom, hashString } from "@/lib/helpers";
 import { WalkableEdgeBarrier } from "./terrain/WalkableEdgeBarrier";
 import { LedgePlatforms } from "./terrain/LedgePlatforms";
+import {
+    buildGroundDetailTexture,
+    buildGroundSplatTexture,
+    deriveGroundMaterials,
+} from "./terrain/GroundMaterials";
 
 const EMPTY_ENTRANCES: IRegionEntrance[] = [];
 
@@ -216,11 +221,33 @@ function spawnTerrain(
 
     const heightField = new TerrainHeightField(regionFloors, corridorPaths, seed);
     const heightMap = new TerrainHeightMap(heightField, mappedRadius);
+    const groundMaterials = deriveGroundMaterials(world.context.environment.terrain);
+    const groundSplat = buildGroundSplatTexture(seed);
+    const groundDetail = buildGroundDetailTexture(seed);
 
-    world.addEntity(new TerrainMesh(world.context, center, heightMap, seed));
+    world.addEntity(
+        new TerrainMesh(
+            world.context,
+            center,
+            heightMap,
+            groundSplat,
+            groundDetail,
+            groundMaterials
+        )
+    );
     world.addEntity(new WalkableEdgeBarrier(world.context, center, heightMap));
     world.addEntity(new LedgePlatforms(world.context, center, corridorPaths));
-    world.addEntity(new GrassField(world.context, camera, center, heightMap));
+    world.addEntity(
+        new GrassField(
+            world.context,
+            camera,
+            center,
+            heightMap,
+            groundSplat,
+            groundDetail,
+            groundMaterials
+        )
+    );
 
     const vegetationBuckets = scatterVegetation(
         manifest,
@@ -304,7 +331,7 @@ function buildRegionGeometry(
             halfWidth,
             halfDepth,
             floorElevation: y,
-            floorColorIndex: region.nestingDepth,
+            nestingDepth: region.nestingDepth,
         };
 
         const distance = Math.sqrt(localX * localX + localZ * localZ) + Math.max(width, depth) / 2;

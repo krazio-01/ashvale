@@ -20,7 +20,7 @@ import {
     SUMMER_SEASON,
     WINTER_SEASON,
 } from "@/themes/seasonProfiles";
-import { blendColors, clamp, shiftColorHsl } from "@/lib/helpers";
+import { blendColors, clamp, shiftColorHsl, tintKeepingLightness } from "@/lib/helpers";
 
 const BIOME_MANIFESTS: Record<ChapterTheme, IThemeManifest> = {
     [ChapterTheme.Woodland]: WOODLAND_MANIFEST,
@@ -68,6 +68,12 @@ function applySeasonToEnvironment(
             wildColor: shiftGround(environment.terrain.wildColor, season),
             rockColor: shiftGround(environment.terrain.rockColor, season),
             peakColor: shiftGround(environment.terrain.peakColor, season),
+            soilColor: tintKeepingLightness(
+                environment.terrain.soilColor,
+                season.groundTint.color,
+                season.groundTint.strength,
+                season.groundTint.lightnessShift
+            ),
         },
     };
 }
