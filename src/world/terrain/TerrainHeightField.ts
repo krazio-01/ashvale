@@ -1,4 +1,4 @@
-import { LANDFORM, TERRAIN, TERRAIN_DETAIL, WORLD_EDGE } from "@/constants/world";
+import { LANDFORM, TERRAIN, TERRAIN_DETAIL, TRAIL, WORLD_EDGE } from "@/constants/world";
 import { clamp, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
 
@@ -8,6 +8,7 @@ export class TerrainHeightField {
     private readonly regionFloors: IRegionFloor[];
     private readonly preparedCorridors: IPreparedCorridor[];
     private readonly undulationNoise: FractalNoise;
+    private readonly trailEdgeNoise: FractalNoise;
     private readonly elevationRampDistance: number;
     private readonly scratchSample = createTerrainSample();
     private readonly scratchGround = createGroundAccumulator();
@@ -16,6 +17,7 @@ export class TerrainHeightField {
         this.regionFloors = regionFloors;
         this.preparedCorridors = corridorPaths.map(prepareCorridor);
         this.undulationNoise = new FractalNoise(seed);
+        this.trailEdgeNoise = new FractalNoise(seed + 11);
         this.elevationRampDistance =
             measureNeighbourSpacing(regionFloors) * LANDFORM.openGroundRampRatio;
     }
@@ -23,8 +25,10 @@ export class TerrainHeightField {
     sampleInto(localX: number, localZ: number, sample: ITerrainSample): ITerrainSample {
         const ground = resetGroundAccumulator(this.scratchGround);
 
-        sample.floorColorIndex = 0;
+        sample.nestingDepth = 0;
         sample.isCorridor = false;
+
+        let nearestTrailCentreDistance = Infinity;
 
         for (const region of this.regionFloors) {
             const carveWeight = accumulateFeature(
@@ -36,17 +40,27 @@ export class TerrainHeightField {
 
             if (carveWeight > ground.dominantCarveWeight) {
                 ground.dominantCarveWeight = carveWeight;
-                sample.floorColorIndex = region.floorColorIndex;
+                sample.nestingDepth = region.nestingDepth;
                 sample.isCorridor = false;
             }
         }
 
         for (const corridor of this.preparedCorridors) {
             const travelRatio = corridorTravelRatioAt(localX, localZ, corridor);
+            const centreDistance = distanceToCorridorCentreAt(
+                localX,
+                localZ,
+                corridor,
+                travelRatio
+            );
+
+            if (centreDistance < nearestTrailCentreDistance)
+                nearestTrailCentreDistance = centreDistance;
+
             const carveWeight = accumulateFeature(
                 ground,
                 corridorElevationAt(corridor, travelRatio) - TERRAIN.corridorDrop,
-                distanceOutsideCorridorAt(localX, localZ, corridor, travelRatio),
+                Math.max(centreDistance - corridor.halfWidth, 0),
                 true
             );
 
@@ -58,6 +72,11 @@ export class TerrainHeightField {
 
         sample.carveStrength = ground.dominantCarveWeight;
         sample.footprintDistance = ground.nearestEdgeDistance;
+        sample.trailDistance = clamp(
+            nearestTrailCentreDistance + this.trailEdgeWobbleAt(localX, localZ),
+            0,
+            TRAIL.distanceLimit
+        );
         sample.elevation =
             this.resolveElevationAt(localX, localZ, ground) +
             edgeDropAt(ground.nearestEdgeDistance);
@@ -85,6 +104,17 @@ export class TerrainHeightField {
         );
     }
 
+    private trailEdgeWobbleAt(localX: number, localZ: number): number {
+        const wobbleSample = this.trailEdgeNoise.sample(
+            localX * TRAIL.edgeWobbleScale,
+            localZ * TRAIL.edgeWobbleScale,
+            2,
+            0.5
+        );
+
+        return (wobbleSample - 0.5) * 2 * TRAIL.edgeWobbleAmplitude;
+    }
+
     private floorUndulationAt(localX: number, localZ: number): number {
         const undulationSample = this.undulationNoise.sample(
             localX * LANDFORM.floorReliefScale,
@@ -96,9 +126,6 @@ export class TerrainHeightField {
         return (undulationSample - 0.5) * 2 * LANDFORM.floorReliefHeight;
     }
 
-    /* the boundary is only forced hard when a corridor is genuinely the nearest thing —
-       that is the one obstacle worth protecting. Region-vs-region open ground, where
-       nothing deliberate is happening, blends smoothly so no unintended cliff appears */
     private openGroundElevationAt(
         localX: number,
         localZ: number,
@@ -142,13 +169,13 @@ export function createTerrainSample(): ITerrainSample {
     return {
         elevation: 0,
         carveStrength: 0,
-        floorColorIndex: 0,
+        trailDistance: TRAIL.distanceLimit,
+        nestingDepth: 0,
         isCorridor: false,
         footprintDistance: 0,
     };
 }
 
-/* the last stretch of apron eases into a dive that fog swallows */
 function edgeDropAt(footprintDistance: number): number {
     const rolloverRatio = smoothstep(WORLD_EDGE.groundApron, WALKABLE_REACH, footprintDistance);
 
@@ -268,8 +295,6 @@ function prepareCorridor(path: ICorridorPath): IPreparedCorridor {
     };
 }
 
-/* both terrace levels stay flat and the whole rise happens across one short face,
-   which is too steep to walk and therefore has to be climbed */
 export function corridorStepDistanceOf(spanLength: number): number {
     return spanLength * TERRAIN.corridorStepRatio;
 }
@@ -301,8 +326,6 @@ function distanceOutsideRegionFloor(x: number, z: number, region: IRegionFloor):
     return Math.sqrt(outsideX * outsideX + outsideZ * outsideZ);
 }
 
-/* how far along the corridor the closest point lies, which is also how far the
-   ramp between its two end elevations has climbed */
 function corridorTravelRatioAt(x: number, z: number, corridor: IPreparedCorridor): number {
     if (corridor.spanLengthSquared === 0) return 0;
 
@@ -314,7 +337,7 @@ function corridorTravelRatioAt(x: number, z: number, corridor: IPreparedCorridor
     );
 }
 
-function distanceOutsideCorridorAt(
+function distanceToCorridorCentreAt(
     x: number,
     z: number,
     corridor: IPreparedCorridor,
@@ -323,7 +346,7 @@ function distanceOutsideCorridorAt(
     const gapX = x - corridor.fromX - corridor.spanX * travelRatio;
     const gapZ = z - corridor.fromZ - corridor.spanZ * travelRatio;
 
-    return Math.max(Math.sqrt(gapX * gapX + gapZ * gapZ) - corridor.halfWidth, 0);
+    return Math.sqrt(gapX * gapX + gapZ * gapZ);
 }
 
 export interface IRegionFloor {
@@ -332,11 +355,9 @@ export interface IRegionFloor {
     halfWidth: number;
     halfDepth: number;
     floorElevation: number;
-    floorColorIndex: number;
+    nestingDepth: number;
 }
 
-/* decided once per corridor and shared by both the terrain carve and the staircase
-   prop placement, so the two never disagree about which corridors get an obstacle */
 export enum CorridorClimbStyle {
     Ramp = "ramp",
     Straight = "straight",
@@ -359,7 +380,8 @@ export interface ICorridorPath {
 export interface ITerrainSample {
     elevation: number;
     carveStrength: number;
-    floorColorIndex: number;
+    trailDistance: number;
+    nestingDepth: number;
     isCorridor: boolean;
     footprintDistance: number;
 }
