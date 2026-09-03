@@ -63,7 +63,7 @@ export const WOODLAND_MANIFEST: IThemeManifest = {
             groundFill: "#59502e",
             hemisphereIntensity: 0.65,
         },
-        fogDensity: 0.0052,
+        fogDensity: 0.0023,
         outlineColor: "#2a2318",
         terrain: {
             wildColor: "#4e6238",
@@ -118,7 +118,7 @@ export const HIGHLANDS_MANIFEST: IThemeManifest = {
             groundFill: "#4c5a60",
             hemisphereIntensity: 0.7,
         },
-        fogDensity: 0.0042,
+        fogDensity: 0.0019,
         outlineColor: "#1a2028",
         terrain: {
             wildColor: "#43563e",
@@ -173,7 +173,7 @@ export const RUINS_MANIFEST: IThemeManifest = {
             groundFill: "#463f33",
             hemisphereIntensity: 0.6,
         },
-        fogDensity: 0.0078,
+        fogDensity: 0.0035,
         outlineColor: "#1c1a16",
         terrain: {
             wildColor: "#525d44",
@@ -228,7 +228,7 @@ export const SETTLEMENT_MANIFEST: IThemeManifest = {
             groundFill: "#61533e",
             hemisphereIntensity: 0.7,
         },
-        fogDensity: 0.0062,
+        fogDensity: 0.0028,
         outlineColor: "#241d16",
         terrain: {
             wildColor: "#63704b",
