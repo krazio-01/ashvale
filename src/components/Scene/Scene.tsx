@@ -24,9 +24,11 @@ const ACTIVE_CHAPTER_INDEX = 0;
 const WorldRuntime = ({
     chapter,
     manifest,
+    onLoadingChange,
 }: {
     chapter: ChapterResponse;
     manifest: IThemeManifest;
+    onLoadingChange: (isLoading: boolean) => void;
 }) => {
     const camera = useThree((state) => state.camera);
     const glRenderer = useThree((state) => state.gl);
@@ -35,6 +37,7 @@ const WorldRuntime = ({
     useEffect(() => {
         let activeWorld: World | null = null;
         let isCancelled = false;
+        onLoadingChange(true);
 
         const createWorld = async () => {
             const createdWorld = await World.create(manifest);
@@ -45,8 +48,16 @@ const WorldRuntime = ({
             }
 
             spawnChapterWorld(createdWorld, camera, chapter);
+            await glRenderer.compileAsync(createdWorld.root, camera);
+
+            if (isCancelled) {
+                createdWorld.dispose();
+                return;
+            }
+
             activeWorld = createdWorld;
             setWorld(createdWorld);
+            onLoadingChange(false);
         };
 
         void createWorld();
@@ -56,7 +67,7 @@ const WorldRuntime = ({
             activeWorld?.dispose();
             setWorld(null);
         };
-    }, [camera, chapter, manifest]);
+    }, [camera, chapter, manifest, onLoadingChange]);
 
     useEffect(() => {
         const canvas = glRenderer.domElement;
@@ -74,6 +85,7 @@ const WorldRuntime = ({
 const Scene = ({ owner, name }: { owner: string; name: string }) => {
     const { isPending, error, sendRequest } = useRequest();
     const [realm, setRealm] = useState<RealmResponse | null>(null);
+    const [isSpawningWorld, setIsSpawningWorld] = useState(true);
 
     useEffect(() => {
         const fetchRealm = async () => {
@@ -114,29 +126,42 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
     const manifest = resolveThemeManifest(chapter.theme, chapter.season);
 
     return (
-        <Canvas
-            shadows="percentage"
-            dpr={RENDER.pixelRatioRange}
-            camera={{
-                fov: CAMERA.fov,
-                near: CAMERA.near,
-                far: CAMERA.far,
-                position: CAMERA.startPosition,
-            }}
-            gl={{
-                antialias: false,
-                toneMapping: NoToneMapping,
-                toneMappingExposure: POST_PROCESSING.exposure,
-            }}
-        >
-            <SkyDome environment={manifest.environment} />
-            <SceneLighting environment={manifest.environment} />
-            <WorldRuntime chapter={chapter} manifest={manifest} />
+        <div className="scene-canvas-container">
+            <Canvas
+                shadows="percentage"
+                dpr={RENDER.pixelRatioRange}
+                camera={{
+                    fov: CAMERA.fov,
+                    near: CAMERA.near,
+                    far: CAMERA.far,
+                    position: CAMERA.startPosition,
+                }}
+                gl={{
+                    antialias: false,
+                    toneMapping: NoToneMapping,
+                    toneMappingExposure: POST_PROCESSING.exposure,
+                }}
+            >
+                <SkyDome environment={manifest.environment} />
+                <SceneLighting environment={manifest.environment} />
+                <WorldRuntime
+                    chapter={chapter}
+                    manifest={manifest}
+                    onLoadingChange={setIsSpawningWorld}
+                />
 
-            <PostProcessing environment={manifest.environment} />
+                <PostProcessing environment={manifest.environment} />
 
-            <PerformanceOverlay />
-        </Canvas>
+                <PerformanceOverlay />
+            </Canvas>
+
+            {isSpawningWorld && (
+                <div className="scene-status scene-status--overlay">
+                    <InlineLoader variant="matrix" size={32} color="#fff" />
+                    <p>Shaping the realm</p>
+                </div>
+            )}
+        </div>
     );
 };
 
