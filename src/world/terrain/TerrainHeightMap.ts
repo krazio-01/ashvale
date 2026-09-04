@@ -78,8 +78,8 @@ export class TerrainHeightMap {
         }
     }
 
-    elevationAt(localX: number, localZ: number): number {
-        return this.interpolate(this.elevations, localX, localZ);
+    surfaceElevationAt(localX: number, localZ: number): number {
+        return this.sampleTriangleSurface(this.computeInterpolationWeights(localX, localZ));
     }
 
     carveStrengthAt(localX: number, localZ: number): number {
@@ -93,7 +93,7 @@ export class TerrainHeightMap {
     sampleAt(localX: number, localZ: number, sample: IHeightMapSample): IHeightMapSample {
         const weights = this.computeInterpolationWeights(localX, localZ);
 
-        sample.elevation = this.interpolateWithWeights(this.elevations, weights);
+        sample.elevation = this.sampleTriangleSurface(weights);
         sample.carveStrength = this.interpolateWithWeights(this.carveStrengths, weights);
         sample.trailDistance = this.interpolateWithWeights(this.trailDistances, weights);
         sample.steepness = this.interpolateWithWeights(this.steepnesses, weights);
@@ -182,25 +182,44 @@ export class TerrainHeightMap {
 
         const column = this.clampCellIndex(Math.floor(columnPosition));
         const row = this.clampCellIndex(Math.floor(rowPosition));
-        const topRow = row * this.pointsPerSide + column;
+        const nearLeftIndex = row * this.pointsPerSide + column;
 
         return {
             acrossRatio: clamp(columnPosition - column, 0, 1),
             downRatio: clamp(rowPosition - row, 0, 1),
-            topRow,
-            bottomRow: topRow + this.pointsPerSide,
+            nearLeftIndex,
+            farLeftIndex: nearLeftIndex + this.pointsPerSide,
         };
     }
 
     private interpolateWithWeights(values: Float32Array, weights: IInterpolationWeights): number {
+        const { nearLeftIndex, farLeftIndex, acrossRatio, downRatio } = weights;
+
         return lerp(
-            lerp(values[weights.topRow] ?? 0, values[weights.topRow + 1] ?? 0, weights.acrossRatio),
-            lerp(
-                values[weights.bottomRow] ?? 0,
-                values[weights.bottomRow + 1] ?? 0,
-                weights.acrossRatio
-            ),
-            weights.downRatio
+            lerp(values[nearLeftIndex] ?? 0, values[nearLeftIndex + 1] ?? 0, acrossRatio),
+            lerp(values[farLeftIndex] ?? 0, values[farLeftIndex + 1] ?? 0, acrossRatio),
+            downRatio
+        );
+    }
+
+    private sampleTriangleSurface(weights: IInterpolationWeights): number {
+        const { nearLeftIndex, farLeftIndex, acrossRatio, downRatio } = weights;
+
+        const nearLeft = this.elevations[nearLeftIndex] ?? 0;
+        const nearRight = this.elevations[nearLeftIndex + 1] ?? 0;
+        const farLeft = this.elevations[farLeftIndex] ?? 0;
+
+        if (acrossRatio + downRatio <= 1)
+            return (
+                nearLeft + (nearRight - nearLeft) * acrossRatio + (farLeft - nearLeft) * downRatio
+            );
+
+        const farRight = this.elevations[farLeftIndex + 1] ?? 0;
+
+        return (
+            farRight +
+            (farLeft - farRight) * (1 - acrossRatio) +
+            (nearRight - farRight) * (1 - downRatio)
         );
     }
 
@@ -216,8 +235,8 @@ export class TerrainHeightMap {
 interface IInterpolationWeights {
     acrossRatio: number;
     downRatio: number;
-    topRow: number;
-    bottomRow: number;
+    nearLeftIndex: number;
+    farLeftIndex: number;
 }
 
 export interface IHeightMapSample {
