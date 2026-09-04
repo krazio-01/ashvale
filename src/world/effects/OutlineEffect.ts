@@ -9,6 +9,8 @@ const fragmentShader = `
     uniform float edgeThreshold;
     uniform float fadeStartDistance;
     uniform float fadeEndDistance;
+    uniform float foliageFadeStartDistance;
+    uniform float foliageFadeEndDistance;
     uniform float opacity;
     uniform float thickness;
     uniform vec2 texelSize;
@@ -38,10 +40,21 @@ const fragmentShader = `
         vec2 upUv = uv + vec2(0.0, offset.y);
         vec2 downUv = uv - vec2(0.0, offset.y);
 
+        bool centerIsFoliage = isFoliage(uv);
+
         if (
-            isFoliage(uv) && isFoliage(rightUv) && isFoliage(leftUv)
+            centerIsFoliage && isFoliage(rightUv) && isFoliage(leftUv)
                 && isFoliage(upUv) && isFoliage(downUv)
         ) {
+            outputColor = inputColor;
+            return;
+        }
+
+        float foliageFade = centerIsFoliage
+            ? smoothstep(foliageFadeStartDistance, foliageFadeEndDistance, centerDistance)
+            : 1.0;
+
+        if (foliageFade <= 0.001) {
             outputColor = inputColor;
             return;
         }
@@ -76,7 +89,7 @@ const fragmentShader = `
             return;
         }
 
-        float edgeStrength = edge * distanceFade * opacity;
+        float edgeStrength = edge * distanceFade * foliageFade * opacity;
 
         outputColor = vec4(mix(inputColor.rgb, outlineColor, edgeStrength), inputColor.a);
     }
@@ -100,6 +113,8 @@ export class OutlineEffect extends ViewPositionEffect {
             ["edgeThreshold", new Uniform(OUTLINE.edgeThreshold)],
             ["fadeStartDistance", new Uniform(OUTLINE.fadeStartDistance)],
             ["fadeEndDistance", new Uniform(OUTLINE.fadeEndDistance)],
+            ["foliageFadeStartDistance", new Uniform(OUTLINE.foliageFadeStartDistance)],
+            ["foliageFadeEndDistance", new Uniform(OUTLINE.foliageFadeEndDistance)],
             ["opacity", new Uniform(OUTLINE.opacity)],
             ["thickness", new Uniform(OUTLINE.thickness)],
             ["texelSize", texelSizeUniform],

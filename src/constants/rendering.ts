@@ -39,7 +39,7 @@ export const POST_PROCESSING = {
     bloomRadius: 0.72,
     saturationBoost: 0.24,
     brightnessLift: 0.02,
-    contrastBoost: 0.12,
+    contrastBoost: 0.16,
 };
 
 export const AMBIENT_OCCLUSION = {
@@ -57,6 +57,8 @@ export const OUTLINE = {
     edgeThreshold: 0.012,
     fadeStartDistance: 26,
     fadeEndDistance: 70,
+    foliageFadeStartDistance: 9,
+    foliageFadeEndDistance: 28,
     opacity: 0.68,
     debugView: false,
 };

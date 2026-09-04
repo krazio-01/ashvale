@@ -42,11 +42,19 @@ export class Player extends Character implements IWorldEntity {
     private currentFollowDistance = CAMERA.targetFollowDistance;
     private pivotInitialized = false;
 
-    constructor(id: string, context: IWorldContext, camera: Camera, spawnPosition: Vector3Tuple) {
+    constructor(
+        id: string,
+        context: IWorldContext,
+        camera: Camera,
+        spawnPosition: Vector3Tuple,
+        spawnYaw = 0
+    ) {
         super(id, PLAYER.maxHealth);
 
         this.context = context;
         this.camera = camera;
+        this.facingYaw = spawnYaw;
+        this.orbitYaw = spawnYaw + Math.PI;
 
         const cylinderLength = PLAYER.height - PLAYER.radius * 2;
 
@@ -56,6 +64,7 @@ export class Player extends Character implements IWorldEntity {
             context.materialLibrary.getToonMaterial(PALETTE.playerBody)
         );
         this.sceneObject.castShadow = true;
+        this.sceneObject.rotation.y = spawnYaw;
 
         const [spawnX, spawnY, spawnZ] = spawnPosition;
 
