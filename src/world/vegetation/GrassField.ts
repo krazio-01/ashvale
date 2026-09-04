@@ -20,9 +20,15 @@ import { Entity } from "@/entities/Entity";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
-import { GRASS } from "@/constants/placement";
-import { WORLD_EDGE } from "@/constants/world";
+import { GRASS, GROUND_FIELD } from "@/constants/placement";
 import { FULL_TURN, shiftColorHsl } from "@/lib/helpers";
+import {
+    GROUND_FIELD_GLSL,
+    buildDetailBands,
+    collectBandCells,
+    groundFieldUniforms,
+    type IDetailBand,
+} from "@/world/vegetation/GroundField";
 import {
     GROUND_MATERIAL_GLSL,
     groundMaterialUniforms,
@@ -31,11 +37,7 @@ import {
 
 const VERTEX_SHADER = /* glsl */ `
     ${GROUND_MATERIAL_GLSL}
-
-    uniform sampler2D terrainField;
-    uniform vec2 fieldOrigin;
-    uniform float fieldCellSize;
-    uniform float fieldPointsPerSide;
+    ${GROUND_FIELD_GLSL}
 
     uniform vec2 cameraGround;
     uniform float windWavePhase;
@@ -52,8 +54,6 @@ const VERTEX_SHADER = /* glsl */ `
     uniform vec2 leanRange;
     uniform float crushedHeightRatio;
     uniform float crushedExtraLean;
-    uniform vec2 steepGroundBand;
-    uniform vec2 worldEdgeBand;
 
     uniform vec2 windDirection;
     uniform float windHeading;
@@ -75,35 +75,6 @@ const VERTEX_SHADER = /* glsl */ `
     varying float vPatchTone;
 
     const float TAU = 6.2831853;
-
-    vec3 randomTriple(vec3 seed) {
-        vec3 scattered = fract(seed * vec3(0.1031, 0.1030, 0.0973));
-        scattered += dot(scattered, scattered.yxz + 33.33);
-
-        return fract((scattered.xxy + scattered.yxx) * scattered.zyx);
-    }
-
-    float withinGrowableGround(float steepness, float footprintDistance) {
-        float offSteepGround = 1.0 - smoothstep(steepGroundBand.x, steepGroundBand.y, steepness);
-        float insideWorldEdge = 1.0 - smoothstep(worldEdgeBand.x, worldEdgeBand.y, footprintDistance);
-
-        return offSteepGround * insideWorldEdge;
-    }
-
-    vec2 fieldPointCoordAt(vec2 ground) {
-        return (ground - fieldOrigin) / fieldCellSize;
-    }
-
-    vec4 sampleTerrainField(vec2 pointCoord) {
-        return texture2D(terrainField, (pointCoord + 0.5) / fieldPointsPerSide);
-    }
-
-    float insideTerrainField(vec2 pointCoord) {
-        float lastPoint = fieldPointsPerSide - 1.0;
-
-        return step(0.0, pointCoord.x) * step(pointCoord.x, lastPoint)
-            * step(0.0, pointCoord.y) * step(pointCoord.y, lastPoint);
-    }
 
     vec2 bendAlongArc(float heightRatio, float bendAngle, float bladeLength) {
         if (abs(bendAngle) < 0.001) return vec2(0.0, heightRatio * bladeLength);
@@ -246,7 +217,7 @@ export class GrassField extends Entity implements IWorldEntity {
         this.sceneObject.updateMatrixWorld(true);
         this.sceneObject.matrixWorldAutoUpdate = false;
 
-        const bands = buildDetailBands();
+        const bands = buildDetailBands(GRASS.levelRadii);
         const fieldRadius = bands[bands.length - 1]?.outerRadius ?? 0;
         const previousRadius = bands[bands.length - 2]?.outerRadius ?? 0;
 
@@ -264,7 +235,7 @@ export class GrassField extends Entity implements IWorldEntity {
             side: DoubleSide,
             uniforms: {
                 ...this.frameUniforms,
-                ...terrainUniforms(this.fieldTexture, heightMap),
+                ...groundFieldUniforms(this.fieldTexture, heightMap, GROUND_FIELD.steepGroundBand),
                 ...groundMaterialUniforms(groundSplat, groundDetail, materials),
                 ...bladeUniforms(),
                 ...paletteUniforms(context),
@@ -323,26 +294,9 @@ function advancePhase(phase: number, increment: number): number {
     return (phase + increment) % FULL_TURN;
 }
 
-function buildDetailBands(): IGrassDetailBand[] {
-    const finestSegments = 1 << (GRASS.levelRadii.length - 1);
-    let innerRadius = 0;
-
-    return GRASS.levelRadii.map((outerRadius, bandIndex) => {
-        const band = {
-            innerRadius,
-            outerRadius,
-            bladeSegments: finestSegments >> bandIndex,
-        };
-
-        innerRadius = outerRadius;
-
-        return band;
-    });
-}
-
-function buildBandGeometry(band: IGrassDetailBand): InstancedBufferGeometry {
-    const cluster = buildBladeCluster(band.bladeSegments);
-    const cellOffsets = collectBandCells(band);
+function buildBandGeometry(band: IDetailBand): InstancedBufferGeometry {
+    const cluster = buildBladeCluster(band.subdivisions);
+    const cellOffsets = collectBandCells(band, GRASS.tuftSpacing);
     const geometry = new InstancedBufferGeometry();
 
     geometry.setAttribute("position", new BufferAttribute(cluster.positions, 3));
@@ -426,38 +380,6 @@ function buildBladeCluster(bladeSegments: number): IBladeCluster {
     return { positions, bladeYaws, bladeSeeds, indices };
 }
 
-function collectBandCells(band: IGrassDetailBand): Float32Array {
-    const reach = Math.ceil(band.outerRadius / GRASS.tuftSpacing);
-    const innerCellsSquared = (band.innerRadius / GRASS.tuftSpacing) ** 2;
-    const outerCellsSquared = (band.outerRadius / GRASS.tuftSpacing) ** 2;
-
-    const offsets = new Float32Array((reach * 2 + 1) ** 2 * 2);
-    let count = 0;
-
-    for (let offsetZ = -reach; offsetZ <= reach; offsetZ += 1)
-        for (let offsetX = -reach; offsetX <= reach; offsetX += 1) {
-            const distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
-
-            if (distanceSquared >= outerCellsSquared || distanceSquared < innerCellsSquared)
-                continue;
-
-            offsets[count] = offsetX;
-            offsets[count + 1] = offsetZ;
-            count += 2;
-        }
-
-    return offsets.slice(0, count);
-}
-
-function terrainUniforms(fieldTexture: DataTexture, heightMap: TerrainHeightMap) {
-    return {
-        terrainField: { value: fieldTexture },
-        fieldOrigin: { value: new Vector2(heightMap.originX, heightMap.originZ) },
-        fieldCellSize: { value: heightMap.cellSize },
-        fieldPointsPerSide: { value: heightMap.pointsPerSide },
-    };
-}
-
 function bladeUniforms() {
     return {
         tuftSpacing: { value: GRASS.tuftSpacing },
@@ -469,13 +391,6 @@ function bladeUniforms() {
         leanRange: { value: new Vector2(...GRASS.leanRange) },
         crushedHeightRatio: { value: GRASS.growth.crushedHeightRatio },
         crushedExtraLean: { value: GRASS.growth.crushedExtraLean },
-        steepGroundBand: { value: new Vector2(...GRASS.steepGroundBand) },
-        worldEdgeBand: {
-            value: new Vector2(
-                WORLD_EDGE.groundApron - GRASS.worldEdgeFadeWidth,
-                WORLD_EDGE.groundApron
-            ),
-        },
         windDirection: {
             value: new Vector2(Math.sin(GRASS.wind.heading), Math.cos(GRASS.wind.heading)),
         },
@@ -527,12 +442,6 @@ interface IBladeCluster {
     bladeYaws: Float32Array;
     bladeSeeds: Float32Array;
     indices: Uint16Array | Uint32Array;
-}
-
-interface IGrassDetailBand {
-    innerRadius: number;
-    outerRadius: number;
-    bladeSegments: number;
 }
 
 interface IFrameUniforms {

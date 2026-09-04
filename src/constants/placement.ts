@@ -72,31 +72,81 @@ export const LEDGE = {
     buriedDepth: 1.5,
 };
 
-export const PROP_PLACEMENT = {
-    landmarkDensity: 0.00028,
-    structureDensity: 0.0012,
-    clutterDensity: 0.014,
-    anchorDensity: 0.00016,
-    landmarkSpeciesPerRegion: 3,
-    structureSpeciesPerRegion: 4,
-    clutterSpeciesPerRegion: 7,
+export const PROP_FIELD = {
+    occupancyCellSize: 6,
+    collidingPropBudget: 900,
+    groundBite: 0.02,
+    placementAttempts: 8,
+    trailWearRejectThreshold: 0.75,
     typicalFileCount: 20,
-    minimumRichness: 0.5,
-    maximumRichness: 2,
-    referenceScatterPropsPerFile: 0.45,
-    combatArenaRatio: 0.35,
-    clusterRadiusRatio: 0.22,
-    edgeBiasExponent: 0.4,
-    entranceMouthClearanceRatio: 1.9,
-    entranceLaneWidthRatio: 1.1,
-    standingEntranceClearanceFactor: 1,
-    clutterEntranceClearanceFactor: 0.45,
-    clutterHuddledAgainstPropRatio: 0.4,
-    clutterHuddleRadius: 3,
-    clearanceRelaxationSteps: [1, 0.6, 0.35],
-    separationGap: 1,
-    placementAttempts: 10,
-    slopeLimit: 0.9,
+    richnessRange: pair(0.5, 2),
+
+    keepOut: {
+        combatArenaRatio: 0.35,
+        enemySpawnClearance: 3,
+        laneClearanceRatio: 1.05,
+        chapterSpawnClearance: 7,
+    },
+
+    clump: {
+        candidateSpacing: 46,
+        maskWavelength: 110,
+        maskOctaves: 3,
+        maskGain: 0.5,
+        forestThreshold: 0.46,
+        outcropThreshold: 0.6,
+        radiusRange: pair(12, 24),
+        canopySpeciesPerClump: 2,
+        understorySpeciesPerClump: 3,
+        groundcoverSpeciesPerClump: 4,
+    },
+
+    canopy: {
+        density: 0.0035,
+        centreBias: 0.8,
+        spacingGap: 1.4,
+        slopeLimit: 0.7,
+        scaleBoost: pair(1.1, 1.7),
+    },
+
+    rock: {
+        density: 0.005,
+        centreBias: 0.6,
+        spacingGap: 0.7,
+        slopeLimit: 1.1,
+        scaleBoost: pair(0.9, 1.6),
+    },
+
+    understory: {
+        density: 0.008,
+        huddleRatio: 0.55,
+        huddleRadius: 2.6,
+        centreBias: 0.6,
+        spacingGap: 0.15,
+        slopeLimit: 1.1,
+        scaleBoost: pair(0.9, 1.25),
+    },
+
+    groundcover: {
+        density: 0.01,
+        openDensity: 0.0035,
+        meadowPatchWavelength: 55,
+        openPatchThreshold: 0.42,
+        centreBias: 0.5,
+        spacingGap: 0.05,
+        slopeLimit: 0.9,
+        scaleBoost: pair(0.9, 1.2),
+    },
+
+    debris: {
+        density: 0.0014,
+        trailShoulderRatio: 0.45,
+        shoulderOffsetRatio: pair(0.25, 0.7),
+        centreBias: 0.5,
+        spacingGap: 0,
+        slopeLimit: 1.2,
+        scaleBoost: pair(0.9, 1.15),
+    },
 };
 
 export const CORRIDOR_PROPS = {
@@ -114,4 +164,38 @@ export const CORRIDOR_PROPS = {
     carveRejectThreshold: 0.25,
     scaleBoost: pair(1, 1.4),
     placementAttempts: 8,
+};
+
+export const GROUND_FIELD = {
+    steepGroundBand: pair(0.58, 0.9),
+    worldEdgeFadeWidth: 14,
+};
+
+export const BLOOM = {
+    levelRadii: [20, 52],
+    cellSpacing: 1.15,
+    petalsPerBloom: 5,
+    stemHeightRange: pair(0.17, 0.29),
+    petalLength: 0.11,
+    petalWidth: 0.07,
+    petalRise: 0.55,
+    scaleRange: pair(0.75, 1.2),
+    coverage: 0.9,
+    driftWavelength: 26,
+    driftThreshold: 0.28,
+    speciesWavelength: 61,
+    speciesOffset: 137,
+    swayStrength: 0.16,
+    tone: {
+        tipLightnessGain: 0.16,
+        throatDarken: 0.62,
+        stemHueShift: -0.02,
+        stemLightnessShift: -0.06,
+        speciesHueSpread: 0.27,
+    },
+    light: {
+        sunWrap: 0.5,
+        sunGain: 0.6,
+        ambientGain: 0.9,
+    },
 };

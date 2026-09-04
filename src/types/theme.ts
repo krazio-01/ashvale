@@ -1,31 +1,29 @@
 import type { ChapterSeason, ChapterTheme } from "@/types/realm";
 
-export enum PropRole {
-    Landmark = "landmark",
-    Structure = "structure",
-    Scatter = "scatter",
+export enum PropLayer {
+    Canopy = "canopy",
+    Rock = "rock",
+    Understory = "understory",
+    Groundcover = "groundcover",
+    Debris = "debris",
 }
+
+export const PROP_TRANSFORM_STRIDE = 5;
 
 export interface IThemeProp {
     modelPath: string;
-    role: PropRole;
+    layer: PropLayer;
     footprintRadius: number;
     scaleRange: [number, number];
-    hasCollider: boolean;
-}
-
-export interface IPropPlacement {
-    position: [number, number, number];
-    rotationY: number;
-    scale: number;
 }
 
 export interface IPropGroup {
     modelPath: string;
-    role: PropRole;
+    layer: PropLayer;
     hasCollider: boolean;
     footprintRadius: number;
-    placements: IPropPlacement[];
+    instanceCount: number;
+    transforms: Float32Array;
 }
 
 export interface ISkyGradient {

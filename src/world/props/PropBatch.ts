@@ -2,12 +2,13 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import type { RigidBody, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Group, InstancedMesh, Object3D } from "three";
 import { Entity } from "@/entities/Entity";
-import { PropRole } from "@/types/theme";
+import { PROP_TRANSFORM_STRIDE, PropLayer } from "@/types/theme";
 import type { IPropGroup } from "@/types/theme";
 import type { IModelTemplate, IWorldContext, IWorldEntity } from "@/types/world";
 import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 
 const instanceTransform = new Object3D();
+let matrixScratch = new Float32Array(0);
 
 export class PropBatch extends Entity implements IWorldEntity {
     readonly sceneObject = new Group();
@@ -16,16 +17,15 @@ export class PropBatch extends Entity implements IWorldEntity {
     private readonly batches: InstancedMesh[] = [];
     private readonly rigidBody: RigidBody;
 
-    constructor(regionId: string, context: IWorldContext, groups: IPropGroup[]) {
-        super(`${regionId}-props`);
+    constructor(batchId: string, context: IWorldContext, groups: IPropGroup[]) {
+        super(`${batchId}-props`);
         this.sceneObject.matrixAutoUpdate = false;
-        this.sceneObject.updateMatrix();
 
         this.physicsWorld = context.physicsWorld;
         this.rigidBody = context.physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
 
         for (const group of groups) {
-            if (group.placements.length === 0) continue;
+            if (group.instanceCount === 0) continue;
 
             const template = context.assetLibrary.getTemplate(group.modelPath);
             if (!template) continue;
@@ -51,34 +51,18 @@ export class PropBatch extends Entity implements IWorldEntity {
     }
 
     private addBatches(group: IPropGroup, template: IModelTemplate): void {
-        const placementCount = group.placements.length;
-        const castsShadow = group.role !== PropRole.Scatter;
-        const instanceMatrices = new Float32Array(placementCount * 16);
-
-        for (let index = 0; index < placementCount; index += 1) {
-            const placement = group.placements[index];
-
-            instanceTransform.position.set(
-                placement.position[0],
-                placement.position[1],
-                placement.position[2]
-            );
-            instanceTransform.rotation.y = placement.rotationY;
-            instanceTransform.scale.setScalar(placement.scale);
-            instanceTransform.updateMatrix();
-            instanceTransform.matrix.toArray(instanceMatrices, index * 16);
-        }
+        const matrices = buildInstanceMatrices(group);
+        const castsShadow = shadowCastingLayer(group.layer);
 
         for (const part of template.parts) {
-            const batch = new InstancedMesh(part.geometry, part.material, placementCount);
+            const batch = new InstancedMesh(part.geometry, part.material, group.instanceCount);
             batch.castShadow = castsShadow;
             batch.receiveShadow = true;
             batch.matrixAutoUpdate = false;
-            batch.updateMatrix();
+            batch.updateMatrixWorld(true);
             if (part.isFoliage) batch.layers.enable(FOLIAGE_LAYER);
 
-            const instanceMatrixArray = batch.instanceMatrix.array as Float32Array;
-            instanceMatrixArray.set(instanceMatrices);
+            batch.instanceMatrix.array.set(matrices.subarray(0, group.instanceCount * 16));
             batch.instanceMatrix.needsUpdate = true;
             batch.computeBoundingSphere();
 
@@ -88,18 +72,46 @@ export class PropBatch extends Entity implements IWorldEntity {
     }
 
     private addColliders(group: IPropGroup, modelHeight: number): void {
-        for (const placement of group.placements) {
-            const [x, y, z] = placement.position;
-            const halfHeight = (modelHeight * placement.scale) / 2;
-            const radius = group.footprintRadius * placement.scale;
+        for (let instance = 0; instance < group.instanceCount; instance += 1) {
+            const offset = instance * PROP_TRANSFORM_STRIDE;
+            const scale = group.transforms[offset + 4] ?? 1;
+            const halfHeight = (modelHeight * scale) / 2;
 
-            const colliderDesc = RAPIER.ColliderDesc.cylinder(halfHeight, radius).setTranslation(
-                x,
-                y + halfHeight,
-                z
+            const colliderDesc = RAPIER.ColliderDesc.cylinder(
+                halfHeight,
+                group.footprintRadius * scale
+            ).setTranslation(
+                group.transforms[offset] ?? 0,
+                (group.transforms[offset + 1] ?? 0) + halfHeight,
+                group.transforms[offset + 2] ?? 0
             );
 
             this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
         }
     }
+}
+
+function buildInstanceMatrices(group: IPropGroup): Float32Array {
+    const requiredLength = group.instanceCount * 16;
+    if (matrixScratch.length < requiredLength) matrixScratch = new Float32Array(requiredLength);
+
+    for (let instance = 0; instance < group.instanceCount; instance += 1) {
+        const offset = instance * PROP_TRANSFORM_STRIDE;
+
+        instanceTransform.position.set(
+            group.transforms[offset] ?? 0,
+            group.transforms[offset + 1] ?? 0,
+            group.transforms[offset + 2] ?? 0
+        );
+        instanceTransform.rotation.y = group.transforms[offset + 3] ?? 0;
+        instanceTransform.scale.setScalar(group.transforms[offset + 4] ?? 1);
+        instanceTransform.updateMatrix();
+        instanceTransform.matrix.toArray(matrixScratch, instance * 16);
+    }
+
+    return matrixScratch;
+}
+
+function shadowCastingLayer(layer: PropLayer): boolean {
+    return layer === PropLayer.Canopy || layer === PropLayer.Rock || layer === PropLayer.Understory;
 }
