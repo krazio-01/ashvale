@@ -1,26 +1,34 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { RigidBody, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
-import { Group, InstancedMesh, Object3D } from "three";
+import { Camera, Group, InstancedMesh, Object3D, Vector3 } from "three";
 import { Entity } from "@/entities/Entity";
 import { PROP_TRANSFORM_STRIDE, PropLayer } from "@/types/theme";
 import type { IPropGroup } from "@/types/theme";
 import type { IModelTemplate, IWorldContext, IWorldEntity } from "@/types/world";
 import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
+import { PROP_FIELD } from "@/constants/placement";
 
 const instanceTransform = new Object3D();
+const cameraGroundPosition = new Vector3();
 let matrixScratch = new Float32Array(0);
 
 export class PropBatch extends Entity implements IWorldEntity {
     readonly sceneObject = new Group();
 
     private readonly physicsWorld: PhysicsWorld;
+    private readonly camera: Camera;
     private readonly batches: InstancedMesh[] = [];
     private readonly rigidBody: RigidBody;
 
-    constructor(batchId: string, context: IWorldContext, groups: IPropGroup[]) {
+    private footprintCenterX = 0;
+    private footprintCenterZ = 0;
+    private activationDistanceSquared = Infinity;
+
+    constructor(batchId: string, context: IWorldContext, camera: Camera, groups: IPropGroup[]) {
         super(`${batchId}-props`);
         this.sceneObject.matrixAutoUpdate = false;
 
+        this.camera = camera;
         this.physicsWorld = context.physicsWorld;
         this.rigidBody = context.physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
 
@@ -37,9 +45,19 @@ export class PropBatch extends Entity implements IWorldEntity {
         this.sceneObject.updateMatrixWorld(true);
         this.sceneObject.matrixWorldAutoUpdate = false;
         for (const batch of this.batches) batch.matrixWorldAutoUpdate = false;
+
+        this.measureFootprint();
     }
 
-    update(): void {}
+    update(): void {
+        this.camera.getWorldPosition(cameraGroundPosition);
+
+        const offsetX = cameraGroundPosition.x - this.footprintCenterX;
+        const offsetZ = cameraGroundPosition.z - this.footprintCenterZ;
+
+        this.sceneObject.visible =
+            offsetX * offsetX + offsetZ * offsetZ <= this.activationDistanceSquared;
+    }
 
     dispose(): void {
         this.physicsWorld.removeRigidBody(this.rigidBody);
@@ -88,6 +106,33 @@ export class PropBatch extends Entity implements IWorldEntity {
 
             this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
         }
+    }
+
+    private measureFootprint(): void {
+        let minimumX = Infinity;
+        let maximumX = -Infinity;
+        let minimumZ = Infinity;
+        let maximumZ = -Infinity;
+
+        for (const batch of this.batches) {
+            const sphere = batch.boundingSphere;
+            if (!sphere) continue;
+
+            minimumX = Math.min(minimumX, sphere.center.x - sphere.radius);
+            maximumX = Math.max(maximumX, sphere.center.x + sphere.radius);
+            minimumZ = Math.min(minimumZ, sphere.center.z - sphere.radius);
+            maximumZ = Math.max(maximumZ, sphere.center.z + sphere.radius);
+        }
+
+        if (minimumX > maximumX) return;
+
+        this.footprintCenterX = (minimumX + maximumX) / 2;
+        this.footprintCenterZ = (minimumZ + maximumZ) / 2;
+
+        const footprintReach = Math.hypot(maximumX - minimumX, maximumZ - minimumZ) / 2;
+        const activationDistance = PROP_FIELD.activationRadius + footprintReach;
+
+        this.activationDistanceSquared = activationDistance * activationDistance;
     }
 }
 

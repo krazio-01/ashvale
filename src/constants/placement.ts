@@ -1,4 +1,7 @@
 import { pair } from "@/lib/helpers";
+import { CAMERA } from "./characters";
+
+const PROP_VIEW_RATIO_OF_CAMERA_FAR = 0.5;
 
 export const GRASS = {
     levelRadii: [15, 45, 150],
@@ -73,6 +76,7 @@ export const LEDGE = {
 };
 
 export const PROP_FIELD = {
+    activationRadius: CAMERA.far * PROP_VIEW_RATIO_OF_CAMERA_FAR,
     occupancyCellSize: 6,
     collidingPropBudget: 900,
     groundBite: 0.02,
