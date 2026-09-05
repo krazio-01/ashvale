@@ -18,10 +18,11 @@ import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainHeightF
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
 import type { IChapterRegion, IRegionPathway } from "@/types/realm";
-import type { IThemeManifest } from "@/types/theme";
+import type { IPropGroup, IThemeManifest } from "@/types/theme";
+import type { SpawnProgressListener } from "@/types/world";
 import { SPAWNING } from "@/constants/characters";
 import { TERRAIN } from "@/constants/world";
-import { FULL_TURN, createSeededRandom, hashString } from "@/lib/helpers";
+import { FULL_TURN, createSeededRandom, hashString, yieldToBrowser } from "@/lib/helpers";
 import { WalkableEdgeBarrier } from "./terrain/WalkableEdgeBarrier";
 import { LedgePlatforms } from "./terrain/LedgePlatforms";
 import {
@@ -31,21 +32,158 @@ import {
 } from "./terrain/GroundMaterials";
 import { BloomField } from "./vegetation/BloomField";
 
-export function spawnChapterWorld(world: World, camera: Camera, chapter: ChapterResponse): void {
+const SPAWN_TIME_SLICE_MS = 8;
+
+export async function spawnChapterWorld(
+    world: World,
+    camera: Camera,
+    chapter: ChapterResponse,
+    reportProgress?: SpawnProgressListener
+): Promise<void> {
+    const beginStage = createStageRunner(reportProgress);
     const manifest = resolveThemeManifest(chapter.theme, chapter.season);
     const positionsByRegionId = new Map<string, Vector3Tuple>();
 
-    const regions = chapter.regions;
-    for (let i = 0, len = regions.length; i < len; i++) {
-        const region = regions[i];
+    for (const region of chapter.regions)
         positionsByRegionId.set(region.regionId, region.worldPosition);
-    }
 
-    const terrain = spawnTerrain(world, camera, chapter, manifest, positionsByRegionId);
+    const terrain = await spawnTerrain(
+        world,
+        camera,
+        chapter,
+        manifest,
+        positionsByRegionId,
+        beginStage
+    );
 
+    await beginStage("Waking the inhabitants");
     spawnRegionEnemies(world, chapter, terrain.groundHeightAt);
     spawnPlayer(world, camera, chapter, positionsByRegionId, terrain);
     spawnBoss(world, chapter, positionsByRegionId, terrain);
+}
+
+function createStageRunner(reportProgress?: SpawnProgressListener): StageRunner {
+    return async (stageLabel: string) => {
+        reportProgress?.(stageLabel);
+        await yieldToBrowser();
+    };
+}
+
+async function spawnTerrain(
+    world: World,
+    camera: Camera,
+    chapter: ChapterResponse,
+    manifest: IThemeManifest,
+    positionsByRegionId: Map<string, Vector3Tuple>,
+    beginStage: StageRunner
+): Promise<ITerrainContext> {
+    const [centerX, centerZ] = computeChapterCenter(chapter.regions);
+    const { regionFloors, regionSites, furthestDistance } = buildRegionGeometry(
+        chapter.regions,
+        centerX,
+        centerZ
+    );
+    const seed = hashString(`${chapter.title}-${chapter.chapterIndex}`);
+    const { corridorPaths, corridorLanes } = buildCorridorGeometry(
+        chapter.pathways,
+        positionsByRegionId,
+        centerX,
+        centerZ,
+        createSeededRandom(seed + 17)
+    );
+
+    const mappedRadius = furthestDistance + WALKABLE_REACH;
+    const center: Vector3Tuple = [centerX, 0, centerZ];
+
+    await beginStage("Sculpting the terrain");
+    const heightField = new TerrainHeightField(regionFloors, corridorPaths, seed);
+    const heightMap = new TerrainHeightMap(heightField, mappedRadius);
+
+    await beginStage("Weathering the soil");
+    const groundMaterials = deriveGroundMaterials(world.context.environment.terrain);
+    const groundSplat = buildGroundSplatTexture(seed);
+    const groundDetail = buildGroundDetailTexture(seed);
+
+    await beginStage("Laying the ground");
+    world.addEntity(
+        new TerrainMesh(
+            world.context,
+            center,
+            heightMap,
+            groundSplat,
+            groundDetail,
+            groundMaterials
+        )
+    );
+    world.addEntity(new WalkableEdgeBarrier(world.context, center, heightMap));
+    world.addEntity(new LedgePlatforms(world.context, center, corridorPaths));
+
+    await beginStage("Sowing the grasslands");
+    world.addEntity(
+        new GrassField(
+            world.context,
+            camera,
+            center,
+            heightMap,
+            groundSplat,
+            groundDetail,
+            groundMaterials
+        )
+    );
+
+    await beginStage("Scattering wildflowers");
+    world.addEntity(
+        new BloomField(
+            world.context,
+            camera,
+            center,
+            heightMap,
+            groundSplat,
+            groundDetail,
+            groundMaterials
+        )
+    );
+
+    await beginStage("Planting the woodland");
+    const propBuckets = buildPropField({
+        manifest,
+        heightMap,
+        sites: regionSites,
+        lanes: corridorLanes,
+        chapterSpawnPoints: chapterSpawnPointsIn(chapter, positionsByRegionId, centerX, centerZ),
+        center,
+        fieldRadius: mappedRadius,
+        seed: seed + 3,
+    });
+
+    await addPropBuckets(world, camera, propBuckets);
+
+    return {
+        groundHeightAt: (worldX, worldZ) =>
+            heightMap.surfaceElevationAt(worldX - centerX, worldZ - centerZ),
+        groundSteepnessAt: (worldX, worldZ) =>
+            heightMap.steepnessAt(worldX - centerX, worldZ - centerZ),
+    };
+}
+
+async function addPropBuckets(
+    world: World,
+    camera: Camera,
+    propBuckets: IPropGroup[][]
+): Promise<void> {
+    let sliceStartedAt = performance.now();
+
+    for (let index = 0; index < propBuckets.length; index += 1) {
+        const bucket = propBuckets[index];
+        if (!bucket) continue;
+
+        world.addEntity(new PropBatch(`props-${index}`, world.context, camera, bucket));
+
+        if (performance.now() - sliceStartedAt < SPAWN_TIME_SLICE_MS) continue;
+
+        await yieldToBrowser();
+        sliceStartedAt = performance.now();
+    }
 }
 
 function spawnPlayer(
@@ -152,94 +290,6 @@ function spawnEnemyRing(
 
         world.addEntity(spawnEnemyBody(region, world.context, [enemyX, enemyY, enemyZ]));
     }
-}
-
-function spawnTerrain(
-    world: World,
-    camera: Camera,
-    chapter: ChapterResponse,
-    manifest: IThemeManifest,
-    positionsByRegionId: Map<string, Vector3Tuple>
-): ITerrainContext {
-    const [centerX, centerZ] = computeChapterCenter(chapter.regions);
-    const { regionFloors, regionSites, furthestDistance } = buildRegionGeometry(
-        chapter.regions,
-        centerX,
-        centerZ
-    );
-    const seed = hashString(`${chapter.title}-${chapter.chapterIndex}`);
-    const { corridorPaths, corridorLanes } = buildCorridorGeometry(
-        chapter.pathways,
-        positionsByRegionId,
-        centerX,
-        centerZ,
-        createSeededRandom(seed + 17)
-    );
-
-    const mappedRadius = furthestDistance + WALKABLE_REACH;
-    const center: Vector3Tuple = [centerX, 0, centerZ];
-
-    const heightField = new TerrainHeightField(regionFloors, corridorPaths, seed);
-    const heightMap = new TerrainHeightMap(heightField, mappedRadius);
-    const groundMaterials = deriveGroundMaterials(world.context.environment.terrain);
-    const groundSplat = buildGroundSplatTexture(seed);
-    const groundDetail = buildGroundDetailTexture(seed);
-
-    world.addEntity(
-        new TerrainMesh(
-            world.context,
-            center,
-            heightMap,
-            groundSplat,
-            groundDetail,
-            groundMaterials
-        )
-    );
-    world.addEntity(new WalkableEdgeBarrier(world.context, center, heightMap));
-    world.addEntity(new LedgePlatforms(world.context, center, corridorPaths));
-    world.addEntity(
-        new GrassField(
-            world.context,
-            camera,
-            center,
-            heightMap,
-            groundSplat,
-            groundDetail,
-            groundMaterials
-        )
-    );
-    world.addEntity(
-        new BloomField(
-            world.context,
-            camera,
-            center,
-            heightMap,
-            groundSplat,
-            groundDetail,
-            groundMaterials
-        )
-    );
-
-    const propBuckets = buildPropField({
-        manifest,
-        heightMap,
-        sites: regionSites,
-        lanes: corridorLanes,
-        chapterSpawnPoints: chapterSpawnPointsIn(chapter, positionsByRegionId, centerX, centerZ),
-        center,
-        fieldRadius: mappedRadius,
-        seed: seed + 3,
-    });
-
-    for (let i = 0, len = propBuckets.length; i < len; i++)
-        world.addEntity(new PropBatch(`props-${i}`, world.context, propBuckets[i]));
-
-    return {
-        groundHeightAt: (worldX, worldZ) =>
-            heightMap.surfaceElevationAt(worldX - centerX, worldZ - centerZ),
-        groundSteepnessAt: (worldX, worldZ) =>
-            heightMap.steepnessAt(worldX - centerX, worldZ - centerZ),
-    };
 }
 
 function computeChapterCenter(regions: IChapterRegion[]): [number, number] {
@@ -378,6 +428,8 @@ function pickClimbStyle(nextRandom: () => number): CorridorClimbStyle {
 
     return CorridorClimbStyle.Ramp;
 }
+
+type StageRunner = (stageLabel: string) => Promise<void>;
 
 interface IRegionGeometry {
     regionFloors: IRegionFloor[];

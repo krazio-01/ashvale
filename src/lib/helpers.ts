@@ -12,6 +12,12 @@ export function pair(a: number, b: number): [number, number] {
     return [a, b];
 }
 
+export function yieldToBrowser(): Promise<void> {
+    return new Promise((resolve) => {
+        requestAnimationFrame(() => setTimeout(resolve, 0));
+    });
+}
+
 export function clamp(value: number, minimum: number, maximum: number): number {
     return Math.min(maximum, Math.max(minimum, value));
 }
