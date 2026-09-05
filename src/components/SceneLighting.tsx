@@ -4,6 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import type { DirectionalLight } from "three";
 import type { Vector3Tuple } from "three";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
+import { SCENE_LIGHT_LAYERS } from "@/world/effects/FoliageMaskPass";
 import type { IThemeEnvironment } from "@/types/theme";
 import { LIGHT } from "@/constants/rendering";
 
@@ -50,12 +51,14 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
             <color attach="background" args={[sky.abyss]} />
 
             <hemisphereLight
+                layers={SCENE_LIGHT_LAYERS}
                 args={[lighting.skyFill, lighting.groundFill, lighting.hemisphereIntensity]}
             />
 
             <directionalLight
                 ref={keyLightRef}
                 castShadow
+                layers={SCENE_LIGHT_LAYERS}
                 color={lighting.keyColor}
                 intensity={lighting.keyIntensity}
                 shadow-bias={LIGHT.shadowBias}
@@ -69,6 +72,7 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
             />
 
             <directionalLight
+                layers={SCENE_LIGHT_LAYERS}
                 color={lighting.rimColor}
                 intensity={lighting.rimIntensity}
                 position={rimPosition}

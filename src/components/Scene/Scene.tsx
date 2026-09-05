@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { NoToneMapping } from "three";
 import { World } from "@/world/World";
@@ -20,15 +20,17 @@ import PerformanceOverlay from "../PerformanceOverlay";
 import "./scene.scss";
 
 const ACTIVE_CHAPTER_INDEX = 0;
+const FIRST_SPAWN_STAGE = "Opening the realm";
+const SHADER_WARMUP_STAGE = "Warming the shaders";
 
 const WorldRuntime = ({
     chapter,
     manifest,
-    onLoadingChange,
+    onStageChange,
 }: {
     chapter: ChapterResponse;
     manifest: IThemeManifest;
-    onLoadingChange: (isLoading: boolean) => void;
+    onStageChange: (stageLabel: string | null) => void;
 }) => {
     const camera = useThree((state) => state.camera);
     const glRenderer = useThree((state) => state.gl);
@@ -37,19 +39,24 @@ const WorldRuntime = ({
     useEffect(() => {
         let activeWorld: World | null = null;
         let isCancelled = false;
-        onLoadingChange(true);
 
         const createWorld = async () => {
-            const createdWorld = await World.create(manifest);
+            onStageChange(FIRST_SPAWN_STAGE);
 
+            const createdWorld = await World.create(manifest);
             if (isCancelled) {
                 createdWorld.dispose();
                 return;
             }
 
-            spawnChapterWorld(createdWorld, camera, chapter);
-            await glRenderer.compileAsync(createdWorld.root, camera);
+            await spawnChapterWorld(createdWorld, camera, chapter, onStageChange);
+            if (isCancelled) {
+                createdWorld.dispose();
+                return;
+            }
 
+            onStageChange(SHADER_WARMUP_STAGE);
+            await glRenderer.compileAsync(createdWorld.root, camera);
             if (isCancelled) {
                 createdWorld.dispose();
                 return;
@@ -57,7 +64,7 @@ const WorldRuntime = ({
 
             activeWorld = createdWorld;
             setWorld(createdWorld);
-            onLoadingChange(false);
+            onStageChange(null);
         };
 
         void createWorld();
@@ -67,7 +74,7 @@ const WorldRuntime = ({
             activeWorld?.dispose();
             setWorld(null);
         };
-    }, [camera, chapter, manifest, onLoadingChange]);
+    }, [camera, glRenderer, chapter, manifest, onStageChange]);
 
     useEffect(() => {
         const canvas = glRenderer.domElement;
@@ -85,7 +92,12 @@ const WorldRuntime = ({
 const Scene = ({ owner, name }: { owner: string; name: string }) => {
     const { isPending, error, sendRequest } = useRequest();
     const [realm, setRealm] = useState<RealmResponse | null>(null);
-    const [isSpawningWorld, setIsSpawningWorld] = useState(true);
+    const [spawnStage, setSpawnStage] = useState<string | null>(FIRST_SPAWN_STAGE);
+
+    const handleStageChange = useCallback(
+        (stageLabel: string | null) => setSpawnStage(stageLabel),
+        []
+    );
 
     useEffect(() => {
         const fetchRealm = async () => {
@@ -147,7 +159,7 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
                 <WorldRuntime
                     chapter={chapter}
                     manifest={manifest}
-                    onLoadingChange={setIsSpawningWorld}
+                    onStageChange={handleStageChange}
                 />
 
                 <PostProcessing environment={manifest.environment} />
@@ -155,10 +167,10 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
                 <PerformanceOverlay />
             </Canvas>
 
-            {isSpawningWorld && (
+            {spawnStage && (
                 <div className="scene-status scene-status--overlay">
                     <InlineLoader variant="matrix" size={32} color="#fff" />
-                    <p>Shaping the realm</p>
+                    <p>{spawnStage}</p>
                 </div>
             )}
         </div>

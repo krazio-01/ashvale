@@ -27,6 +27,7 @@ export interface ICharacterModel {
 export interface IModelPart {
     geometry: BufferGeometry;
     material: Material | Material[];
+    isFoliage: boolean;
 }
 
 export interface IModelTemplate {
@@ -34,8 +35,4 @@ export interface IModelTemplate {
     height: number;
 }
 
-export interface IModelPart {
-    geometry: BufferGeometry;
-    material: Material | Material[];
-    isFoliage: boolean;
-}
+export type SpawnProgressListener = (stageLabel: string) => void;

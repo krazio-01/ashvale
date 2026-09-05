@@ -5,6 +5,9 @@ export const FOLIAGE_LAYER = 1;
 const maskLayers = new Layers();
 maskLayers.set(FOLIAGE_LAYER);
 
+export const SCENE_LIGHT_LAYERS = new Layers();
+SCENE_LIGHT_LAYERS.enable(FOLIAGE_LAYER);
+
 export class FoliageMaskPass {
     readonly renderTarget: WebGLRenderTarget;
 
@@ -22,15 +25,17 @@ export class FoliageMaskPass {
         const previousCameraLayerMask = camera.layers.mask;
         const previousOverrideMaterial = scene.overrideMaterial;
         const previousRenderTarget = renderer.getRenderTarget();
+        const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
 
+        renderer.shadowMap.autoUpdate = false;
         camera.layers.mask = maskLayers.mask;
         scene.overrideMaterial = this.maskMaterial;
 
         renderer.setRenderTarget(this.renderTarget);
-        renderer.setClearColor(0x000000, 1);
         renderer.clear();
         renderer.render(scene, camera);
 
+        renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
         camera.layers.mask = previousCameraLayerMask;
         scene.overrideMaterial = previousOverrideMaterial;
         renderer.setRenderTarget(previousRenderTarget);

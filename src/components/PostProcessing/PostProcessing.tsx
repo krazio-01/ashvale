@@ -6,7 +6,6 @@ import {
     BrightnessContrast,
     EffectComposer,
     HueSaturation,
-    N8AO,
     SMAA,
     ToneMapping,
 } from "@react-three/postprocessing";
@@ -17,7 +16,7 @@ import { AtmosphereEffect } from "@/world/effects/AtmosphereEffect";
 import { FoliageMaskPass } from "@/world/effects/FoliageMaskPass";
 import { OutlineEffect } from "@/world/effects/OutlineEffect";
 import type { IThemeEnvironment } from "@/types/theme";
-import { AMBIENT_OCCLUSION, POST_PROCESSING, RENDER } from "@/constants/rendering";
+import { POST_PROCESSING, RENDER } from "@/constants/rendering";
 
 const FOLIAGE_MASK_RENDER_PRIORITY = 0;
 
@@ -68,16 +67,6 @@ const PostProcessing = ({ environment }: { environment: IThemeEnvironment }) => 
 
     return (
         <EffectComposer multisampling={RENDER.multisampling}>
-            <N8AO
-                halfRes={AMBIENT_OCCLUSION.halfResolution}
-                aoRadius={AMBIENT_OCCLUSION.radius}
-                distanceFalloff={AMBIENT_OCCLUSION.distanceFalloff}
-                intensity={AMBIENT_OCCLUSION.intensity}
-                aoSamples={AMBIENT_OCCLUSION.samples}
-                denoiseSamples={AMBIENT_OCCLUSION.denoiseSamples}
-                denoiseRadius={AMBIENT_OCCLUSION.denoiseRadius}
-            />
-
             <primitive object={outline} dispose={null} />
 
             <primitive object={atmosphere} dispose={null} />
