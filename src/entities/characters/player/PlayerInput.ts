@@ -13,7 +13,7 @@ const ACTIONS_BY_KEY = new Map<string, InputAction>();
 for (const [action, codes] of Object.entries(KEY_BINDINGS) as [InputAction, string[]][])
     for (const code of codes) ACTIONS_BY_KEY.set(code, action);
 
-export class InputManager {
+export class PlayerInput {
     private readonly heldCounts: Record<InputAction, number> = {
         forward: 0,
         backward: 0,

@@ -2,7 +2,7 @@ import { Golem } from "@/entities/characters/enemies/Golem";
 import { Gremlin } from "@/entities/characters/enemies/Gremlin";
 import { Sentinel } from "@/entities/characters/enemies/Sentinel";
 import { Wraith } from "@/entities/characters/enemies/Wraith";
-import { Enemy } from "@/entities/characters/Enemy";
+import { Enemy } from "@/entities/characters/enemies/Enemy";
 import { CharacterBody } from "@/entities/characters/CharacterBody";
 import { modelFor } from "@/entities/characters/enemies/EnemyModels";
 import { EnemyArchetype } from "@/constants/characters";

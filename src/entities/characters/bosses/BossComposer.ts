@@ -1,6 +1,6 @@
 import { FrenzyCombo } from "@/entities/attacks/FrenzyCombo";
 import { SteadyStrike } from "@/entities/attacks/SteadyStrike";
-import { Boss } from "@/entities/characters/Boss";
+import { Boss } from "@/entities/characters/bosses/Boss";
 import { IAttackModule } from "@/types/entities";
 import { IChapterBoss } from "@/types/realm";
 

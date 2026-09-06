@@ -1,5 +1,5 @@
 import { EnemyAction } from "@/constants/characters";
-import { Enemy } from "@/entities/characters/Enemy";
+import { Enemy } from "@/entities/characters/enemies/Enemy";
 
 const GOLEM_MAX_HEALTH = 90;
 const GOLEM_ATTACK_DAMAGE = 18;

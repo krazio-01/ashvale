@@ -1,4 +1,4 @@
-import type { BufferGeometry, Group, Material, Object3D } from "three";
+import type { AnimationClip, BufferGeometry, Group, Material, Object3D } from "three";
 import type { World as PhysicsWorld, ColliderDesc } from "@dimforge/rapier3d-compat";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { AssetLibrary } from "@/world/assets/AssetLibrary";
@@ -32,6 +32,12 @@ export interface IModelPart {
 
 export interface IModelTemplate {
     parts: IModelPart[];
+    height: number;
+}
+
+export interface ISkinnedModel {
+    scene: Object3D;
+    animations: AnimationClip[];
     height: number;
 }
 

@@ -1,3 +1,7 @@
+export const SCALE = {
+    unitsPerMetre: 2,
+};
+
 const TRAIL_HALF_WIDTH = 1.6;
 const TRAIL_WEAR_FALLOFF_WIDTH = 3.2;
 

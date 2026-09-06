@@ -1,14 +1,17 @@
-import { Box3, Material, Mesh, MeshStandardMaterial, Object3D, Vector3 } from "three";
+import { Box3, Material, Mesh, MeshStandardMaterial, Object3D, SkinnedMesh, Vector3 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { BufferGeometry } from "three";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { IThemeManifest } from "@/types/theme";
-import type { IModelPart, IModelTemplate } from "@/types/world";
+import type { IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
+import { CHARACTER } from "@/constants/characters";
 
 const FOLIAGE_MATERIAL_PATTERN = /leaves|leaf|foliage/i;
 
 export class AssetLibrary {
     private readonly templatesByPath = new Map<string, IModelTemplate>();
+    private readonly skinnedModelsByPath = new Map<string, ISkinnedModel>();
 
     static async create(
         manifest: IThemeManifest,
@@ -18,15 +21,24 @@ export class AssetLibrary {
         const library = new AssetLibrary();
         const uniqueModelPaths = [...new Set(manifest.props.map((prop) => prop.modelPath))];
 
-        const loadedModels = await Promise.all(
-            uniqueModelPaths.map(async (modelPath) => ({
-                modelPath,
-                scene: (await loader.loadAsync(modelPath)).scene,
-            }))
-        );
+        const [loadedModels, characterModel, clipLibraries] = await Promise.all([
+            Promise.all(
+                uniqueModelPaths.map(async (modelPath) => ({
+                    modelPath,
+                    scene: (await loader.loadAsync(modelPath)).scene,
+                }))
+            ),
+            loader.loadAsync(CHARACTER.modelPath),
+            Promise.all(CHARACTER.clipLibraryPaths.map((path) => loader.loadAsync(path))),
+        ]);
 
         for (const { modelPath, scene } of loadedModels)
             library.templatesByPath.set(modelPath, flattenForInstancing(scene, materialLibrary));
+
+        library.skinnedModelsByPath.set(
+            CHARACTER.modelPath,
+            prepareSkinnedModel(characterModel, clipLibraries, materialLibrary)
+        );
 
         return library;
     }
@@ -35,12 +47,44 @@ export class AssetLibrary {
         return this.templatesByPath.get(modelPath) ?? null;
     }
 
+    getSkinnedModel(modelPath: string): ISkinnedModel | null {
+        return this.skinnedModelsByPath.get(modelPath) ?? null;
+    }
+
     dispose(): void {
         for (const template of this.templatesByPath.values())
             for (const part of template.parts) part.geometry.dispose();
 
+        for (const model of this.skinnedModelsByPath.values())
+            model.scene.traverse((object) => {
+                if (object instanceof SkinnedMesh) object.geometry.dispose();
+            });
+
         this.templatesByPath.clear();
+        this.skinnedModelsByPath.clear();
     }
+}
+
+function prepareSkinnedModel(
+    gltf: GLTF,
+    clipLibraries: GLTF[],
+    materialLibrary: MaterialLibrary
+): ISkinnedModel {
+    gltf.scene.traverse((object) => {
+        if (!(object instanceof SkinnedMesh)) return;
+
+        object.material = toToonMaterial(object.material, materialLibrary);
+        object.castShadow = true;
+        object.frustumCulled = false;
+    });
+
+    const bounds = new Box3().setFromObject(gltf.scene);
+
+    return {
+        scene: gltf.scene,
+        animations: [...gltf.animations, ...clipLibraries.flatMap((library) => library.animations)],
+        height: bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y,
+    };
 }
 
 function flattenForInstancing(root: Object3D, materialLibrary: MaterialLibrary): IModelTemplate {
