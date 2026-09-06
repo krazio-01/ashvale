@@ -1,10 +1,10 @@
-import { Boss } from "@/entities/characters/Boss";
+import { Character } from "@/entities/characters/Character";
 import { IAttackModule } from "@/types/entities";
 
 export class FrenzyCombo implements IAttackModule {
     readonly name = "Frenzy Combo";
 
-    execute(boss: Boss): void {
-        console.log(boss);
+    execute(attacker: Character): void {
+        console.log(attacker);
     }
 }

@@ -1,8 +1,8 @@
-import type { Boss } from "@/entities/characters/Boss";
+import type { Character } from "@/entities/characters/Character";
 
 export interface IAttackModule {
     readonly name: string;
-    execute(boss: Boss): void;
+    execute(attacker: Character): void;
 }
 
 export interface IWeapon {
