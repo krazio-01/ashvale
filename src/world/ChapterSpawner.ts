@@ -2,10 +2,10 @@ import type { Camera, Vector3Tuple } from "three";
 import { PropBatch } from "@/world/props/PropBatch";
 import { TerrainMesh } from "@/world/terrain/TerrainMesh";
 import { GrassField } from "@/world/vegetation/GrassField";
-import { Player } from "@/entities/characters/Player";
+import { Player } from "@/entities/characters/player/Player";
 import { CharacterBody } from "@/entities/characters/CharacterBody";
-import { bossModel } from "@/entities/characters/BossModel";
-import { spawnEnemyBody } from "@/entities/characters/EnemySpawner";
+import { bossModel } from "@/entities/characters/bosses/BossModel";
+import { spawnEnemyBody } from "@/entities/characters/enemies/EnemySpawner";
 import { buildPropField, type ICorridorLane, type IRegionSite } from "@/world/props/PropField";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
 import {

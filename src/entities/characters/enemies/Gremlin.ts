@@ -1,5 +1,5 @@
 import { EnemyAction } from "@/constants/characters";
-import { Enemy } from "@/entities/characters/Enemy";
+import { Enemy } from "@/entities/characters/enemies/Enemy";
 
 const GREMLIN_MAX_HEALTH = 12;
 const GREMLIN_ATTACK_DAMAGE = 4;

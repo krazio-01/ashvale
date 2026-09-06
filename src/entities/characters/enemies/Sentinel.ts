@@ -1,5 +1,5 @@
 import { EnemyAction } from "@/constants/characters";
-import { Enemy } from "@/entities/characters/Enemy";
+import { Enemy } from "@/entities/characters/enemies/Enemy";
 
 const SENTINEL_MAX_HEALTH = 40;
 const SENTINEL_ATTACK_DAMAGE = 8;
