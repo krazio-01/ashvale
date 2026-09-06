@@ -6,7 +6,7 @@ const PLAYER_HEIGHT = metres(2.1);
 export const PLAYER = {
     height: PLAYER_HEIGHT,
     radius: PLAYER_HEIGHT * 0.24,
-    speed: PLAYER_HEIGHT * 1.25,
+    walkSpeed: PLAYER_HEIGHT * 1.25,
     sprintSpeed: PLAYER_HEIGHT * 5,
     jumpForce: 11,
     maxHealth: 100,
