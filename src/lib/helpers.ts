@@ -1,8 +1,13 @@
+import { SCALE } from "@/constants/world";
 import { Color } from "three";
 import type { Vector3Tuple } from "three";
 
 export const FULL_TURN = Math.PI * 2;
 export const QUARTER_TURN = Math.PI / 2;
+
+export function metres(value: number): number {
+    return value * SCALE.unitsPerMetre;
+}
 
 export function vec3(x: number, y: number, z: number): Vector3Tuple {
     return [x, y, z];
