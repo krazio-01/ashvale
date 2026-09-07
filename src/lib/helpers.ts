@@ -17,6 +17,10 @@ export function pair(a: number, b: number): [number, number] {
     return [a, b];
 }
 
+export function quad(a: number, b: number, c: number, d: number): IQuad {
+    return [a, b, c, d];
+}
+
 export function yieldToBrowser(): Promise<void> {
     return new Promise((resolve) => {
         requestAnimationFrame(() => setTimeout(resolve, 0));
@@ -104,6 +108,22 @@ export function pickRandomSubset<T>(items: T[], count: number, nextRandom: () =>
 export function scaleBetween([minimum, maximum]: [number, number], ratio: number): number {
     return minimum + ratio * (maximum - minimum);
 }
+
+export function distanceOutsideBox(
+    x: number,
+    z: number,
+    centerX: number,
+    centerZ: number,
+    halfWidth: number,
+    halfDepth: number
+): number {
+    const outsideX = Math.max(Math.abs(x - centerX) - halfWidth, 0);
+    const outsideZ = Math.max(Math.abs(z - centerZ) - halfDepth, 0);
+
+    return Math.hypot(outsideX, outsideZ);
+}
+
+export type IQuad = [number, number, number, number];
 
 export interface ISpanVector {
     spanX: number;
