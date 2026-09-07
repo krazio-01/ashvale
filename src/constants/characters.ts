@@ -68,6 +68,7 @@ export const PALETTE = {
     moss: "#6f7d55",
     ember: "#ff7a3c",
     playerBody: "#c1503c",
+    gold: "#d4af37",
 };
 
 export enum CharacterMotion {

@@ -14,8 +14,7 @@ import { Entity } from "@/entities/Entity";
 import type { ITerrainProfile } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
-import { WALKABLE_REACH } from "@/world/terrain/TerrainHeightField";
-import { GROUND, TERRAIN, TERRAIN_DETAIL } from "@/constants/world";
+import { GROUND, TERRAIN, TERRAIN_DETAIL, WATER_CHANNEL } from "@/constants/world";
 import { clamp, smoothstep } from "@/lib/helpers";
 import {
     GROUND_MATERIAL_GLSL,
@@ -101,14 +100,11 @@ function buildIslandGeometry(heightMap: TerrainHeightMap): IIslandGeometry {
         for (let column = 0; column < pointsPerSide; column += 1) {
             const localX = heightMap.originX + column * heightMap.cellSize;
             const pointIndex = row * pointsPerSide + column;
-            if (heightMap.footprintDistanceAtPoint(pointIndex) > WALKABLE_REACH) continue;
-
-            const elevation = heightMap.elevationAtPoint(pointIndex);
-            if (!Number.isFinite(elevation)) continue;
+            if (!heightMap.hasGroundAtPoint(pointIndex)) continue;
 
             vertexIndexByPoint[pointIndex] = pointIndexValues.length;
             pointIndexValues.push(pointIndex);
-            positionValues.push(localX, elevation, localZ);
+            positionValues.push(localX, heightMap.elevationAtPoint(pointIndex), localZ);
         }
     }
 
@@ -149,7 +145,7 @@ function paintGroundOverrides(
     const normalArray = normals.array as Float32Array;
     const vertexCount = positions.count;
     const colors = new Float32Array(vertexCount * 3);
-    const groundBlends = new Float32Array(vertexCount * 3);
+    const groundBlends = new Float32Array(vertexCount * 4);
     const wildTop = TERRAIN.pathLevel + profile.wildElevation;
     const mountainSpan = Math.max(profile.mountainHeight, 1);
     const rock = new Color(profile.rockColor);
@@ -158,6 +154,7 @@ function paintGroundOverrides(
 
     for (let index = 0; index < vertexCount; index += 1) {
         const offset = index * 3;
+        const blendOffset = index * 4;
         const pointIndex = pointIndices[index] ?? 0;
 
         const heightRatio = clamp(
@@ -179,15 +176,19 @@ function paintGroundOverrides(
         colors[offset + 1] = override.green;
         colors[offset + 2] = override.blue;
 
-        groundBlends[offset] = trailWearAt(heightMap.trailDistanceAtPoint(pointIndex));
-        groundBlends[offset + 1] = override.strength;
-        groundBlends[offset + 2] =
+        groundBlends[blendOffset] = trailWearAt(heightMap.trailDistanceAtPoint(pointIndex));
+        groundBlends[blendOffset + 1] = override.strength;
+        groundBlends[blendOffset + 2] =
             (1 - slope * profile.slopeShade) * nestingShadeAt(heightMap, pointIndex);
+        groundBlends[blendOffset + 3] = shoreWetnessAt(heightMap.waterDepthAtPoint(pointIndex));
     }
 
     geometry.setAttribute("color", new BufferAttribute(colors, 3));
-    geometry.setAttribute("groundBlend", new BufferAttribute(groundBlends, 3));
+    geometry.setAttribute("groundBlend", new BufferAttribute(groundBlends, 4));
 }
+
+const shoreWetnessAt = (waterDepth: number): number =>
+    1 - smoothstep(0, WATER_CHANNEL.shoreWetBand, -waterDepth);
 
 function nestingShadeAt(heightMap: TerrainHeightMap, pointIndex: number): number {
     if (heightMap.isCorridorAtPoint(pointIndex)) return 1;
@@ -227,11 +228,10 @@ function applyGroundMaterialBlend(
     groundDetail: CanvasTexture,
     materials: IGroundMaterials
 ): void {
-    const blendUniforms: Record<string, IUniform> = groundMaterialUniforms(
-        groundSplat,
-        groundDetail,
-        materials
-    );
+    const blendUniforms: Record<string, IUniform> = {
+        ...groundMaterialUniforms(groundSplat, groundDetail, materials),
+        shoreWetShade: { value: WATER_CHANNEL.shoreWetShade },
+    };
 
     material.onBeforeCompile = (shader) => {
         Object.assign(shader.uniforms, blendUniforms);
@@ -240,8 +240,8 @@ function applyGroundMaterialBlend(
             .replace(
                 "#include <common>",
                 `#include <common>
-                attribute vec3 groundBlend;
-                varying vec3 vGroundBlend;
+                attribute vec4 groundBlend;
+                varying vec4 vGroundBlend;
                 varying vec2 vGroundPosition;`
             )
             .replace(
@@ -255,14 +255,19 @@ function applyGroundMaterialBlend(
             .replace(
                 "#include <common>",
                 `#include <common>
-                varying vec3 vGroundBlend;
+                uniform float shoreWetShade;
+                varying vec4 vGroundBlend;
                 varying vec2 vGroundPosition;
                 ${GROUND_MATERIAL_GLSL}`
             )
             .replace(
                 "#include <color_fragment>",
                 `vec4 materialShare = groundMaterialShareAt(vGroundPosition, vGroundBlend.x);
-                vec3 groundColor = groundColorOf(materialShare, vGroundPosition);
+                vec3 groundColor = mix(
+                    groundColorOf(materialShare, vGroundPosition),
+                    mudColor * shoreWetShade,
+                    vGroundBlend.w
+                );
                 diffuseColor.rgb *=
                     mix(groundColor, vColor.rgb, vGroundBlend.y) * vGroundBlend.z;`
             );

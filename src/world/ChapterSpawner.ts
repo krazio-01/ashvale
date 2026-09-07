@@ -14,13 +14,15 @@ import {
     WALKABLE_REACH,
 } from "@/world/terrain/TerrainHeightField";
 import { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+import { plotWaterCourse, type IRegionLink } from "@/world/water/WaterCourse";
+import { WaterSurface } from "@/world/water/WaterSurface";
 import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainHeightField";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
 import type { IChapterRegion, IRegionPathway } from "@/types/realm";
 import type { IPropGroup, IThemeManifest } from "@/types/theme";
 import type { SpawnProgressListener } from "@/types/world";
-import { SPAWNING } from "@/constants/characters";
+import { PLAYER, SPAWNING } from "@/constants/characters";
 import { TERRAIN } from "@/constants/world";
 import { FULL_TURN, createSeededRandom, hashString, yieldToBrowser } from "@/lib/helpers";
 import { WalkableEdgeBarrier } from "./terrain/WalkableEdgeBarrier";
@@ -58,7 +60,11 @@ export async function spawnChapterWorld(
 
     await beginStage("Waking the inhabitants");
     spawnRegionEnemies(world, chapter, terrain.groundHeightAt);
-    spawnPlayer(world, camera, chapter, positionsByRegionId, terrain);
+
+    const player = spawnPlayer(world, camera, chapter, positionsByRegionId, terrain);
+
+    if (player) terrain.waterSurface?.follow(player.sceneObject, PLAYER.height / 2);
+
     spawnBoss(world, chapter, positionsByRegionId, terrain);
 }
 
@@ -84,8 +90,9 @@ async function spawnTerrain(
         centerZ
     );
     const seed = hashString(`${chapter.title}-${chapter.chapterIndex}`);
-    const { corridorPaths, corridorLanes } = buildCorridorGeometry(
+    const { corridorPaths, corridorLanes, regionLinks } = buildCorridorGeometry(
         chapter.pathways,
+        chapter.regions,
         positionsByRegionId,
         centerX,
         centerZ,
@@ -96,7 +103,17 @@ async function spawnTerrain(
     const center: Vector3Tuple = [centerX, 0, centerZ];
 
     await beginStage("Sculpting the terrain");
-    const heightField = new TerrainHeightField(regionFloors, corridorPaths, seed);
+    const dryHeightField = new TerrainHeightField(regionFloors, corridorPaths, null, seed);
+    const waterCourse = plotWaterCourse(
+        regionFloors,
+        regionLinks,
+        corridorPaths,
+        dryHeightField,
+        seed + 29
+    );
+    const heightField = waterCourse
+        ? new TerrainHeightField(regionFloors, corridorPaths, waterCourse, seed)
+        : dryHeightField;
     const heightMap = new TerrainHeightMap(heightField, mappedRadius);
 
     await beginStage("Weathering the soil");
@@ -117,6 +134,14 @@ async function spawnTerrain(
     );
     world.addEntity(new WalkableEdgeBarrier(world.context, center, heightMap));
     world.addEntity(new LedgePlatforms(world.context, center, corridorPaths));
+
+    let waterSurface: WaterSurface | null = null;
+
+    if (waterCourse) {
+        await beginStage("Letting the river in");
+        waterSurface = new WaterSurface(world.context, center, waterCourse, heightMap);
+        world.addEntity(waterSurface);
+    }
 
     await beginStage("Sowing the grasslands");
     world.addEntity(
@@ -159,6 +184,7 @@ async function spawnTerrain(
     await addPropBuckets(world, camera, propBuckets);
 
     return {
+        waterSurface,
         groundHeightAt: (worldX, worldZ) =>
             heightMap.surfaceElevationAt(worldX - centerX, worldZ - centerZ),
         groundSteepnessAt: (worldX, worldZ) =>
@@ -192,24 +218,25 @@ function spawnPlayer(
     chapter: ChapterResponse,
     positionsByRegionId: Map<string, Vector3Tuple>,
     terrain: ITerrainContext
-): void {
+): Player | null {
     const spawnPosition = positionsByRegionId.get(chapter.spawnRegionId);
-    if (!spawnPosition) return;
+    if (!spawnPosition) return null;
 
-    world.addEntity(
-        new Player(
-            "player",
-            world.context,
-            camera,
-            [
-                spawnPosition[0],
-                terrain.groundHeightAt(spawnPosition[0], spawnPosition[2]) +
-                    SPAWNING.playerSpawnHeight,
-                spawnPosition[2],
-            ],
-            spawnFacingYaw(chapter, chapter.spawnRegionId, spawnPosition, positionsByRegionId)
-        )
+    const player = new Player(
+        "player",
+        world.context,
+        camera,
+        [
+            spawnPosition[0],
+            terrain.groundHeightAt(spawnPosition[0], spawnPosition[2]) + SPAWNING.playerSpawnHeight,
+            spawnPosition[2],
+        ],
+        spawnFacingYaw(chapter, chapter.spawnRegionId, spawnPosition, positionsByRegionId)
     );
+
+    world.addEntity(player);
+
+    return player;
 }
 
 function spawnFacingYaw(
@@ -355,6 +382,7 @@ function buildRegionGeometry(
 
 function buildCorridorGeometry(
     pathways: IRegionPathway[],
+    regions: IChapterRegion[],
     positionsByRegionId: Map<string, Vector3Tuple>,
     centerX: number,
     centerZ: number,
@@ -362,13 +390,21 @@ function buildCorridorGeometry(
 ): ICorridorGeometry {
     const corridorPaths: ICorridorPath[] = [];
     const corridorLanes: ICorridorLane[] = [];
+    const regionLinks: IRegionLink[] = [];
+    const indexByRegionId = new Map<string, number>();
+
+    for (let i = 0, len = regions.length; i < len; i++) indexByRegionId.set(regions[i].regionId, i);
 
     for (let i = 0, len = pathways.length; i < len; i++) {
         const pathway = pathways[i];
         const fromPosition = positionsByRegionId.get(pathway.fromRegionId);
         const toPosition = positionsByRegionId.get(pathway.toRegionId);
+        const fromIndex = indexByRegionId.get(pathway.fromRegionId);
+        const toIndex = indexByRegionId.get(pathway.toRegionId);
 
         if (!fromPosition || !toPosition) continue;
+        if (fromIndex !== undefined && toIndex !== undefined)
+            regionLinks.push({ fromIndex, toIndex });
 
         const fromX = fromPosition[0] - centerX;
         const fromZ = fromPosition[2] - centerZ;
@@ -391,7 +427,7 @@ function buildCorridorGeometry(
         });
     }
 
-    return { corridorPaths, corridorLanes };
+    return { corridorPaths, corridorLanes, regionLinks };
 }
 
 function chapterSpawnPointsIn(
@@ -440,9 +476,11 @@ interface IRegionGeometry {
 interface ICorridorGeometry {
     corridorPaths: ICorridorPath[];
     corridorLanes: ICorridorLane[];
+    regionLinks: IRegionLink[];
 }
 
 interface ITerrainContext {
+    waterSurface: WaterSurface | null;
     groundHeightAt: GroundHeightLookup;
     groundSteepnessAt: GroundHeightLookup;
 }

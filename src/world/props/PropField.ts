@@ -10,7 +10,7 @@ import { PropCollector } from "@/world/props/PropCollector";
 import { trailWearAt } from "@/world/terrain/GroundMaterials";
 import { PROP_FIELD } from "@/constants/placement";
 import { SPAWNING } from "@/constants/characters";
-import { WORLD_EDGE } from "@/constants/world";
+import { WATER_CHANNEL, WORLD_EDGE } from "@/constants/world";
 import { FractalNoise } from "@/lib/noise";
 import {
     clamp,
@@ -378,6 +378,7 @@ function placeProp(
 
     const sample = field.heightMap.sampleAt(localX, localZ, field.heightSample);
     if (sample.footprintDistance > WORLD_EDGE.groundApron) return false;
+    if (sample.waterDepth > -WATER_CHANNEL.propBankMargin) return false;
     if (sample.steepness > rules.slopeLimit) return false;
     if (trailWearAt(sample.trailDistance) > PROP_FIELD.trailWearRejectThreshold) return false;
     if (collides && !hasLevelRim(localX, localZ, footprintRadius, rules.slopeLimit, field))
