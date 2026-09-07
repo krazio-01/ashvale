@@ -69,12 +69,19 @@ export interface ITerrainProfile {
     slopeShade: number;
 }
 
+export interface IWaterProfile {
+    shallowColor: string;
+    deepColor: string;
+    foamColor: string;
+}
+
 export interface IThemeEnvironment {
     sky: ISkyGradient;
     lighting: IThemeLighting;
     fogDensity: number;
     outlineColor: string;
     terrain: ITerrainProfile;
+    water: IWaterProfile;
 }
 
 export interface ISeasonColorShift {
