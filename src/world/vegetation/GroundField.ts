@@ -9,7 +9,7 @@ export const GROUND_FIELD_GLSL = /* glsl */ `
     uniform float fieldCellSize;
     uniform float fieldPointsPerSide;
     uniform vec2 steepGroundBand;
-    uniform vec2 worldEdgeBand;
+    uniform vec2 growthStopBand;
 
     vec3 randomTriple(vec3 seed) {
         vec3 scattered = fract(seed * vec3(0.1031, 0.1030, 0.0973));
@@ -33,11 +33,11 @@ export const GROUND_FIELD_GLSL = /* glsl */ `
             * step(0.0, pointCoord.y) * step(pointCoord.y, lastPoint);
     }
 
-    float withinGrowableGround(float steepness, float footprintDistance) {
+    float withinGrowableGround(float steepness, float growthStopDistance) {
         float offSteepGround = 1.0 - smoothstep(steepGroundBand.x, steepGroundBand.y, steepness);
-        float insideWorldEdge = 1.0 - smoothstep(worldEdgeBand.x, worldEdgeBand.y, footprintDistance);
+        float shortOfStop = 1.0 - smoothstep(growthStopBand.x, growthStopBand.y, growthStopDistance);
 
-        return offSteepGround * insideWorldEdge;
+        return offSteepGround * shortOfStop;
     }
 
     float latticeValue(vec2 lattice) {
@@ -73,7 +73,7 @@ export const groundFieldUniforms = (
     fieldCellSize: { value: heightMap.cellSize },
     fieldPointsPerSide: { value: heightMap.pointsPerSide },
     steepGroundBand: { value: new Vector2(...steepGroundBand) },
-    worldEdgeBand: {
+    growthStopBand: {
         value: new Vector2(
             WORLD_EDGE.groundApron - GROUND_FIELD.worldEdgeFadeWidth,
             WORLD_EDGE.groundApron

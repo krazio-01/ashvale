@@ -1,21 +1,38 @@
-import { LANDFORM, TERRAIN, TERRAIN_DETAIL, TRAIL, WORLD_EDGE } from "@/constants/world";
-import { clamp, lerp, smoothstep } from "@/lib/helpers";
+import {
+    LANDFORM,
+    TERRAIN,
+    TERRAIN_DETAIL,
+    TRAIL,
+    WATER_CHANNEL,
+    WORLD_EDGE,
+} from "@/constants/world";
+import { clamp, distanceOutsideBox, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
+import { createChannelReading, WaterChannel } from "@/world/water/WaterChannel";
+import type { IWaterCourse } from "@/world/water/WaterCourse";
 
 export const WALKABLE_REACH = WORLD_EDGE.groundApron + WORLD_EDGE.lipWidth;
 
 export class TerrainHeightField {
     private readonly regionFloors: IRegionFloor[];
     private readonly preparedCorridors: IPreparedCorridor[];
+    private readonly waterChannel: WaterChannel | null;
     private readonly undulationNoise: FractalNoise;
     private readonly trailEdgeNoise: FractalNoise;
     private readonly elevationRampDistance: number;
     private readonly scratchSample = createTerrainSample();
     private readonly scratchGround = createGroundAccumulator();
+    private readonly scratchChannel = createChannelReading();
 
-    constructor(regionFloors: IRegionFloor[], corridorPaths: ICorridorPath[], seed: number) {
+    constructor(
+        regionFloors: IRegionFloor[],
+        corridorPaths: ICorridorPath[],
+        waterCourse: IWaterCourse | null,
+        seed: number
+    ) {
         this.regionFloors = regionFloors;
         this.preparedCorridors = corridorPaths.map(prepareCorridor);
+        this.waterChannel = waterCourse ? WaterChannel.from(waterCourse) : null;
         this.undulationNoise = new FractalNoise(seed);
         this.trailEdgeNoise = new FractalNoise(seed + 11);
         this.elevationRampDistance =
@@ -77,15 +94,47 @@ export class TerrainHeightField {
             0,
             TRAIL.distanceLimit
         );
-        sample.elevation =
-            this.resolveElevationAt(localX, localZ, ground) +
-            edgeDropAt(ground.nearestEdgeDistance);
+        this.applyWaterChannelTo(
+            sample,
+            localX,
+            localZ,
+            this.resolveElevationAt(localX, localZ, ground) + edgeDropAt(ground.nearestEdgeDistance)
+        );
 
         return sample;
     }
 
     elevationAt(localX: number, localZ: number): number {
         return this.sampleInto(localX, localZ, this.scratchSample).elevation;
+    }
+
+    footprintDistanceAt(localX: number, localZ: number): number {
+        return this.sampleInto(localX, localZ, this.scratchSample).footprintDistance;
+    }
+
+    private applyWaterChannelTo(
+        sample: ITerrainSample,
+        localX: number,
+        localZ: number,
+        groundElevation: number
+    ): void {
+        sample.elevation = groundElevation;
+        sample.waterDepth = WATER_CHANNEL.dryDepth;
+
+        const channel = this.waterChannel;
+        if (!channel) return;
+
+        const reading = channel.readInto(localX, localZ, this.scratchChannel);
+        if (reading.bankBlend <= 0) return;
+
+        const bedElevation =
+            reading.waterlineElevation - WATER_CHANNEL.bedDepth * reading.bedProfile;
+
+        sample.elevation = lerp(groundElevation, bedElevation, reading.bankBlend);
+        sample.waterDepth = Math.max(
+            reading.waterlineElevation - sample.elevation,
+            WATER_CHANNEL.dryDepth
+        );
     }
 
     private resolveElevationAt(localX: number, localZ: number, ground: IGroundAccumulator): number {
@@ -173,6 +222,7 @@ export function createTerrainSample(): ITerrainSample {
         nestingDepth: 0,
         isCorridor: false,
         footprintDistance: 0,
+        waterDepth: WATER_CHANNEL.dryDepth,
     };
 }
 
@@ -319,11 +369,15 @@ function corridorElevationAt(corridor: IPreparedCorridor, travelRatio: number): 
     );
 }
 
-function distanceOutsideRegionFloor(x: number, z: number, region: IRegionFloor): number {
-    const outsideX = Math.max(Math.abs(x - region.centerX) - region.halfWidth, 0);
-    const outsideZ = Math.max(Math.abs(z - region.centerZ) - region.halfDepth, 0);
-
-    return Math.sqrt(outsideX * outsideX + outsideZ * outsideZ);
+export function distanceOutsideRegionFloor(x: number, z: number, region: IRegionFloor): number {
+    return distanceOutsideBox(
+        x,
+        z,
+        region.centerX,
+        region.centerZ,
+        region.halfWidth,
+        region.halfDepth
+    );
 }
 
 function corridorTravelRatioAt(x: number, z: number, corridor: IPreparedCorridor): number {
@@ -384,6 +438,7 @@ export interface ITerrainSample {
     nestingDepth: number;
     isCorridor: boolean;
     footprintDistance: number;
+    waterDepth: number;
 }
 
 interface IPreparedCorridor {

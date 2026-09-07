@@ -6,9 +6,14 @@ import {
     LinearFilter,
     RGBAFormat,
 } from "three";
-import { TERRAIN, TERRAIN_DETAIL, TRAIL } from "@/constants/world";
-import { clamp, lerp } from "@/lib/helpers";
-import { createTerrainSample, type TerrainHeightField } from "@/world/terrain/TerrainHeightField";
+import { TERRAIN, TERRAIN_DETAIL, TRAIL, WATER_CHANNEL, WORLD_EDGE } from "@/constants/world";
+import { GROUND_FIELD } from "@/constants/placement";
+import { clamp, lerp, smoothstep } from "@/lib/helpers";
+import {
+    createTerrainSample,
+    WALKABLE_REACH,
+    type TerrainHeightField,
+} from "@/world/terrain/TerrainHeightField";
 
 export class TerrainHeightMap {
     readonly span: number;
@@ -25,6 +30,7 @@ export class TerrainHeightMap {
     private readonly corridorDominates: Uint8Array;
     private readonly nestingDepths: Uint8Array;
     private readonly footprintDistances: Float32Array;
+    private readonly waterDepths: Float32Array;
 
     constructor(heightField: TerrainHeightField, outerRadius: number) {
         this.span = outerRadius * 2;
@@ -46,6 +52,7 @@ export class TerrainHeightMap {
         this.corridorDominates = new Uint8Array(pointCount);
         this.nestingDepths = new Uint8Array(pointCount);
         this.footprintDistances = new Float32Array(pointCount);
+        this.waterDepths = new Float32Array(pointCount);
 
         const sample = createTerrainSample();
         const slopeReach = TERRAIN.macroSlopeGrainWavelengths / TERRAIN_DETAIL.grainNoiseScale / 2;
@@ -64,6 +71,7 @@ export class TerrainHeightMap {
                 this.corridorDominates[index] = sample.isCorridor ? 1 : 0;
                 this.nestingDepths[index] = Math.min(sample.nestingDepth, 255);
                 this.footprintDistances[index] = sample.footprintDistance;
+                this.waterDepths[index] = sample.waterDepth;
 
                 const riseAcross =
                     heightField.elevationAt(localX + slopeReach, localZ) -
@@ -98,6 +106,7 @@ export class TerrainHeightMap {
         sample.trailDistance = this.interpolateWithWeights(this.trailDistances, weights);
         sample.steepness = this.interpolateWithWeights(this.steepnesses, weights);
         sample.footprintDistance = this.interpolateWithWeights(this.footprintDistances, weights);
+        sample.waterDepth = this.interpolateWithWeights(this.waterDepths, weights);
 
         return sample;
     }
@@ -137,6 +146,17 @@ export class TerrainHeightMap {
         return this.footprintDistances[pointIndex] ?? Infinity;
     }
 
+    waterDepthAtPoint(pointIndex: number): number {
+        return this.waterDepths[pointIndex] ?? WATER_CHANNEL.dryDepth;
+    }
+
+    hasGroundAtPoint(pointIndex: number): boolean {
+        return (
+            this.footprintDistanceAtPoint(pointIndex) <= WALKABLE_REACH &&
+            Number.isFinite(this.elevationAtPoint(pointIndex))
+        );
+    }
+
     createShaderTexture(): DataTexture {
         const channels = new Uint16Array(this.elevations.length * 4);
 
@@ -148,7 +168,12 @@ export class TerrainHeightMap {
                 this.trailDistances[index] ?? TRAIL.distanceLimit
             );
             channels[channelStart + 2] = DataUtils.toHalfFloat(this.steepnesses[index] ?? 0);
-            channels[channelStart + 3] = DataUtils.toHalfFloat(this.footprintDistances[index] ?? 0);
+            channels[channelStart + 3] = DataUtils.toHalfFloat(
+                growthStopDistanceOf(
+                    this.footprintDistances[index] ?? 0,
+                    this.waterDepths[index] ?? WATER_CHANNEL.dryDepth
+                )
+            );
         }
 
         const texture = new DataTexture(
@@ -232,6 +257,16 @@ export class TerrainHeightMap {
     }
 }
 
+function growthStopDistanceOf(footprintDistance: number, waterDepth: number): number {
+    const fadeStart = WORLD_EDGE.groundApron - GROUND_FIELD.worldEdgeFadeWidth;
+    const waterlineApproach = smoothstep(-WATER_CHANNEL.shoreGrassBand, 0, waterDepth);
+
+    return Math.max(
+        footprintDistance,
+        fadeStart + GROUND_FIELD.worldEdgeFadeWidth * waterlineApproach
+    );
+}
+
 interface IInterpolationWeights {
     acrossRatio: number;
     downRatio: number;
@@ -245,6 +280,7 @@ export interface IHeightMapSample {
     trailDistance: number;
     steepness: number;
     footprintDistance: number;
+    waterDepth: number;
 }
 
 export function createHeightMapSample(): IHeightMapSample {
@@ -254,5 +290,6 @@ export function createHeightMapSample(): IHeightMapSample {
         trailDistance: TRAIL.distanceLimit,
         steepness: 0,
         footprintDistance: 0,
+        waterDepth: WATER_CHANNEL.dryDepth,
     };
 }
