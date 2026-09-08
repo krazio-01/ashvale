@@ -23,12 +23,17 @@ export class WaterChannel {
     private readonly cellStarts: Int32Array;
     private readonly cellSegments: Int32Array;
 
-    static from(course: IWaterCourse): WaterChannel | null {
-        return course.points.length > 1 ? new WaterChannel(course) : null;
+    static from(input: IWaterCourse | IWaterCourse[]): WaterChannel | null {
+        const courses = Array.isArray(input) ? input : [input];
+        const validCourses = courses.filter((c) => c.points.length > 1);
+        return validCourses.length > 0 ? new WaterChannel(validCourses) : null;
     }
 
-    private constructor(course: IWaterCourse) {
-        const segmentCount = course.points.length - 1;
+    private constructor(courses: IWaterCourse[]) {
+        let segmentCount = 0;
+        for (const course of courses) {
+            segmentCount += Math.max(0, course.points.length - 1);
+        }
 
         this.fromX = new Float32Array(segmentCount);
         this.fromZ = new Float32Array(segmentCount);
@@ -47,31 +52,37 @@ export class WaterChannel {
         let largestX = -Infinity;
         let largestZ = -Infinity;
 
-        for (let segment = 0; segment < segmentCount; segment += 1) {
-            const from = course.points[segment];
-            const to = course.points[segment + 1];
-            if (!from || !to) continue;
+        let cursor = 0;
+        for (const course of courses) {
+            const courseSegments = course.points.length - 1;
+            for (let seg = 0; seg < courseSegments; seg += 1) {
+                const from = course.points[seg];
+                const to = course.points[seg + 1];
+                if (!from || !to) continue;
 
-            const reachX = to.x - from.x;
-            const reachZ = to.z - from.z;
-            const lengthSquared = reachX * reachX + reachZ * reachZ;
+                const reachX = to.x - from.x;
+                const reachZ = to.z - from.z;
+                const lengthSquared = reachX * reachX + reachZ * reachZ;
 
-            this.fromX[segment] = from.x;
-            this.fromZ[segment] = from.z;
-            this.spanX[segment] = reachX;
-            this.spanZ[segment] = reachZ;
-            this.inverseSpanLengthSquared[segment] = lengthSquared > 0 ? 1 / lengthSquared : 0;
-            this.fromWaterline[segment] = from.waterlineElevation;
-            this.toWaterline[segment] = to.waterlineElevation;
-            this.fromHalfWidth[segment] = from.halfWidth;
-            this.toHalfWidth[segment] = to.halfWidth;
-            this.fromBedRatio[segment] = from.bedRatio;
-            this.toBedRatio[segment] = to.bedRatio;
+                this.fromX[cursor] = from.x;
+                this.fromZ[cursor] = from.z;
+                this.spanX[cursor] = reachX;
+                this.spanZ[cursor] = reachZ;
+                this.inverseSpanLengthSquared[cursor] = lengthSquared > 0 ? 1 / lengthSquared : 0;
+                this.fromWaterline[cursor] = from.waterlineElevation;
+                this.toWaterline[cursor] = to.waterlineElevation;
+                this.fromHalfWidth[cursor] = from.halfWidth;
+                this.toHalfWidth[cursor] = to.halfWidth;
+                this.fromBedRatio[cursor] = from.bedRatio;
+                this.toBedRatio[cursor] = to.bedRatio;
 
-            smallestX = Math.min(smallestX, from.x, to.x);
-            smallestZ = Math.min(smallestZ, from.z, to.z);
-            largestX = Math.max(largestX, from.x, to.x);
-            largestZ = Math.max(largestZ, from.z, to.z);
+                smallestX = Math.min(smallestX, from.x, to.x);
+                smallestZ = Math.min(smallestZ, from.z, to.z);
+                largestX = Math.max(largestX, from.x, to.x);
+                largestZ = Math.max(largestZ, from.z, to.z);
+
+                cursor += 1;
+            }
         }
 
         this.cellSize = WATER_COURSE.halfWidthWide + WATER_CHANNEL.bankWidth;

@@ -89,12 +89,9 @@ export const WORLD_EDGE = {
     barrierSink: 6,
 };
 
-/* water is a landform, not a decal: one course is routed past the arenas, the ground is blended
-   down onto its bed, and the surface is the flat plane that bed sits under — so water can only
-   ever exist inside its own channel, and its depth is capped by the bed rather than by the land */
 export const WATER_COURSE = {
-    minimumRegionsInCourse: 2,
-    minimumPointCount: 12,
+    minimumRegionsInCourse: 1,
+    minimumPointCount: 6,
     rimOffsetRatio: 0.88,
     arenaCoreRatio: 0.6,
     sideNoiseScale: 0.004,
@@ -116,70 +113,48 @@ export const WATER_COURSE = {
 
 export const WATER_CHANNEL = {
     bedDepth: 1.6,
-    flatBedRatio: 0.5,
+    flatBedRatio: 0.2,
     bankWidth: 13,
-    shoreReach: 5,
+    shoreReach: 4.5,
     dryDepth: -8,
-    shoreWetBand: 1.4,
+    shoreWetBand: 0.9,
     shoreGrassBand: 1,
-    shoreWetShade: 0.78,
+    shoreWetShade: 0.88,
     propBankMargin: 1.4,
 };
 
-/* the sheet spans the whole channel and finds its own shoreline per pixel, where the rendered
-   ground crosses the water plane. nothing here describes an outline — the outline is wherever the
-   depth reaches zero, which is why it can be exact instead of polygonal */
 export const WATER_SURFACE = {
-    lateralStep: 1.4,
-    wetQuadMargin: 0.06,
-
-    depthFadeRange: 1.15,
-    shallowAlpha: 0.06,
-    deepAlpha: 0.5,
-    flowSpeed: 1.2,
-
-    rippleWavelengths: quad(6.5, 3.1, 1.4, 0.8),
-    rippleAmplitudes: quad(0.045, 0.05, 0.04, 0.032),
-    rippleDrifts: quad(1, 0.6, 1.5, 0.9),
-
-    /* physically based reflectance (Schlick's approximation): water reflects almost nothing
-       looking straight down and almost everything at a grazing angle, which is the one cue that
-       reads as "wet" rather than "painted" — reflectivityAtNormal is F0, the fraction reflected
-       when looking straight down */
-    reflectivityAtNormal: 0.02,
-    grazingCurve: 5,
-
-    specularSharpness: 420,
-    specularStrength: 0.75,
-    glitterThreshold: 0.6,
-    glitterGrain: 90,
-
-    causticWavelength: 0.5,
-    causticStrength: 0.16,
-    causticDepthReach: 0.85,
-
-    foamDepth: 0.16,
-    foamSoftness: 0.11,
-    foamBreakupScale: 1.4,
-    foamBreakupStrength: 0.5,
-    foamColorMix: 0.75,
-    foamAlpha: 0.55,
-
+    splineResampleStep: 1.0,
+    lateralStep: 0.75,
+    wetQuadMargin: 0.12,
+    depthFadeRange: 1.8,
+    depthColorCurve: 1.1,
+    shallowAlpha: 0.18,
+    deepAlpha: 0.88,
+    flowSpeed: 1.0,
+    rippleWavelengths: quad(4.5, 2.4, 1.1, 0.5),
+    rippleAmplitudes: quad(0.024, 0.018, 0.012, 0.008),
+    rippleDrifts: quad(1.0, 0.7, 1.3, 0.9),
+    reflectivityAtNormal: 0.04,
+    grazingCurve: 4.0,
+    shoreFoamStrength: 0.15,
+    causticScale: 0.28,
+    causticSpeed: 0.35,
+    causticIntensity: 0.18,
+    sunSpecularShininess: 140.0,
+    sunSpecularIntensity: 0.55,
+    skyReflectionStrength: 0.18,
     seasonTintStrength: 0.35,
 };
 
 export const WATER_WADER = {
-    immersionDepth: 0.5,
+    immersionDepth: 0.35,
     channelGrace: 2,
     ringWavelength: 1.1,
-    ringSpeed: 3.2,
-    ringFalloff: 3.6,
-    ringAmplitude: 0.15,
-    collarRadius: 1.5,
-    collarSoftness: 0.7,
-    collarStrength: 0.85,
-    speedReference: 6,
-    speedSmoothing: 6,
+    ringSpeed: 3.4,
+    ringFalloff: 2.8,
+    ringAmplitude: 0.18,
+    contactFoamStrength: 0.8,
 };
 
 export const TERRAIN_DETAIL = {

@@ -46,7 +46,7 @@ export class PropBatch extends Entity implements IWorldEntity {
         this.sceneObject.matrixWorldAutoUpdate = false;
         for (const batch of this.batches) batch.matrixWorldAutoUpdate = false;
 
-        this.measureFootprint();
+        this.measureFootprint(groups);
     }
 
     update(): void {
@@ -108,20 +108,27 @@ export class PropBatch extends Entity implements IWorldEntity {
         }
     }
 
-    private measureFootprint(): void {
+    private measureFootprint(groups: IPropGroup[]): void {
         let minimumX = Infinity;
         let maximumX = -Infinity;
         let minimumZ = Infinity;
         let maximumZ = -Infinity;
 
-        for (const batch of this.batches) {
-            const sphere = batch.boundingSphere;
-            if (!sphere) continue;
+        for (const group of groups) {
+            const transforms = group.transforms;
+            const count = group.instanceCount;
+            for (let i = 0; i < count; i++) {
+                const offset = i * PROP_TRANSFORM_STRIDE;
+                const x = transforms[offset] ?? 0;
+                const z = transforms[offset + 2] ?? 0;
+                const scale = transforms[offset + 4] ?? 1;
+                const radius = group.footprintRadius * scale;
 
-            minimumX = Math.min(minimumX, sphere.center.x - sphere.radius);
-            maximumX = Math.max(maximumX, sphere.center.x + sphere.radius);
-            minimumZ = Math.min(minimumZ, sphere.center.z - sphere.radius);
-            maximumZ = Math.max(maximumZ, sphere.center.z + sphere.radius);
+                minimumX = Math.min(minimumX, x - radius);
+                maximumX = Math.max(maximumX, x + radius);
+                minimumZ = Math.min(minimumZ, z - radius);
+                maximumZ = Math.max(maximumZ, z + radius);
+            }
         }
 
         if (minimumX > maximumX) return;

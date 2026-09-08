@@ -22,7 +22,6 @@ import {
     WINTER_SEASON,
 } from "@/themes/seasonProfiles";
 import { blendColors, clamp, shiftColorHsl, tintKeepingLightness } from "@/lib/helpers";
-import { WATER_SURFACE } from "@/constants/world";
 
 const BIOME_MANIFESTS: Record<ChapterTheme, IThemeManifest> = {
     [ChapterTheme.Woodland]: WOODLAND_MANIFEST,
@@ -81,14 +80,10 @@ function applySeasonToEnvironment(
     };
 }
 
-const applySeasonToWater = (water: IWaterProfile, season: ISeasonProfile): IWaterProfile => ({
-    shallowColor: blendColors(water.shallowColor, season.skyTint.color, waterTintStrength(season)),
-    deepColor: blendColors(water.deepColor, season.skyTint.color, waterTintStrength(season)),
-    foamColor: blendColors(water.foamColor, season.skyTint.color, waterTintStrength(season)),
+const applySeasonToWater = (water: IWaterProfile, _season: ISeasonProfile): IWaterProfile => ({
+    shallowColor: water.shallowColor,
+    deepColor: water.deepColor,
 });
-
-const waterTintStrength = (season: ISeasonProfile): number =>
-    season.skyTint.strength * WATER_SURFACE.seasonTintStrength;
 
 const shiftGround = (hex: string, season: ISeasonProfile): string =>
     shiftColorHsl(

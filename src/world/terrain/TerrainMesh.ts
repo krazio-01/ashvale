@@ -263,9 +263,10 @@ function applyGroundMaterialBlend(
             .replace(
                 "#include <color_fragment>",
                 `vec4 materialShare = groundMaterialShareAt(vGroundPosition, vGroundBlend.x);
+                vec3 wetRiverbedColor = mix(gritColor, mudColor, 0.25) * shoreWetShade;
                 vec3 groundColor = mix(
                     groundColorOf(materialShare, vGroundPosition),
-                    mudColor * shoreWetShade,
+                    wetRiverbedColor,
                     vGroundBlend.w
                 );
                 diffuseColor.rgb *=
