@@ -3,6 +3,54 @@ import { clamp, distanceOutsideBox, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
 import type { ICorridorPath, IRegionFloor } from "@/world/terrain/TerrainHeightField";
 
+export function plotWaterCourses(
+    regionFloors: IRegionFloor[],
+    regionLinks: IRegionLink[],
+    corridorPaths: ICorridorPath[],
+    ground: IGroundProbe,
+    seed: number
+): IWaterCourse[] {
+    if (regionFloors.length === 0) return [];
+
+    const courses: IWaterCourse[] = [];
+    const riverResult = plotPrimaryRiver(regionFloors, regionLinks, corridorPaths, ground, seed);
+    const occupiedRegions = new Set<number>();
+
+    if (riverResult) {
+        courses.push(riverResult.course);
+        for (const reg of riverResult.regions) occupiedRegions.add(reg);
+    }
+
+    const eligibleMudholeRegions: number[] = [];
+    for (let index = 0; index < regionFloors.length; index += 1) {
+        if (!occupiedRegions.has(index)) {
+            const floor = regionFloors[index];
+            if (floor && floor.halfWidth >= 16 && floor.halfDepth >= 16) {
+                eligibleMudholeRegions.push(index);
+            }
+        }
+    }
+
+    const count = Math.min(3, Math.max(1, eligibleMudholeRegions.length));
+    for (let m = 0; m < count; m += 1) {
+        if (eligibleMudholeRegions.length === 0) break;
+        const pickSeed = seed + 300 + m * 47;
+        const listIndex = (Math.abs(pickSeed) + m) % eligibleMudholeRegions.length;
+        const regionIndex = eligibleMudholeRegions[listIndex];
+        if (regionIndex === undefined) continue;
+
+        const region = regionFloors[regionIndex];
+        if (region) {
+            const mudhole = generateMudholeCourse(region, pickSeed, ground);
+            if (mudhole) courses.push(mudhole);
+        }
+
+        eligibleMudholeRegions.splice(listIndex, 1);
+    }
+
+    return courses;
+}
+
 export function plotWaterCourse(
     regionFloors: IRegionFloor[],
     regionLinks: IRegionLink[],
@@ -10,11 +58,24 @@ export function plotWaterCourse(
     ground: IGroundProbe,
     seed: number
 ): IWaterCourse | null {
-    const descendingRegions = findLongestDescendingPath(regionFloors, regionLinks);
-    if (descendingRegions.length < WATER_COURSE.minimumRegionsInCourse) return null;
+    const courses = plotWaterCourses(regionFloors, regionLinks, corridorPaths, ground, seed);
+    return courses[0] ?? null;
+}
+
+function plotPrimaryRiver(
+    regionFloors: IRegionFloor[],
+    regionLinks: IRegionLink[],
+    corridorPaths: ICorridorPath[],
+    ground: IGroundProbe,
+    seed: number
+): { course: IWaterCourse; regions: number[] } | null {
+    if (regionFloors.length === 0) return null;
+
+    const courseRegions = findCourseRegions(regionFloors, regionLinks, seed);
+    if (courseRegions.length < WATER_COURSE.minimumRegionsInCourse) return null;
 
     const noise = new FractalNoise(seed);
-    const anchors = placeCourseAnchors(descendingRegions, regionFloors, noise);
+    const anchors = placeCourseAnchors(courseRegions, regionFloors, noise);
     if (anchors.length < 2) return null;
 
     const points = resampleAlongSpline(anchors);
@@ -28,10 +89,102 @@ export function plotWaterCourse(
     taperCourseEnds(solidPoints);
     settleWaterline(solidPoints, ground);
 
-    return { points: solidPoints };
+    return { course: { points: solidPoints }, regions: courseRegions };
 }
 
-function findLongestDescendingPath(
+function generateMudholeCourse(
+    region: IRegionFloor,
+    localSeed: number,
+    ground: IGroundProbe
+): IWaterCourse | null {
+    const noise = new FractalNoise(localSeed);
+    const angleNoise = noise.sample(region.centerX * 0.05, region.centerZ * 0.05, 1, 0.5);
+    const angle = angleNoise * Math.PI * 2;
+    const offsetDistance = Math.min(region.halfWidth, region.halfDepth) * 0.42;
+
+    const cx = region.centerX + Math.cos(angle) * offsetDistance;
+    const cz = region.centerZ + Math.sin(angle) * offsetDistance;
+
+    const radius = 5.0 + noise.sample(cx * 0.08, cz * 0.08, 1, 0.5) * 2.5;
+    const dirAngle = noise.sample(cz * 0.08, cx * 0.08, 1, 0.5) * Math.PI * 2;
+    const dx = Math.cos(dirAngle);
+    const dz = Math.sin(dirAngle);
+
+    const restingElevation = ground.elevationAt(cx, cz) - 1.0;
+
+    const anchors: IWaterAnchor[] = [
+        { x: cx - dx * (radius * 1.15), z: cz - dz * (radius * 1.15) },
+        { x: cx - dx * (radius * 0.6), z: cz - dz * (radius * 0.6) },
+        { x: cx, z: cz },
+        { x: cx + dx * (radius * 0.6), z: cz + dz * (radius * 0.6) },
+        { x: cx + dx * (radius * 1.15), z: cz + dz * (radius * 1.15) },
+    ];
+
+    const widths = [0.8, radius * 0.85, radius, radius * 0.85, 0.8];
+    const bedRatios = [0.5, 0.8, 1.0, 0.8, 0.5];
+
+    const points: IWaterPoint[] = [];
+    for (let i = 0; i < anchors.length; i += 1) {
+        const anchor = anchors[i]!;
+        points.push({
+            x: anchor.x,
+            z: anchor.z,
+            waterlineElevation: restingElevation,
+            halfWidth: widths[i] ?? radius,
+            bedRatio: bedRatios[i] ?? 1.0,
+        });
+    }
+
+    const solidPoints = trimToSolidGround(points, ground);
+    if (solidPoints.length < 3) return null;
+
+    return { points: solidPoints, isMudhole: true };
+}
+
+function findCourseRegions(
+    regionFloors: IRegionFloor[],
+    regionLinks: IRegionLink[],
+    seed: number
+): number[] {
+    const sameLevelPath = findLongestSameLevelPath(regionFloors, regionLinks);
+    if (sameLevelPath.length >= 2) {
+        const startsInBoss = regionFloors[sameLevelPath[0]!]?.isBossRegion;
+        if (!startsInBoss) return sameLevelPath;
+    }
+
+    const eligibleNonBoss: number[] = [];
+    for (let index = 0; index < regionFloors.length; index += 1) {
+        const floor = regionFloors[index];
+        if (!floor) continue;
+        if (!floor.isBossRegion && floor.halfWidth >= 22 && floor.halfDepth >= 22) {
+            eligibleNonBoss.push(index);
+        }
+    }
+
+    if (eligibleNonBoss.length > 0) {
+        const picked = eligibleNonBoss[Math.abs(seed) % eligibleNonBoss.length]!;
+        return [picked];
+    }
+
+    if (sameLevelPath.length >= 2) return sameLevelPath;
+
+    let largestRegionIndex = 0;
+    let largestArea = -1;
+
+    for (let index = 0; index < regionFloors.length; index += 1) {
+        const floor = regionFloors[index];
+        if (!floor) continue;
+        const area = floor.halfWidth * floor.halfDepth;
+        if (area > largestArea) {
+            largestArea = area;
+            largestRegionIndex = index;
+        }
+    }
+
+    return [largestRegionIndex];
+}
+
+function findLongestSameLevelPath(
     regionFloors: IRegionFloor[],
     regionLinks: IRegionLink[]
 ): number[] {
@@ -61,7 +214,7 @@ function findLongestDescendingPath(
             if (visited.has(neighbour)) continue;
 
             const next = regionFloors[neighbour];
-            if (!next || next.floorElevation > current.floorElevation) continue;
+            if (!next || Math.abs(next.floorElevation - current.floorElevation) > 1.0) continue;
 
             visited.add(neighbour);
             path.push(neighbour);
@@ -91,6 +244,53 @@ function placeCourseAnchors(
     regionFloors: IRegionFloor[],
     noise: FractalNoise
 ): IWaterAnchor[] {
+    if (courseRegions.length === 0) return [];
+
+    if (courseRegions.length === 1) {
+        const regionIndex = courseRegions[0]!;
+        const region = regionFloors[regionIndex];
+        if (!region) return [];
+
+        const noiseVal = noise.sample(
+            region.centerX * WATER_COURSE.sideNoiseScale,
+            region.centerZ * WATER_COURSE.sideNoiseScale,
+            1,
+            0.5
+        );
+        const rimSide = noiseVal < 0.5 ? -1 : 1;
+
+        const isWiderAlongX = region.halfWidth >= region.halfDepth;
+        const primaryHalf = isWiderAlongX ? region.halfWidth : region.halfDepth;
+        const secondaryHalf = isWiderAlongX ? region.halfDepth : region.halfWidth;
+
+        const reach = primaryHalf * 0.82;
+        const lateralOffset = secondaryHalf * WATER_COURSE.rimOffsetRatio * 0.7 * rimSide;
+
+        const dirX = isWiderAlongX ? 1 : 0;
+        const dirZ = isWiderAlongX ? 0 : 1;
+        const acrossX = -dirZ;
+        const acrossZ = dirX;
+
+        return [
+            {
+                x: region.centerX - dirX * reach + acrossX * (lateralOffset * 0.3),
+                z: region.centerZ - dirZ * reach + acrossZ * (lateralOffset * 0.3),
+            },
+            {
+                x: region.centerX - dirX * (reach * 0.4) + acrossX * lateralOffset,
+                z: region.centerZ - dirZ * (reach * 0.4) + acrossZ * lateralOffset,
+            },
+            {
+                x: region.centerX + dirX * (reach * 0.4) + acrossX * lateralOffset,
+                z: region.centerZ + dirZ * (reach * 0.4) + acrossZ * lateralOffset,
+            },
+            {
+                x: region.centerX + dirX * reach + acrossX * (lateralOffset * 0.3),
+                z: region.centerZ + dirZ * reach + acrossZ * (lateralOffset * 0.3),
+            },
+        ];
+    }
+
     const anchors: IWaterAnchor[] = [];
 
     for (let position = 0; position < courseRegions.length; position += 1) {
@@ -123,6 +323,14 @@ function placeCourseAnchors(
             x: region.centerX + (travelZ / travelLength) * rimOffset,
             z: region.centerZ - (travelX / travelLength) * rimOffset,
         };
+
+        if (position === 0 && courseRegions.length > 1) {
+            const headReach = Math.min(region.halfWidth, region.halfDepth) * 0.95;
+            anchors.push({
+                x: anchor.x - (travelX / travelLength) * headReach,
+                z: anchor.z - (travelZ / travelLength) * headReach,
+            });
+        }
 
         const previous = anchors[anchors.length - 1];
 
@@ -241,31 +449,66 @@ function fitCourseBesideArenas(
 
     for (let pass = 0; pass < WATER_COURSE.clearancePasses; pass += 1) {
         shapeCourseWidth(points, corridorPaths, noise);
-        clampWidthToArenaRoom(points, arenaCores, true);
+        clampWidthToArenaRoom(points, arenaCores, corridorPaths, true);
         relaxCourse(points);
     }
 
     shapeCourseWidth(points, corridorPaths, noise);
-    clampWidthToArenaRoom(points, arenaCores, false);
+    clampWidthToArenaRoom(points, arenaCores, corridorPaths, false);
 }
 
 function clampWidthToArenaRoom(
     points: IWaterPoint[],
     arenaCores: IArenaCore[],
+    corridorPaths: ICorridorPath[],
     mayPushOutwards: boolean
 ): void {
     for (const point of points) {
         const room = roomBesideCores(point, arenaCores);
-        if (room >= point.halfWidth) continue;
-
-        if (mayPushOutwards && room < WATER_COURSE.halfWidthNarrow) {
-            pushOutsideCores(point, arenaCores, WATER_COURSE.halfWidthNarrow);
-            point.halfWidth = Math.min(point.halfWidth, roomBesideCores(point, arenaCores));
-            continue;
+        if (room < point.halfWidth) {
+            if (mayPushOutwards && room < WATER_COURSE.halfWidthNarrow) {
+                pushOutsideCores(point, arenaCores, WATER_COURSE.halfWidthNarrow);
+                point.halfWidth = Math.min(point.halfWidth, roomBesideCores(point, arenaCores));
+            } else {
+                point.halfWidth = Math.max(room, 0);
+            }
         }
 
-        point.halfWidth = Math.max(room, 0);
+        for (const corridor of corridorPaths) {
+            if (Math.abs(corridor.toElevation - corridor.fromElevation) <= 1.5) continue;
+            const dist = distanceToCorridorCentre(point, corridor);
+            const minClearance = corridor.halfWidth + 8.0;
+            if (dist < minClearance) {
+                if (mayPushOutwards) {
+                    pushOutsideCliffCorridor(point, corridor, minClearance);
+                }
+                const newDist = distanceToCorridorCentre(point, corridor);
+                point.halfWidth = Math.min(point.halfWidth, Math.max(0, newDist - corridor.halfWidth - 3.0));
+            }
+        }
     }
+}
+
+function pushOutsideCliffCorridor(
+    point: IWaterPoint,
+    corridor: ICorridorPath,
+    minDistance: number
+): void {
+    const dist = distanceToCorridorCentre(point, corridor);
+    if (dist >= minDistance) return;
+
+    const spanX = corridor.toX - corridor.fromX;
+    const spanZ = corridor.toZ - corridor.fromZ;
+    const spanLen = Math.hypot(spanX, spanZ) || 1;
+    const normAcrossX = -spanZ / spanLen;
+    const normAcrossZ = spanX / spanLen;
+    const toPointX = point.x - corridor.fromX;
+    const toPointZ = point.z - corridor.fromZ;
+    const side = toPointX * normAcrossX + toPointZ * normAcrossZ >= 0 ? 1 : -1;
+    const push = minDistance - dist;
+
+    point.x += normAcrossX * side * push;
+    point.z += normAcrossZ * side * push;
 }
 
 function roomBesideCores(point: IWaterPoint, arenaCores: IArenaCore[]): number {
@@ -454,7 +697,14 @@ function taperCourseEnds(points: IWaterPoint[]): void {
         const fromStart = lengthFromStart[index] ?? 0;
         const fromEnd = travelledLength - fromStart;
 
-        point.halfWidth *= smoothstep(0, WATER_COURSE.endTaperLength, Math.min(fromStart, fromEnd));
+        const sourceWidthRatio = lerp(
+            0.85,
+            1.0,
+            smoothstep(0, WATER_COURSE.endTaperLength * 0.5, fromStart)
+        );
+        const endTaper = smoothstep(0, WATER_COURSE.endTaperLength, fromEnd);
+
+        point.halfWidth *= sourceWidthRatio * endTaper;
     }
 }
 
@@ -490,6 +740,7 @@ export interface IWaterPoint {
 
 export interface IWaterCourse {
     points: IWaterPoint[];
+    isMudhole?: boolean;
 }
 
 interface IWaterAnchor {

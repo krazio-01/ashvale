@@ -14,7 +14,7 @@ import {
     WALKABLE_REACH,
 } from "@/world/terrain/TerrainHeightField";
 import { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
-import { plotWaterCourse, type IRegionLink } from "@/world/water/WaterCourse";
+import { plotWaterCourses, type IRegionLink } from "@/world/water/WaterCourse";
 import { WaterSurface } from "@/world/water/WaterSurface";
 import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainHeightField";
 import type { World } from "@/world/World";
@@ -87,7 +87,9 @@ async function spawnTerrain(
     const { regionFloors, regionSites, furthestDistance } = buildRegionGeometry(
         chapter.regions,
         centerX,
-        centerZ
+        centerZ,
+        chapter.bossRegionId,
+        chapter.spawnRegionId
     );
     const seed = hashString(`${chapter.title}-${chapter.chapterIndex}`);
     const { corridorPaths, corridorLanes, regionLinks } = buildCorridorGeometry(
@@ -104,15 +106,15 @@ async function spawnTerrain(
 
     await beginStage("Sculpting the terrain");
     const dryHeightField = new TerrainHeightField(regionFloors, corridorPaths, null, seed);
-    const waterCourse = plotWaterCourse(
+    const waterCourses = plotWaterCourses(
         regionFloors,
         regionLinks,
         corridorPaths,
         dryHeightField,
         seed + 29
     );
-    const heightField = waterCourse
-        ? new TerrainHeightField(regionFloors, corridorPaths, waterCourse, seed)
+    const heightField = waterCourses.length > 0
+        ? new TerrainHeightField(regionFloors, corridorPaths, waterCourses, seed)
         : dryHeightField;
     const heightMap = new TerrainHeightMap(heightField, mappedRadius);
 
@@ -137,9 +139,9 @@ async function spawnTerrain(
 
     let waterSurface: WaterSurface | null = null;
 
-    if (waterCourse) {
+    if (waterCourses.length > 0) {
         await beginStage("Letting the river in");
-        waterSurface = new WaterSurface(world.context, center, waterCourse, heightMap);
+        waterSurface = new WaterSurface(world.context, center, waterCourses, heightMap);
         world.addEntity(waterSurface);
     }
 
@@ -179,6 +181,7 @@ async function spawnTerrain(
         center,
         fieldRadius: mappedRadius,
         seed: seed + 3,
+        waterCourses,
     });
 
     await addPropBuckets(world, camera, propBuckets);
@@ -338,7 +341,9 @@ function computeChapterCenter(regions: IChapterRegion[]): [number, number] {
 function buildRegionGeometry(
     regions: IChapterRegion[],
     centerX: number,
-    centerZ: number
+    centerZ: number,
+    bossRegionId?: string,
+    spawnRegionId?: string
 ): IRegionGeometry {
     const len = regions.length;
     let furthestDistance = 0;
@@ -371,6 +376,8 @@ function buildRegionGeometry(
             halfDepth,
             floorElevation: y,
             nestingDepth: region.nestingDepth,
+            isBossRegion: region.regionId === bossRegionId,
+            isSpawnRegion: region.regionId === spawnRegionId,
         };
 
         const distance = Math.sqrt(localX * localX + localZ * localZ) + Math.max(width, depth) / 2;

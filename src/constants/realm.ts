@@ -40,7 +40,7 @@ export const ROUTE_DESIGN = {
     corridorClearance: 5,
     terraceStepHeight: 9,
     terraceLevelRange: [-2, 2],
-    terraceLevelSteps: [-2, -1, 1, 2],
+    terraceLevelSteps: [-1, 0, 0, 1],
     sideRoomLevelDrop: 1,
 };
 

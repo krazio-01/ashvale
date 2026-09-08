@@ -27,12 +27,12 @@ export class TerrainHeightField {
     constructor(
         regionFloors: IRegionFloor[],
         corridorPaths: ICorridorPath[],
-        waterCourse: IWaterCourse | null,
+        waterCourses: IWaterCourse[] | IWaterCourse | null,
         seed: number
     ) {
         this.regionFloors = regionFloors;
         this.preparedCorridors = corridorPaths.map(prepareCorridor);
-        this.waterChannel = waterCourse ? WaterChannel.from(waterCourse) : null;
+        this.waterChannel = waterCourses ? WaterChannel.from(waterCourses) : null;
         this.undulationNoise = new FractalNoise(seed);
         this.trailEdgeNoise = new FractalNoise(seed + 11);
         this.elevationRampDistance =
@@ -125,7 +125,7 @@ export class TerrainHeightField {
         if (!channel) return;
 
         const reading = channel.readInto(localX, localZ, this.scratchChannel);
-        if (reading.bankBlend <= 0) return;
+        if (reading.bankBlend <= 0 || this.isCliffCorridorAt(localX, localZ)) return;
 
         const bedElevation =
             reading.waterlineElevation - WATER_CHANNEL.bedDepth * reading.bedProfile;
@@ -135,6 +135,21 @@ export class TerrainHeightField {
             reading.waterlineElevation - sample.elevation,
             WATER_CHANNEL.dryDepth
         );
+    }
+
+    private isCliffCorridorAt(localX: number, localZ: number): boolean {
+        for (const corridor of this.preparedCorridors) {
+            if (Math.abs(corridor.toElevation - corridor.fromElevation) <= 1.5) continue;
+            const travelRatio = corridorTravelRatioAt(localX, localZ, corridor);
+            const spanX = corridor.spanX;
+            const spanZ = corridor.spanZ;
+            const dist = Math.hypot(
+                localX - corridor.fromX - spanX * travelRatio,
+                localZ - corridor.fromZ - spanZ * travelRatio
+            );
+            if (dist < corridor.halfWidth + 5.0) return true;
+        }
+        return false;
     }
 
     private resolveElevationAt(localX: number, localZ: number, ground: IGroundAccumulator): number {
@@ -410,6 +425,8 @@ export interface IRegionFloor {
     halfDepth: number;
     floorElevation: number;
     nestingDepth: number;
+    isBossRegion?: boolean;
+    isSpawnRegion?: boolean;
 }
 
 export enum CorridorClimbStyle {
