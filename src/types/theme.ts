@@ -72,7 +72,6 @@ export interface ITerrainProfile {
 export interface IWaterProfile {
     shallowColor: string;
     deepColor: string;
-    foamColor: string;
 }
 
 export interface IThemeEnvironment {

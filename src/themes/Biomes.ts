@@ -78,9 +78,8 @@ export const WOODLAND_MANIFEST: IThemeManifest = {
             slopeShade: 0.45,
         },
         water: {
-            shallowColor: "#7fb8a8",
-            deepColor: "#255d63",
-            foamColor: "#eaf6f2",
+            shallowColor: "#2da69d",
+            deepColor: "#053d47",
         },
     },
 };
@@ -138,9 +137,8 @@ export const HIGHLANDS_MANIFEST: IThemeManifest = {
             slopeShade: 0.5,
         },
         water: {
-            shallowColor: "#8fc4cf",
-            deepColor: "#1f5a78",
-            foamColor: "#f2fafd",
+            shallowColor: "#32b0a7",
+            deepColor: "#07424d",
         },
     },
 };
@@ -198,9 +196,8 @@ export const RUINS_MANIFEST: IThemeManifest = {
             slopeShade: 0.55,
         },
         water: {
-            shallowColor: "#7a9c94",
-            deepColor: "#26494b",
-            foamColor: "#dfeae5",
+            shallowColor: "#2aa096",
+            deepColor: "#053842",
         },
     },
 };
@@ -258,9 +255,8 @@ export const SETTLEMENT_MANIFEST: IThemeManifest = {
             slopeShade: 0.4,
         },
         water: {
-            shallowColor: "#86bcb0",
-            deepColor: "#2a636a",
-            foamColor: "#eef6f1",
+            shallowColor: "#2fa89f",
+            deepColor: "#073f4a",
         },
     },
 };
