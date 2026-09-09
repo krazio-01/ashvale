@@ -35,6 +35,27 @@ export function lerp(from: number, to: number, ratio: number): number {
     return from + (to - from) * ratio;
 }
 
+/* was copy-pasted verbatim between WaterCourse.ts and WaterSurface.ts, which both already
+   imported from this file. Caught in review. */
+export function catmullRomAt(
+    before: number,
+    start: number,
+    end: number,
+    after: number,
+    travelRatio: number
+): number {
+    const squared = travelRatio * travelRatio;
+    const cubed = squared * travelRatio;
+
+    return (
+        0.5 *
+        (2 * start +
+            (end - before) * travelRatio +
+            (2 * before - 5 * start + 4 * end - after) * squared +
+            (-before + 3 * start - 3 * end + after) * cubed)
+    );
+}
+
 export function smoothstep(edgeStart: number, edgeEnd: number, value: number): number {
     if (edgeEnd === edgeStart) return value < edgeStart ? 0 : 1;
 
@@ -124,19 +145,6 @@ export function distanceOutsideBox(
 }
 
 export type IQuad = [number, number, number, number];
-
-export interface ISpanVector {
-    spanX: number;
-    spanZ: number;
-    length: number;
-}
-
-export function spanBetween(fromX: number, fromZ: number, toX: number, toZ: number): ISpanVector {
-    const spanX = toX - fromX;
-    const spanZ = toZ - fromZ;
-
-    return { spanX, spanZ, length: Math.hypot(spanX, spanZ) };
-}
 
 export function tintKeepingLightness(
     hex: string,

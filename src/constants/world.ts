@@ -5,7 +5,7 @@ export const SCALE = {
 };
 
 const TRAIL_HALF_WIDTH = 1.6;
-const TRAIL_WEAR_FALLOFF_WIDTH = 3.2;
+const TRAIL_WEAR_FALLOFF_WIDTH = 5.5;
 
 export const WORLD = {
     gravity: -22,
@@ -44,7 +44,10 @@ export const LANDFORM = {
 export const TRAIL = {
     halfWidth: TRAIL_HALF_WIDTH,
     wearFalloffWidth: TRAIL_WEAR_FALLOFF_WIDTH,
-    wearFalloffExponent: 2.5,
+    /* 1.4 rather than a steeper curve: the exponent compounds with the exponential material
+       sharpening in groundMaterialShareAt, and at 2.5 the pair collapsed the soil tint from
+       worn to lush inside a metre, which is what made trails read as stamped out */
+    wearFalloffExponent: 1.4,
     edgeWobbleAmplitude: 1.4,
     edgeWobbleScale: 0.055,
     distanceLimit: (TRAIL_HALF_WIDTH + TRAIL_WEAR_FALLOFF_WIDTH) * 2,
@@ -72,11 +75,6 @@ export const GROUND_MATERIAL = {
     detailTileSpan: 14,
     detailTileCounts: [6, 16, 3, 34],
     detailStrengths: [0.18, 0.1, 0.32, 0.36],
-};
-
-export const GROUND_PATCH = {
-    noiseScale: 0.34,
-    breakupStrength: 1.15,
 };
 
 export const WORLD_EDGE = {
