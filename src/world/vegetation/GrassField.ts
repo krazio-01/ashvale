@@ -19,25 +19,25 @@ import {
 import { Entity } from "@/entities/Entity";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
-import { GRASS, GROUND_FIELD } from "@/constants/placement";
+import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
+import { GRASS, GROUND_COVER } from "@/constants/placement";
 import { FULL_TURN, shiftColorHsl } from "@/lib/helpers";
 import {
-    GROUND_FIELD_GLSL,
+    GROUND_COVER_GLSL,
     buildDetailBands,
     collectBandCells,
-    groundFieldUniforms,
+    groundCoverUniforms,
     type IDetailBand,
-} from "@/world/vegetation/GroundField";
+} from "@/world/vegetation/GroundCoverField";
 import {
     GROUND_MATERIAL_GLSL,
     groundMaterialUniforms,
     type IGroundMaterials,
-} from "@/world/terrain/GroundMaterials";
+} from "@/world/terrain/TerrainMaterials";
 
 const VERTEX_SHADER = /* glsl */ `
     ${GROUND_MATERIAL_GLSL}
-    ${GROUND_FIELD_GLSL}
+    ${GROUND_COVER_GLSL}
 
     uniform vec2 cameraGround;
     uniform float windWavePhase;
@@ -95,9 +95,9 @@ const VERTEX_SHADER = /* glsl */ `
         vec2 tuftGround = (tuftCell + tuftRandom.xy) * tuftSpacing;
         vec2 fieldPointCoord = fieldPointCoordAt(tuftGround);
         vec4 field = sampleTerrainField(fieldPointCoord);
-        vec2 growth = groundGrowthOf(groundMaterialShareAt(tuftGround, trailWearAt(field.g)));
-        
-        float grassiness = growth.x * withinGrowableGround(field.b, field.a);
+        vec2 cover = groundCoverAt(tuftGround, field);
+
+        float grassiness = cover.x;
         float rootedHere = insideTerrainField(fieldPointCoord) * step(tuftRandom.z, grassiness);
 
         float horizonFade = 1.0 - smoothstep(
@@ -128,8 +128,9 @@ const VERTEX_SHADER = /* glsl */ `
 
         vec2 arc = bendAlongArc(vHeightRatio, bendAngle, bladeLength);
 
+        float activeWidth = bladeWidth * step(0.0001, bladeLength);
         vec3 bladeWorld = vec3(rootGround.x, field.r, rootGround.y)
-            + vec3(sideDirection.x, 0.0, sideDirection.y) * position.x * bladeWidth
+            + vec3(sideDirection.x, 0.0, sideDirection.y) * position.x * activeWidth
             + vec3(bendDirection.x, 0.0, bendDirection.y) * arc.x
             + vec3(0.0, arc.y, 0.0);
 
@@ -145,7 +146,7 @@ const VERTEX_SHADER = /* glsl */ `
             cross(acrossBlade, alongBlade) + acrossBlade * position.x * 2.0 * bladeCurvature
         );
 
-        vPatchTone = mix(growth.y, toneRandom.z, tuftToneWeight);
+        vPatchTone = mix(cover.y, toneRandom.z, tuftToneWeight);
         vTint = mix(tintRange.x, tintRange.y, mix(vPatchTone, toneRandom.x, tuftToneWeight));
 
         gl_Position = projectionMatrix * modelViewMatrix * vec4(bladeWorld, 1.0);
@@ -202,7 +203,8 @@ export class GrassField extends Entity implements IWorldEntity {
         context: IWorldContext,
         camera: Camera,
         center: Vector3Tuple,
-        heightMap: TerrainHeightMap,
+        heightMap: TerrainSampleGrid,
+        terrainFieldTexture: DataTexture,
         groundSplat: CanvasTexture,
         groundDetail: CanvasTexture,
         materials: IGroundMaterials
@@ -210,7 +212,7 @@ export class GrassField extends Entity implements IWorldEntity {
         super("grass-field");
 
         this.camera = camera;
-        this.fieldTexture = heightMap.createShaderTexture();
+        this.fieldTexture = terrainFieldTexture;
         this.sceneObject.position.set(center[0], 0, center[2]);
         this.sceneObject.matrixAutoUpdate = false;
         this.sceneObject.updateMatrix();
@@ -235,7 +237,7 @@ export class GrassField extends Entity implements IWorldEntity {
             side: DoubleSide,
             uniforms: {
                 ...this.frameUniforms,
-                ...groundFieldUniforms(this.fieldTexture, heightMap, GROUND_FIELD.steepGroundBand),
+                ...groundCoverUniforms(this.fieldTexture, heightMap, GROUND_COVER.steepGroundBand),
                 ...groundMaterialUniforms(groundSplat, groundDetail, materials),
                 ...bladeUniforms(),
                 ...paletteUniforms(context),
@@ -285,7 +287,6 @@ export class GrassField extends Entity implements IWorldEntity {
 
         this.geometries.length = 0;
         this.material.dispose();
-        this.fieldTexture.dispose();
         this.sceneObject.clear();
     }
 }
@@ -383,7 +384,7 @@ function buildBladeCluster(bladeSegments: number): IBladeCluster {
 function bladeUniforms() {
     return {
         tuftSpacing: { value: GRASS.tuftSpacing },
-        tuftSpread: { value: GRASS.tuftSpacing },
+        tuftSpread: { value: GRASS.tuftSpacing * GRASS.tuftSpreadRatio },
         bladeHeightRange: { value: new Vector2(...GRASS.bladeHeightRange) },
         bladeWidth: { value: GRASS.bladeWidth },
         bladeCurvature: { value: GRASS.bladeCurvature },
