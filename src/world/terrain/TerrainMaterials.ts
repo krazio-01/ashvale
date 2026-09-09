@@ -1,6 +1,6 @@
 import { CanvasTexture, Color, LinearFilter, RepeatWrapping, Vector2, Vector4 } from "three";
 import { GROUND_MATERIAL, SOIL_RAMP, TRAIL } from "@/constants/world";
-import { clamp, shiftColorHsl, smoothstep } from "@/lib/helpers";
+import { clamp, shiftColorHsl } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
 import type { ITerrainProfile } from "@/types/theme";
 
@@ -103,13 +103,6 @@ export function groundMaterialUniforms(
             value: new Vector2(GROUND_MATERIAL.trailDustGain, GROUND_MATERIAL.trailMudGain),
         },
     };
-}
-
-export function trailWearAt(trailDistance: number): number {
-    return Math.pow(
-        1 - smoothstep(TRAIL_WEAR_BAND[0], TRAIL_WEAR_BAND[1], trailDistance),
-        TRAIL.wearFalloffExponent
-    );
 }
 
 export function deriveGroundMaterials(profile: ITerrainProfile): IGroundMaterials {

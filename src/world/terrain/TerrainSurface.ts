@@ -5,6 +5,7 @@ import {
     BufferGeometry,
     CanvasTexture,
     Color,
+    type DataTexture,
     Mesh,
     MeshLambertMaterial,
     type IUniform,
@@ -13,17 +14,16 @@ import {
 import { Entity } from "@/entities/Entity";
 import type { ITerrainProfile } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
 import { GROUND, TERRAIN, TERRAIN_DETAIL, WATER_CHANNEL } from "@/constants/world";
 import { clamp, smoothstep } from "@/lib/helpers";
 import {
     GROUND_MATERIAL_GLSL,
     groundMaterialUniforms,
-    trailWearAt,
     type IGroundMaterials,
-} from "@/world/terrain/GroundMaterials";
+} from "@/world/terrain/TerrainMaterials";
 
-export class TerrainMesh extends Entity implements IWorldEntity {
+export class TerrainSurface extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;
 
     private readonly context: IWorldContext;
@@ -31,18 +31,21 @@ export class TerrainMesh extends Entity implements IWorldEntity {
     private readonly material: MeshLambertMaterial;
     private readonly groundSplat: CanvasTexture;
     private readonly groundDetail: CanvasTexture;
+    private readonly terrainFieldTexture: DataTexture;
     private readonly rigidBody: RigidBody;
 
     constructor(
         context: IWorldContext,
         center: Vector3Tuple,
-        heightMap: TerrainHeightMap,
+        heightMap: TerrainSampleGrid,
+        terrainFieldTexture: DataTexture,
         groundSplat: CanvasTexture,
         groundDetail: CanvasTexture,
         materials: IGroundMaterials
     ) {
         super("terrain");
         this.context = context;
+        this.terrainFieldTexture = terrainFieldTexture;
         this.groundSplat = groundSplat;
         this.groundDetail = groundDetail;
 
@@ -55,6 +58,7 @@ export class TerrainMesh extends Entity implements IWorldEntity {
         paintGroundOverrides(this.geometry, heightMap, island.pointIndices, profile);
 
         this.material = new MeshLambertMaterial({ vertexColors: true });
+        this.material.customProgramCacheKey = () => "terrain-surface-ground-material";
 
         applyGroundMaterialBlend(this.material, groundSplat, groundDetail, materials);
 
@@ -70,10 +74,11 @@ export class TerrainMesh extends Entity implements IWorldEntity {
             RAPIER.RigidBodyDesc.fixed().setTranslation(center[0], 0, center[2])
         );
 
-        context.physicsWorld.createCollider(
-            RAPIER.ColliderDesc.trimesh(island.positions, island.indices),
-            this.rigidBody
-        );
+        if (island.indices.length > 0)
+            context.physicsWorld.createCollider(
+                RAPIER.ColliderDesc.trimesh(island.positions, island.indices),
+                this.rigidBody
+            );
     }
 
     update(): void {}
@@ -84,10 +89,11 @@ export class TerrainMesh extends Entity implements IWorldEntity {
         this.material.dispose();
         this.groundSplat.dispose();
         this.groundDetail.dispose();
+        this.terrainFieldTexture.dispose();
     }
 }
 
-function buildIslandGeometry(heightMap: TerrainHeightMap): IIslandGeometry {
+function buildIslandGeometry(heightMap: TerrainSampleGrid): IIslandGeometry {
     const pointsPerSide = heightMap.pointsPerSide;
     const vertexIndexByPoint = new Int32Array(pointsPerSide * pointsPerSide).fill(-1);
 
@@ -135,7 +141,7 @@ function buildIslandGeometry(heightMap: TerrainHeightMap): IIslandGeometry {
 
 function paintGroundOverrides(
     geometry: BufferGeometry,
-    heightMap: TerrainHeightMap,
+    heightMap: TerrainSampleGrid,
     pointIndices: Int32Array,
     profile: ITerrainProfile
 ): void {
@@ -175,8 +181,7 @@ function paintGroundOverrides(
         colors[offset] = override.red;
         colors[offset + 1] = override.green;
         colors[offset + 2] = override.blue;
-
-        groundBlends[blendOffset] = trailWearAt(heightMap.trailDistanceAtPoint(pointIndex));
+        groundBlends[blendOffset] = heightMap.trailDistanceAtPoint(pointIndex);
         groundBlends[blendOffset + 1] = override.strength;
         groundBlends[blendOffset + 2] =
             (1 - slope * profile.slopeShade) * nestingShadeAt(heightMap, pointIndex);
@@ -190,7 +195,7 @@ function paintGroundOverrides(
 const shoreWetnessAt = (waterDepth: number): number =>
     1 - smoothstep(0, WATER_CHANNEL.shoreWetBand, -waterDepth);
 
-function nestingShadeAt(heightMap: TerrainHeightMap, pointIndex: number): number {
+function nestingShadeAt(heightMap: TerrainSampleGrid, pointIndex: number): number {
     if (heightMap.isCorridorAtPoint(pointIndex)) return 1;
 
     const carveStrength = heightMap.carveStrengthAtPoint(pointIndex);
@@ -262,7 +267,7 @@ function applyGroundMaterialBlend(
             )
             .replace(
                 "#include <color_fragment>",
-                `vec4 materialShare = groundMaterialShareAt(vGroundPosition, vGroundBlend.x);
+                `vec4 materialShare = groundMaterialShareAt(vGroundPosition, trailWearAt(vGroundBlend.x));
                 vec3 wetRiverbedColor = mix(gritColor, mudColor, 0.25) * shoreWetShade;
                 vec3 groundColor = mix(
                     groundColorOf(materialShare, vGroundPosition),
