@@ -13,11 +13,11 @@ import {
 import { Entity } from "@/entities/Entity";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
 import { shoreAllowanceAt } from "@/world/water/WaterChannel";
 import type { IWaterCourse, IWaterPoint } from "@/world/water/WaterCourse";
 import { WATER_CHANNEL, WATER_SURFACE, WATER_WADER } from "@/constants/world";
-import { lerp, smoothstep } from "@/lib/helpers";
+import { catmullRomAt, lerp, smoothstep } from "@/lib/helpers";
 
 export class WaterSurface extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;
@@ -40,7 +40,7 @@ export class WaterSurface extends Entity implements IWorldEntity {
         context: IWorldContext,
         center: Vector3Tuple,
         input: IWaterCourse | IWaterCourse[],
-        heightMap: TerrainHeightMap
+        heightMap: TerrainSampleGrid
     ) {
         super("water-surface");
 
@@ -52,10 +52,7 @@ export class WaterSurface extends Entity implements IWorldEntity {
         let totalSmoothedCount = 0;
 
         for (const course of courses) {
-            const smoothed = resampleCoursePoints(
-                course.points,
-                WATER_SURFACE.splineResampleStep
-            );
+            const smoothed = resampleCoursePoints(course.points, WATER_SURFACE.splineResampleStep);
             if (smoothed.length >= 2) {
                 allSmoothedPoints.push(smoothed);
                 totalSmoothedCount += smoothed.length;
@@ -99,7 +96,6 @@ export class WaterSurface extends Entity implements IWorldEntity {
         this.sceneObject = new Mesh(combinedGeometry, this.material);
         this.sceneObject.position.set(center[0], 0, center[2]);
         this.sceneObject.renderOrder = 1;
-        this.sceneObject.frustumCulled = false;
         this.sceneObject.matrixAutoUpdate = false;
         this.sceneObject.updateMatrix();
         this.sceneObject.updateMatrixWorld(true);
@@ -213,26 +209,7 @@ function resampleCoursePoints(points: IWaterCourse["points"], targetStep: number
     return resampled;
 }
 
-function catmullRomAt(
-    before: number,
-    start: number,
-    end: number,
-    after: number,
-    travelRatio: number
-): number {
-    const squared = travelRatio * travelRatio;
-    const cubed = squared * travelRatio;
-
-    return (
-        0.5 *
-        (2 * start +
-            (end - before) * travelRatio +
-            (2 * before - 5 * start + 4 * end - after) * squared +
-            (-before + 3 * start - 3 * end + after) * cubed)
-    );
-}
-
-function buildWaterRibbon(points: IWaterPoint[], heightMap: TerrainHeightMap): BufferGeometry {
+function buildWaterRibbon(points: IWaterPoint[], heightMap: TerrainSampleGrid): BufferGeometry {
     const widestReach = maximumHalfWidthOf(points) + WATER_CHANNEL.shoreReach;
     const columnsPerSide = Math.max(Math.ceil(widestReach / WATER_SURFACE.lateralStep), 1);
     const columnCount = columnsPerSide * 2 + 1;
@@ -588,9 +565,8 @@ const FRAGMENT_SHADER = /* glsl */ `
 
         slope += downstream * gradDownstream + acrossStream * gradAcross;
 
-        float streamDot = dot(surfacePosition, downstream);
-        float waveDown1 = cos((streamDot - time * flowSpeed * rippleDrifts.x) / rippleWavelengths.x) * rippleAmplitudes.x;
-        float waveDown4 = cos((streamDot - time * flowSpeed * rippleDrifts.w) / rippleWavelengths.w) * rippleAmplitudes.w;
+        float waveDown1 = cos((vStreamCoord.y - time * flowSpeed * rippleDrifts.x) / rippleWavelengths.x) * rippleAmplitudes.x;
+        float waveDown4 = cos((vStreamCoord.y - time * flowSpeed * rippleDrifts.w) / rippleWavelengths.w) * rippleAmplitudes.w;
         slope += downstream * (waveDown1 + waveDown4);
 
         vec2 dirAngled1 = (downstream + acrossStream * 0.28) * 0.9629;
@@ -615,7 +591,7 @@ const FRAGMENT_SHADER = /* glsl */ `
 
         vec2 surfacePosition = vWorldPosition.xz;
         vec2 downstream = normalize(vFlowDirection + vec2(1e-5, 0.0));
-        vec2 acrossStream = vec2(-downstream.y, downstream.x);
+        vec2 acrossStream = vec2(downstream.y, -downstream.x);
 
         vec3 surfaceNormal = surfaceNormalAt(surfacePosition, downstream, acrossStream);
         if (!gl_FrontFacing) {
@@ -632,11 +608,11 @@ const FRAGMENT_SHADER = /* glsl */ `
         float causticVal = 0.0;
         if (causticFade > 0.01 && causticIntensity > 0.0) {
             vec2 causticUv1 = vec2(
-                surfacePosition.x * 0.25,
+                vStreamCoord.x * 4.0,
                 vStreamCoord.y * causticScale - time * flowSpeed * causticSpeed
             );
             vec2 causticUv2 = vec2(
-                surfacePosition.y * 0.25 + 2.1,
+                vStreamCoord.x * 5.6 + 2.1,
                 vStreamCoord.y * causticScale * 1.4 - time * flowSpeed * causticSpeed * 1.2
             );
             float v1 = voronoi2D(causticUv1);
