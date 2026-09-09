@@ -10,11 +10,19 @@ export enum PropLayer {
 
 export const PROP_TRANSFORM_STRIDE = 5;
 
+/* Species with the same family read as one kind of thing wherever they grow together - the
+   same tree, the same rock formation. BiomeRegions (see PropScatter) uses this to keep one
+   family dominant per region instead of shuffling every canopy species together at random.
+   Species with no natural grouping (most groundcover and debris) share DEFAULT_FAMILY, which
+   is always eligible everywhere. */
+export const DEFAULT_FAMILY = "default";
+
 export interface IThemeProp {
     modelPath: string;
     layer: PropLayer;
     footprintRadius: number;
     scaleRange: [number, number];
+    family: string;
 }
 
 export interface IPropGroup {

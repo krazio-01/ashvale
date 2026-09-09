@@ -1,46 +1,55 @@
-import { PropLayer, type IThemeProp } from "@/types/theme";
+import { DEFAULT_FAMILY, PropLayer, type IThemeProp } from "@/types/theme";
 
 const MODEL_DIRECTORY = "/models/woodland";
 
+/* family defaults to DEFAULT_FAMILY: only canopy trees currently need biome-region
+   coherence (problem 3 - "mix pine, dead/bare trees, and red-leafed trees in the same small
+   area with no rule for why"), so every other family is left as one shared bucket. */
 const propFamily = (
     names: string[],
     layer: PropLayer,
     footprintRadius: number,
-    scaleRange: [number, number]
+    scaleRange: [number, number],
+    family: string = DEFAULT_FAMILY
 ): IThemeProp[] =>
     names.map((name) => ({
         modelPath: `${MODEL_DIRECTORY}/${name}.gltf`,
         layer,
         footprintRadius,
         scaleRange,
+        family,
     }));
 
 export const CANOPY_TREES = propFamily(
     ["CommonTree_1", "CommonTree_2", "CommonTree_3", "CommonTree_4", "CommonTree_5"],
     PropLayer.Canopy,
     0.9,
-    [0.8, 1.3]
+    [0.8, 1.3],
+    "common"
 );
 
 export const PINE_TREES = propFamily(
     ["Pine_1", "Pine_2", "Pine_3", "Pine_4", "Pine_5"],
     PropLayer.Canopy,
     0.8,
-    [0.9, 1.4]
+    [0.9, 1.4],
+    "pine"
 );
 
 export const TWISTED_TREES = propFamily(
     ["TwistedTree_1", "TwistedTree_2", "TwistedTree_3", "TwistedTree_4", "TwistedTree_5"],
     PropLayer.Canopy,
     0.95,
-    [0.7, 1.15]
+    [0.7, 1.15],
+    "twisted"
 );
 
 export const DEAD_TREES = propFamily(
     ["DeadTree_1", "DeadTree_2", "DeadTree_3", "DeadTree_4", "DeadTree_5"],
     PropLayer.Canopy,
     0.7,
-    [0.7, 1.1]
+    [0.7, 1.1],
+    "dead"
 );
 
 export const BOULDERS = propFamily(

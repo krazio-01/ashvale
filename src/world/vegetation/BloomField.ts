@@ -19,25 +19,28 @@ import {
 import { Entity } from "@/entities/Entity";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import type { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
-import { BLOOM, GRASS, GROUND_FIELD } from "@/constants/placement";
+import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
+import { BLOOM, GRASS, GROUND_COVER } from "@/constants/placement";
 import { FULL_TURN, shiftColorHsl } from "@/lib/helpers";
 import {
-    GROUND_FIELD_GLSL,
+    GROUND_COVER_GLSL,
+    PATCH_FIELD_GLSL,
     buildDetailBands,
     collectBandCells,
-    groundFieldUniforms,
+    groundCoverUniforms,
+    patchFieldUniforms,
     type IDetailBand,
-} from "@/world/vegetation/GroundField";
+} from "@/world/vegetation/GroundCoverField";
 import {
     GROUND_MATERIAL_GLSL,
     groundMaterialUniforms,
     type IGroundMaterials,
-} from "@/world/terrain/GroundMaterials";
+} from "@/world/terrain/TerrainMaterials";
 
 const VERTEX_SHADER = /* glsl */ `
     ${GROUND_MATERIAL_GLSL}
-    ${GROUND_FIELD_GLSL}
+    ${GROUND_COVER_GLSL}
+    ${PATCH_FIELD_GLSL}
 
     uniform vec2 cameraGround;
     uniform float windWavePhase;
@@ -47,10 +50,6 @@ const VERTEX_SHADER = /* glsl */ `
     uniform float cellSpacing;
     uniform vec2 scaleRange;
     uniform float coverage;
-    uniform float driftWavelength;
-    uniform float driftThreshold;
-    uniform float speciesWavelength;
-    uniform float speciesOffset;
     uniform float swayStrength;
 
     uniform vec2 windDirection;
@@ -79,16 +78,11 @@ const VERTEX_SHADER = /* glsl */ `
         vec2 bloomGround = (bloomCell + cellRandom.xy) * cellSpacing;
         vec2 fieldPointCoord = fieldPointCoordAt(bloomGround);
         vec4 field = sampleTerrainField(fieldPointCoord);
-        vec2 growth = groundGrowthOf(groundMaterialShareAt(bloomGround, trailWearAt(field.g)));
+        float growable = groundCoverAt(bloomGround, field).x;
 
-        /* blooms follow the same growable-ground rule as grass, so they never appear on
-           worn trails, cliff faces or past the island lip */
-        float growable = growth.x * withinGrowableGround(field.b, field.a);
-
-        float drift = driftNoise(bloomGround / driftWavelength);
-        float driftStrength = smoothstep(driftThreshold, 1.0, drift);
+        vec2 bloomPatch = patchDensityAt(bloomGround);
         float rootedHere = insideTerrainField(fieldPointCoord)
-            * step(cellRandom.z, driftStrength * coverage * growable);
+            * step(cellRandom.z, bloomPatch.x * coverage * growable);
 
         float horizonFade = 1.0 - smoothstep(
             fadeStartDistance,
@@ -98,9 +92,7 @@ const VERTEX_SHADER = /* glsl */ `
         float bloomScale = mix(scaleRange.x, scaleRange.y, shapeRandom.x)
             * rootedHere * horizonFade;
 
-        float speciesPick = driftNoise(
-            (bloomGround + vec2(speciesOffset)) / speciesWavelength
-        ) * 3.0;
+        float speciesPick = bloomPatch.y * 3.0;
         vSpeciesColor = speciesPick < 1.0
             ? speciesColorA
             : (speciesPick < 2.0 ? speciesColorB : speciesColorC);
@@ -117,7 +109,8 @@ const VERTEX_SHADER = /* glsl */ `
         float windWave = sin(
             dot(bloomGround, windDirection) / windWaveLength - windWavePhase
         );
-        vec2 sway = windDirection * windWave * swayStrength * swayWeight;
+        float swayFactor = partKind > 0.5 ? 1.0 : swayWeight;
+        vec2 sway = windDirection * windWave * swayStrength * swayFactor;
 
         vec3 bloomWorld = vec3(bloomGround.x, field.r, bloomGround.y)
             + turned * bloomScale
@@ -182,7 +175,8 @@ export class BloomField extends Entity implements IWorldEntity {
         context: IWorldContext,
         camera: Camera,
         center: Vector3Tuple,
-        heightMap: TerrainHeightMap,
+        heightMap: TerrainSampleGrid,
+        terrainFieldTexture: DataTexture,
         groundSplat: CanvasTexture,
         groundDetail: CanvasTexture,
         materials: IGroundMaterials
@@ -190,7 +184,7 @@ export class BloomField extends Entity implements IWorldEntity {
         super("bloom-field");
 
         this.camera = camera;
-        this.fieldTexture = heightMap.createShaderTexture();
+        this.fieldTexture = terrainFieldTexture;
         this.sceneObject.position.set(center[0], 0, center[2]);
         this.sceneObject.matrixAutoUpdate = false;
         this.sceneObject.updateMatrix();
@@ -214,9 +208,10 @@ export class BloomField extends Entity implements IWorldEntity {
             side: DoubleSide,
             uniforms: {
                 ...this.frameUniforms,
-                ...groundFieldUniforms(this.fieldTexture, heightMap, GROUND_FIELD.steepGroundBand),
+                ...groundCoverUniforms(this.fieldTexture, heightMap, GROUND_COVER.steepGroundBand),
                 ...groundMaterialUniforms(groundSplat, groundDetail, materials),
                 ...bloomShapeUniforms(),
+                ...patchFieldUniforms(BLOOM.patch),
                 ...paletteUniforms(context),
             },
         });
@@ -259,7 +254,6 @@ export class BloomField extends Entity implements IWorldEntity {
 
         this.geometries.length = 0;
         this.material.dispose();
-        this.fieldTexture.dispose();
         this.sceneObject.clear();
     }
 }
@@ -403,10 +397,6 @@ function bloomShapeUniforms() {
         cellSpacing: { value: BLOOM.cellSpacing },
         scaleRange: { value: new Vector2(...BLOOM.scaleRange) },
         coverage: { value: BLOOM.coverage },
-        driftWavelength: { value: BLOOM.driftWavelength },
-        driftThreshold: { value: BLOOM.driftThreshold },
-        speciesWavelength: { value: BLOOM.speciesWavelength },
-        speciesOffset: { value: BLOOM.speciesOffset },
         swayStrength: { value: BLOOM.swayStrength },
         windDirection: {
             value: new Vector2(Math.sin(GRASS.wind.heading), Math.cos(GRASS.wind.heading)),

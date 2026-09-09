@@ -1,7 +1,7 @@
 import { WATER_COURSE, WORLD_EDGE } from "@/constants/world";
-import { clamp, distanceOutsideBox, lerp, smoothstep } from "@/lib/helpers";
+import { catmullRomAt, clamp, distanceOutsideBox, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
-import type { ICorridorPath, IRegionFloor } from "@/world/terrain/TerrainHeightField";
+import type { ICorridorPath, IRegionFloor } from "@/world/terrain/TerrainGeneration";
 
 export function plotWaterCourses(
     regionFloors: IRegionFloor[],
@@ -49,17 +49,6 @@ export function plotWaterCourses(
     }
 
     return courses;
-}
-
-export function plotWaterCourse(
-    regionFloors: IRegionFloor[],
-    regionLinks: IRegionLink[],
-    corridorPaths: ICorridorPath[],
-    ground: IGroundProbe,
-    seed: number
-): IWaterCourse | null {
-    const courses = plotWaterCourses(regionFloors, regionLinks, corridorPaths, ground, seed);
-    return courses[0] ?? null;
 }
 
 function plotPrimaryRiver(
@@ -150,6 +139,9 @@ function findCourseRegions(
     if (sameLevelPath.length >= 2) {
         const startsInBoss = regionFloors[sameLevelPath[0]!]?.isBossRegion;
         if (!startsInBoss) return sameLevelPath;
+
+        const endsInBoss = regionFloors[sameLevelPath[sameLevelPath.length - 1]!]?.isBossRegion;
+        if (!endsInBoss) return [...sameLevelPath].reverse();
     }
 
     const eligibleNonBoss: number[] = [];
@@ -381,25 +373,6 @@ const createWaterPoint = (x: number, z: number): IWaterPoint => ({
     bedRatio: 1,
 });
 
-function catmullRomAt(
-    before: number,
-    start: number,
-    end: number,
-    after: number,
-    travelRatio: number
-): number {
-    const squared = travelRatio * travelRatio;
-    const cubed = squared * travelRatio;
-
-    return (
-        0.5 *
-        (2 * start +
-            (end - before) * travelRatio +
-            (2 * before - 5 * start + 4 * end - after) * squared +
-            (-before + 3 * start - 3 * end + after) * cubed)
-    );
-}
-
 function meanderCourse(points: IWaterPoint[], noise: FractalNoise): void {
     const displacements = new Float32Array(points.length * 2);
     let travelledLength = 0;
@@ -483,7 +456,10 @@ function clampWidthToArenaRoom(
                     pushOutsideCliffCorridor(point, corridor, minClearance);
                 }
                 const newDist = distanceToCorridorCentre(point, corridor);
-                point.halfWidth = Math.min(point.halfWidth, Math.max(0, newDist - corridor.halfWidth - 3.0));
+                point.halfWidth = Math.min(
+                    point.halfWidth,
+                    Math.max(0, newDist - corridor.halfWidth - 3.0)
+                );
             }
         }
     }
@@ -709,12 +685,19 @@ function taperCourseEnds(points: IWaterPoint[]): void {
 }
 
 function settleWaterline(points: IWaterPoint[], ground: IGroundProbe): void {
+    if (points.length === 0) return;
+
+    const groundElevations = points.map((point) => ground.elevationAt(point.x, point.z));
     let highestAllowed = Infinity;
 
-    for (const point of points) {
-        const restingLevel =
-            ground.elevationAt(point.x, point.z) - WATER_COURSE.waterlineDropBelowGround;
+    for (let index = 0; index < points.length; index += 1) {
+        const point = points[index]!;
+        const before = groundElevations[index - 1] ?? groundElevations[index]!;
+        const current = groundElevations[index]!;
+        const after = groundElevations[index + 1] ?? groundElevations[index]!;
+        const smoothedGround = (before + current + after) / 3;
 
+        const restingLevel = smoothedGround - WATER_COURSE.waterlineDropBelowGround;
         highestAllowed = Math.min(highestAllowed, restingLevel);
         point.waterlineElevation = highestAllowed;
     }

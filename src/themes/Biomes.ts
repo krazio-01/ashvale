@@ -18,7 +18,7 @@ import {
     FALLEN_PETALS,
 } from "@/themes/PropCatalogue";
 
-export const WOODLAND_PROPS: IThemeProp[] = [
+const WOODLAND_PROPS: IThemeProp[] = [
     ...CANOPY_TREES,
     ...PINE_TREES,
     ...TWISTED_TREES,
@@ -84,7 +84,7 @@ export const WOODLAND_MANIFEST: IThemeManifest = {
     },
 };
 
-export const HIGHLANDS_PROPS: IThemeProp[] = [
+const HIGHLANDS_PROPS: IThemeProp[] = [
     ...PINE_TREES,
     ...TWISTED_TREES,
     ...DEAD_TREES,
@@ -143,7 +143,7 @@ export const HIGHLANDS_MANIFEST: IThemeManifest = {
     },
 };
 
-export const RUINS_PROPS: IThemeProp[] = [
+const RUINS_PROPS: IThemeProp[] = [
     ...TWISTED_TREES,
     ...DEAD_TREES,
     ...BOULDERS,
@@ -202,7 +202,7 @@ export const RUINS_MANIFEST: IThemeManifest = {
     },
 };
 
-export const SETTLEMENT_PROPS: IThemeProp[] = [
+const SETTLEMENT_PROPS: IThemeProp[] = [
     ...CANOPY_TREES,
     ...PINE_TREES,
     ...BUSHES,

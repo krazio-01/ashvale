@@ -1,6 +1,6 @@
 import type { Camera, Vector3Tuple } from "three";
 import { PropBatch } from "@/world/props/PropBatch";
-import { TerrainMesh } from "@/world/terrain/TerrainMesh";
+import { TerrainSurface } from "@/world/terrain/TerrainSurface";
 import { GrassField } from "@/world/vegetation/GrassField";
 import { Player } from "@/entities/characters/player/Player";
 import { CharacterBody } from "@/entities/characters/CharacterBody";
@@ -10,13 +10,14 @@ import { buildPropField, type ICorridorLane, type IRegionSite } from "@/world/pr
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
 import {
     CorridorClimbStyle,
-    TerrainHeightField,
+    TerrainGenerator,
+    TerrainSampleGrid,
     WALKABLE_REACH,
-} from "@/world/terrain/TerrainHeightField";
-import { TerrainHeightMap } from "@/world/terrain/TerrainHeightMap";
+    type IRegionFloor,
+    type ICorridorPath,
+} from "@/world/terrain/TerrainGeneration";
 import { plotWaterCourses, type IRegionLink } from "@/world/water/WaterCourse";
 import { WaterSurface } from "@/world/water/WaterSurface";
-import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainHeightField";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
 import type { IChapterRegion, IRegionPathway } from "@/types/realm";
@@ -25,13 +26,12 @@ import type { SpawnProgressListener } from "@/types/world";
 import { PLAYER, SPAWNING } from "@/constants/characters";
 import { TERRAIN } from "@/constants/world";
 import { FULL_TURN, createSeededRandom, hashString, yieldToBrowser } from "@/lib/helpers";
-import { WalkableEdgeBarrier } from "./terrain/WalkableEdgeBarrier";
-import { LedgePlatforms } from "./terrain/LedgePlatforms";
+import { TerrainEdgeBarrier, TerrainLedges } from "./terrain/TerrainFeatures";
 import {
     buildGroundDetailTexture,
     buildGroundSplatTexture,
     deriveGroundMaterials,
-} from "./terrain/GroundMaterials";
+} from "./terrain/TerrainMaterials";
 import { BloomField } from "./vegetation/BloomField";
 
 const SPAWN_TIME_SLICE_MS = 8;
@@ -105,7 +105,7 @@ async function spawnTerrain(
     const center: Vector3Tuple = [centerX, 0, centerZ];
 
     await beginStage("Sculpting the terrain");
-    const dryHeightField = new TerrainHeightField(regionFloors, corridorPaths, null, seed);
+    const dryHeightField = new TerrainGenerator(regionFloors, corridorPaths, null, seed);
     const waterCourses = plotWaterCourses(
         regionFloors,
         regionLinks,
@@ -113,10 +113,12 @@ async function spawnTerrain(
         dryHeightField,
         seed + 29
     );
-    const heightField = waterCourses.length > 0
-        ? new TerrainHeightField(regionFloors, corridorPaths, waterCourses, seed)
-        : dryHeightField;
-    const heightMap = new TerrainHeightMap(heightField, mappedRadius);
+    const heightField =
+        waterCourses.length > 0
+            ? new TerrainGenerator(regionFloors, corridorPaths, waterCourses, seed)
+            : dryHeightField;
+    const heightMap = new TerrainSampleGrid(heightField, mappedRadius);
+    const terrainFieldTexture = heightMap.createShaderTexture();
 
     await beginStage("Weathering the soil");
     const groundMaterials = deriveGroundMaterials(world.context.environment.terrain);
@@ -125,17 +127,18 @@ async function spawnTerrain(
 
     await beginStage("Laying the ground");
     world.addEntity(
-        new TerrainMesh(
+        new TerrainSurface(
             world.context,
             center,
             heightMap,
+            terrainFieldTexture,
             groundSplat,
             groundDetail,
             groundMaterials
         )
     );
-    world.addEntity(new WalkableEdgeBarrier(world.context, center, heightMap));
-    world.addEntity(new LedgePlatforms(world.context, center, corridorPaths));
+    world.addEntity(new TerrainEdgeBarrier(world.context, center, heightMap));
+    world.addEntity(new TerrainLedges(world.context, center, corridorPaths));
 
     let waterSurface: WaterSurface | null = null;
 
@@ -152,6 +155,7 @@ async function spawnTerrain(
             camera,
             center,
             heightMap,
+            terrainFieldTexture,
             groundSplat,
             groundDetail,
             groundMaterials
@@ -165,6 +169,7 @@ async function spawnTerrain(
             camera,
             center,
             heightMap,
+            terrainFieldTexture,
             groundSplat,
             groundDetail,
             groundMaterials
@@ -380,7 +385,7 @@ function buildRegionGeometry(
             isSpawnRegion: region.regionId === spawnRegionId,
         };
 
-        const distance = Math.sqrt(localX * localX + localZ * localZ) + Math.max(width, depth) / 2;
+        const distance = Math.hypot(localX, localZ) + Math.hypot(halfWidth, halfDepth);
         if (distance > furthestDistance) furthestDistance = distance;
     }
 

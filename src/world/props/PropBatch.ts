@@ -7,6 +7,7 @@ import type { IPropGroup } from "@/types/theme";
 import type { IModelTemplate, IWorldContext, IWorldEntity } from "@/types/world";
 import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 import { PROP_FIELD } from "@/constants/placement";
+import { createSeededRandom, hashString, lerp } from "@/lib/helpers";
 
 const instanceTransform = new Object3D();
 const cameraGroundPosition = new Vector3();
@@ -23,6 +24,7 @@ export class PropBatch extends Entity implements IWorldEntity {
     private footprintCenterX = 0;
     private footprintCenterZ = 0;
     private activationDistanceSquared = Infinity;
+    private deactivationDistanceSquared = Infinity;
 
     constructor(batchId: string, context: IWorldContext, camera: Camera, groups: IPropGroup[]) {
         super(`${batchId}-props`);
@@ -47,6 +49,8 @@ export class PropBatch extends Entity implements IWorldEntity {
         for (const batch of this.batches) batch.matrixWorldAutoUpdate = false;
 
         this.measureFootprint(groups);
+        this.sceneObject.visible = false;
+        this.update();
     }
 
     update(): void {
@@ -54,9 +58,11 @@ export class PropBatch extends Entity implements IWorldEntity {
 
         const offsetX = cameraGroundPosition.x - this.footprintCenterX;
         const offsetZ = cameraGroundPosition.z - this.footprintCenterZ;
+        const distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
 
-        this.sceneObject.visible =
-            offsetX * offsetX + offsetZ * offsetZ <= this.activationDistanceSquared;
+        this.sceneObject.visible = this.sceneObject.visible
+            ? distanceSquared <= this.deactivationDistanceSquared
+            : distanceSquared <= this.activationDistanceSquared;
     }
 
     dispose(): void {
@@ -94,11 +100,11 @@ export class PropBatch extends Entity implements IWorldEntity {
             const offset = instance * PROP_TRANSFORM_STRIDE;
             const scale = group.transforms[offset + 4] ?? 1;
             const halfHeight = (modelHeight * scale) / 2;
+            const radius = group.footprintRadius * scale;
 
-            const colliderDesc = RAPIER.ColliderDesc.cylinder(
-                halfHeight,
-                group.footprintRadius * scale
-            ).setTranslation(
+            if (!(halfHeight > 0) || !(radius > 0)) continue;
+
+            const colliderDesc = RAPIER.ColliderDesc.cylinder(halfHeight, radius).setTranslation(
                 group.transforms[offset] ?? 0,
                 (group.transforms[offset + 1] ?? 0) + halfHeight,
                 group.transforms[offset + 2] ?? 0
@@ -137,9 +143,18 @@ export class PropBatch extends Entity implements IWorldEntity {
         this.footprintCenterZ = (minimumZ + maximumZ) / 2;
 
         const footprintReach = Math.hypot(maximumX - minimumX, maximumZ - minimumZ) / 2;
-        const activationDistance = PROP_FIELD.activationRadius + footprintReach;
+        const jitterSeed = hashString(
+            `${this.footprintCenterX.toFixed(1)},${this.footprintCenterZ.toFixed(1)}`
+        );
+        const jitterRatio = createSeededRandom(jitterSeed)();
+        const jitteredRadius =
+            PROP_FIELD.activationRadius *
+            lerp(1 - PROP_FIELD.activationJitter, 1 + PROP_FIELD.activationJitter, jitterRatio);
+        const activationDistance = jitteredRadius + footprintReach;
+        const deactivationDistance = activationDistance + PROP_FIELD.deactivationMargin;
 
         this.activationDistanceSquared = activationDistance * activationDistance;
+        this.deactivationDistanceSquared = deactivationDistance * deactivationDistance;
     }
 }
 
