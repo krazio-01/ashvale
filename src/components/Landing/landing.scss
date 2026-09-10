@@ -1,0 +1,372 @@
+@use "../../styles/variable" as *;
+
+.landing-container {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    touch-action: none;
+    user-select: none;
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
+}
+
+html.landing-character-hovered .landing-container {
+    cursor: pointer;
+}
+
+@keyframes landing-rise-in {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.landing-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+
+    &::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        bottom: 0;
+        height: 16rem;
+        background: linear-gradient(to top, rgba($color-secondary, 0.45), transparent);
+        pointer-events: none;
+    }
+}
+
+.landing-hero {
+    position: absolute;
+    left: 2.5rem;
+    bottom: 2.5rem;
+    width: min(100%, 25rem);
+    padding: 1.85rem 1.85rem 1.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    pointer-events: auto;
+    cursor: auto;
+    background: linear-gradient(160deg, rgba(26, 21, 38, 0.72), rgba(26, 21, 38, 0.52));
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-top-color: rgba(255, 255, 255, 0.3);
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 26px), calc(100% - 26px) 100%, 0 100%);
+    box-shadow:
+        0 1.5rem 3rem rgba(0, 0, 0, 0.35),
+        inset 0 0 4rem rgba($color-ember, 0.06);
+    transform-style: preserve-3d;
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+    animation: landing-rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-heading {
+    h1 {
+        margin: 0;
+        font-size: clamp(2rem, 4.2vw, 2.75rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        color: $color-primary;
+    }
+
+    p {
+        margin: 0.6rem 0 0;
+        font-family: $font-mono;
+        font-size: 0.82rem;
+        line-height: 1.5;
+        color: rgba(255, 255, 255, 0.72);
+    }
+}
+
+.landing-repo-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.landing-repo-field {
+    display: flex;
+    align-items: center;
+    padding-left: 0.9rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(8, 8, 13, 0.45);
+    font-family: $font-mono;
+    font-size: 0.85rem;
+    transition: border-color 0.15s ease;
+
+    &:focus-within {
+        border-color: $color-ember;
+        box-shadow: 0 0 0 3px rgba($color-ember, 0.18);
+    }
+
+    input {
+        flex: 1;
+        min-width: 0;
+        padding: 0.8rem 0.9rem 0.8rem 0.1rem;
+        border: none;
+        background: transparent;
+        color: $color-primary;
+        font: inherit;
+
+        &::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        &:focus {
+            outline: none;
+        }
+    }
+}
+
+.landing-repo-prefix {
+    color: rgba(255, 255, 255, 0.4);
+    white-space: nowrap;
+}
+
+.landing-repo-kbd {
+    margin-right: 0.6rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.3rem;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.55);
+    font-family: $font-mono;
+    font-size: 0.75rem;
+    line-height: 1.3;
+}
+
+.landing-primary-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.85rem 1.2rem;
+    border-radius: 0.5rem;
+    border: none;
+    background: $color-ember;
+    color: $color-secondary;
+    font-family: $font-sans;
+    font-weight: 600;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition:
+        filter 0.15s ease,
+        box-shadow 0.15s ease,
+        transform 0.1s ease;
+
+    &:hover:not(:disabled) {
+        filter: brightness(1.1);
+        box-shadow: 0 0 1.4rem rgba($color-ember, 0.55);
+    }
+
+    &:active:not(:disabled) {
+        transform: scale(0.97);
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+.landing-error {
+    margin: 0;
+    color: $color-ember;
+    font-family: $font-mono;
+    font-size: 0.8rem;
+}
+
+.landing-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: rgba(255, 255, 255, 0.45);
+    font-family: $font-sans;
+    font-size: 0.82rem;
+}
+
+.landing-divider-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.landing-quick-play {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.8rem 1.2rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.06);
+    color: $color-primary;
+    font-family: $font-sans;
+    font-weight: 600;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        transform 0.1s ease;
+
+    &:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.14);
+        border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    &:active:not(:disabled) {
+        transform: scale(0.97);
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+}
+
+.landing-hud {
+    position: absolute;
+    right: 2.5rem;
+    bottom: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.65rem;
+    animation: landing-rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+
+.landing-compass {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.85rem 1rem;
+    border-radius: 1.2rem;
+    background: linear-gradient(160deg, rgba(26, 21, 38, 0.72), rgba(26, 21, 38, 0.5));
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.3);
+}
+
+.landing-compass-dial {
+    position: relative;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
+}
+
+.landing-compass-dial::before {
+    content: "";
+    position: absolute;
+    top: 0.22rem;
+    left: 50%;
+    width: 2px;
+    height: 0.4rem;
+    margin-left: -1px;
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 1px;
+}
+
+.landing-compass-ring {
+    position: absolute;
+    inset: 0;
+    will-change: transform;
+}
+
+.landing-compass-dot {
+    position: absolute;
+    top: 0.28rem;
+    left: 50%;
+    width: 0.4rem;
+    height: 0.4rem;
+    margin-left: -0.2rem;
+    border-radius: 50%;
+    background: $color-ember;
+    box-shadow: 0 0 0.6rem rgba($color-ember, 0.8);
+}
+
+.landing-compass-value {
+    font-family: $font-mono;
+    font-size: 0.85rem;
+    color: $color-primary;
+    font-variant-numeric: tabular-nums;
+}
+
+.landing-hud-hint {
+    font-family: $font-mono;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+@keyframes landing-status-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.landing-status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    background: $color-secondary;
+    opacity: 0;
+    animation: landing-status-fade-in 0.85s ease forwards;
+
+    p {
+        max-width: min(90%, 800px);
+        font-family: $font-mono;
+        font-size: 1.1rem;
+        color: $color-primary;
+        text-align: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .landing-hero,
+    .landing-hud {
+        animation: none;
+    }
+
+    .landing-status {
+        animation: none;
+        opacity: 1;
+    }
+}
+
+@media (max-width: 640px) {
+    .landing-hero {
+        left: 1.25rem;
+        right: 1.25rem;
+        bottom: 1.25rem;
+        width: auto;
+        clip-path: none;
+    }
+
+    .landing-hud {
+        display: none;
+    }
+}
