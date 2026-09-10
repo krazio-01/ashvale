@@ -10,6 +10,7 @@ import {
 export class MaterialLibrary {
     private readonly gradientMap: DataTexture;
     private readonly materialsByKey = new Map<string, MeshToonMaterial>();
+    private vertexColorMaterial: MeshToonMaterial | null = null;
 
     constructor() {
         this.gradientMap = this.buildGradientMap();
@@ -22,6 +23,16 @@ export class MaterialLibrary {
         const material = new MeshToonMaterial({ color, gradientMap: this.gradientMap });
         this.materialsByKey.set(color, material);
         return material;
+    }
+
+    getVertexColorToonMaterial(): MeshToonMaterial {
+        if (!this.vertexColorMaterial)
+            this.vertexColorMaterial = new MeshToonMaterial({
+                vertexColors: true,
+                gradientMap: this.gradientMap,
+            });
+
+        return this.vertexColorMaterial;
     }
 
     getToonMaterialForSource(source: MeshStandardMaterial): MeshToonMaterial {
@@ -42,6 +53,7 @@ export class MaterialLibrary {
     dispose(): void {
         for (const material of this.materialsByKey.values()) material.dispose();
         this.materialsByKey.clear();
+        this.vertexColorMaterial?.dispose();
         this.gradientMap.dispose();
     }
 

@@ -49,6 +49,12 @@ export interface IChapterBoss {
     chapterAppearanceCount: number;
 }
 
+export interface IFeaturedRealm {
+    repositoryOwner: string;
+    repositoryName: string;
+    repositoryFullName: string;
+}
+
 export enum ChapterTheme {
     Woodland = "woodland",
     Settlement = "settlement",
