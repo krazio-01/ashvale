@@ -65,7 +65,7 @@ export class AssetLibrary {
     }
 }
 
-function prepareSkinnedModel(
+export function prepareSkinnedModel(
     gltf: GLTF,
     clipLibraries: GLTF[],
     materialLibrary: MaterialLibrary
@@ -87,7 +87,10 @@ function prepareSkinnedModel(
     };
 }
 
-function flattenForInstancing(root: Object3D, materialLibrary: MaterialLibrary): IModelTemplate {
+export function flattenForInstancing(
+    root: Object3D,
+    materialLibrary: MaterialLibrary
+): IModelTemplate {
     const parts: IModelPart[] = [];
     const bounds = new Box3();
 
