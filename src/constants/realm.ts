@@ -57,6 +57,19 @@ export const ROOT_REGION = {
 
 export const SMALL_REPOSITORY_FILE_LIMIT = 400;
 
+export const FEATURED_REALM_LIMIT = 12;
+
+/* Used by Quick Play only when no realm has been flagged isFeatured yet, so the landing
+   page always has somewhere to send a first-time visitor. */
+export const QUICK_PLAY_FALLBACK_REPOS: IRepoIdentity[] = [
+    { owner: "expressjs", name: "express" },
+    { owner: "chalk", name: "chalk" },
+    { owner: "axios", name: "axios" },
+    { owner: "lodash", name: "lodash" },
+    { owner: "sveltejs", name: "svelte" },
+    { owner: "pallets", name: "flask" },
+];
+
 export const CHAPTER_ARC: IChapterArcEntry[] = [
     { title: "The Founding", artifactName: "Ember of Origin" },
     { title: "The First Expansion", artifactName: "Shard of Ascent" },
@@ -80,4 +93,9 @@ export interface IChapterTier {
 export interface IChapterArcEntry {
     title: string;
     artifactName: string;
+}
+
+export interface IRepoIdentity {
+    owner: string;
+    name: string;
 }

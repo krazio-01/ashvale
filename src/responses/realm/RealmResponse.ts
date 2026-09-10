@@ -3,6 +3,7 @@ import type {
     ChapterTheme,
     IChapterBoss,
     IChapterRegion,
+    IFeaturedRealm,
     IRealmChapter,
     IRegionPathway,
     IResolvedRealm,
@@ -63,6 +64,18 @@ export class ChapterResponse {
         this.boss = chapter.boss === null ? null : roundBoss(chapter.boss);
         this.theme = chapter.theme;
         this.season = chapter.season;
+    }
+}
+
+export class FeaturedRealmResponse {
+    owner: string;
+    name: string;
+    fullName: string;
+
+    constructor(realm: IFeaturedRealm) {
+        this.owner = realm.repositoryOwner;
+        this.name = realm.repositoryName;
+        this.fullName = realm.repositoryFullName;
     }
 }
 

@@ -3,7 +3,8 @@ import { connectToDatabase } from "@/config/mongo";
 import Realm, { CACHE_BUST_COUNTER } from "@/models/Realm";
 import { fetchCommitAtPosition } from "@/services/github/GithubService";
 import { generateRealm } from "@/services/realm/RealmGenerator";
-import { IResolvedRealm } from "@/types/realm";
+import { IFeaturedRealm, IResolvedRealm } from "@/types/realm";
+import { FEATURED_REALM_LIMIT } from "@/constants/realm";
 
 const NEWEST_COMMIT_POSITION = 0;
 
@@ -50,4 +51,14 @@ export async function resolveRealm(
     );
 
     return realm;
+}
+
+export async function listFeaturedRealms(): Promise<IFeaturedRealm[]> {
+    await connectToDatabase();
+
+    return Realm.find({ isFeatured: true })
+        .sort({ starCount: -1, _id: 1 })
+        .select("repositoryOwner repositoryName repositoryFullName")
+        .limit(FEATURED_REALM_LIMIT)
+        .lean();
 }
