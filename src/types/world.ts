@@ -6,7 +6,14 @@ import type { IThemeEnvironment } from "@/types/theme";
 
 export interface IWorldEntity {
     readonly sceneObject: Object3D;
-    update(deltaSeconds: number): void;
+    /* Runs once per fixed physics step, before World.step(), for anything that writes
+       into the solver. Keeping this off the render tick is what stops movement being
+       dropped or doubled when the render rate beats against the fixed timestep. */
+    fixedUpdate?(fixedTimestep: number): void;
+    /* Runs once per fixed physics step, after World.step(), to latch the simulated
+       transform that `update` interpolates towards. */
+    postStep?(): void;
+    update(deltaSeconds: number, interpolationAlpha: number): void;
     dispose(): void;
 }
 

@@ -3,7 +3,6 @@ import { pair } from "@/lib/helpers";
 export const RENDER = {
     pixelRatioRange: pair(1, 1.5),
     multisampling: 0,
-    foliageMaskScale: 0.5,
 };
 
 export const SHADING = {

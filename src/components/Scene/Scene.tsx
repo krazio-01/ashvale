@@ -12,11 +12,16 @@ import { isRequestCancellation, useRequest } from "@/hooks/useRequest";
 import { HttpMethod } from "@/constants/strings";
 import type { ChapterResponse, RealmResponse } from "@/responses/realm/RealmResponse";
 import type { IThemeManifest } from "@/types/theme";
-import { POST_PROCESSING, RENDER } from "@/constants/rendering";
+import { POST_PROCESSING } from "@/constants/rendering";
 import { CAMERA } from "@/constants/characters";
 import { InlineLoader } from "generative-loaders";
-import "generative-loaders/styles.css";
+import { useRouter } from "next/navigation";
 import PerformanceOverlay from "../PerformanceOverlay";
+import { useFrameLimit } from "@/hooks/useFrameLimit";
+import { useRenderPixelRatio } from "@/hooks/useRenderPixelRatio";
+import { usePointerLock } from "@/hooks/usePointerLock";
+import { FrameRateMeter } from "@/components/Hud/FrameRateMeter";
+import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
 import "./scene.scss";
 
 const ACTIVE_CHAPTER_INDEX = 0;
@@ -27,10 +32,14 @@ const WorldRuntime = ({
     chapter,
     manifest,
     onStageChange,
+    isPaused,
+    onRequestLock,
 }: {
     chapter: ChapterResponse;
     manifest: IThemeManifest;
     onStageChange: (stageLabel: string | null) => void;
+    isPaused: boolean;
+    onRequestLock: (target: Element) => void;
 }) => {
     const camera = useThree((state) => state.camera);
     const glRenderer = useThree((state) => state.gl);
@@ -78,21 +87,65 @@ const WorldRuntime = ({
 
     useEffect(() => {
         const canvas = glRenderer.domElement;
-        const requestLock = () => canvas.requestPointerLock();
+        const handleClick = () => onRequestLock(canvas);
 
-        canvas.addEventListener("click", requestLock);
-        return () => canvas.removeEventListener("click", requestLock);
-    }, [glRenderer]);
+        canvas.addEventListener("click", handleClick);
+        return () => canvas.removeEventListener("click", handleClick);
+    }, [glRenderer, onRequestLock]);
 
-    useFrame((_, deltaSeconds) => world?.update(deltaSeconds));
+    useFrame((_, deltaSeconds) => {
+        if (isPaused) return;
+        world?.update(deltaSeconds);
+    });
 
     return world ? <primitive object={world.root} /> : null;
 };
 
+const FrameLimitDriver = () => {
+    useFrameLimit();
+    return null;
+};
+
 const Scene = ({ owner, name }: { owner: string; name: string }) => {
+    const router = useRouter();
     const { isPending, error, sendRequest } = useRequest();
     const [realm, setRealm] = useState<RealmResponse | null>(null);
     const [spawnStage, setSpawnStage] = useState<string | null>(FIRST_SPAWN_STAGE);
+    const [isPaused, setIsPaused] = useState(false);
+
+    const { requestLock, releaseLock } = usePointerLock();
+    const pixelRatio = useRenderPixelRatio();
+
+    const handleResume = useCallback(() => {
+        setIsPaused(false);
+        requestLock();
+    }, [requestLock]);
+
+    const handleQuit = useCallback(() => {
+        router.push("/");
+    }, [router]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== "Tab") return;
+
+            // Tab is the menu binding, but once focus is inside the dialog it has to
+            // stay a focus-navigation key or the menu is unusable by keyboard.
+            if (isPaused && (e.target as HTMLElement | null)?.closest(".pause-menu-shell")) return;
+
+            e.preventDefault();
+
+            if (isPaused) {
+                handleResume();
+            } else {
+                setIsPaused(true);
+                releaseLock();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isPaused, handleResume, releaseLock]);
 
     const handleStageChange = useCallback(
         (stageLabel: string | null) => setSpawnStage(stageLabel),
@@ -141,7 +194,8 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
         <div className="scene-canvas-container">
             <Canvas
                 shadows="percentage"
-                dpr={RENDER.pixelRatioRange}
+                frameloop="never"
+                dpr={pixelRatio}
                 camera={{
                     fov: CAMERA.fov,
                     near: CAMERA.near,
@@ -154,12 +208,15 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
                     toneMappingExposure: POST_PROCESSING.exposure,
                 }}
             >
+                <FrameLimitDriver />
                 <SkyDome environment={manifest.environment} />
                 <SceneLighting environment={manifest.environment} />
                 <WorldRuntime
                     chapter={chapter}
                     manifest={manifest}
                     onStageChange={handleStageChange}
+                    isPaused={isPaused}
+                    onRequestLock={requestLock}
                 />
 
                 <PostProcessing environment={manifest.environment} />
@@ -167,11 +224,28 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
                 <PerformanceOverlay />
             </Canvas>
 
+            <FrameRateMeter />
+
+            {!isPaused && !spawnStage && (
+                <div className="scene-menu-hint">
+                    <kbd>Tab</kbd> menu
+                </div>
+            )}
+
             {spawnStage && (
                 <div className="scene-status scene-status--overlay">
                     <InlineLoader variant="matrix" size={32} color="#fff" />
                     <p>{spawnStage}</p>
                 </div>
+            )}
+
+            {isPaused && (
+                <PauseMenu
+                    onResume={handleResume}
+                    onQuit={handleQuit}
+                    realmTitle={`${owner}/${name}`}
+                    dismissKey="Esc"
+                />
             )}
         </div>
     );

@@ -12,6 +12,7 @@ import type { IWorldContext, IWorldEntity } from "@/types/world";
 import { CAMERA, CHARACTER, CharacterMotion, PLAYER } from "@/constants/characters";
 import { WORLD } from "@/constants/world";
 import { FULL_TURN } from "@/lib/helpers";
+import { settings } from "@/settings/SettingsStore";
 
 const forwardDirection = new Vector3();
 const rightDirection = new Vector3();
@@ -32,6 +33,9 @@ export class Player extends Character implements IWorldEntity {
     private readonly collider: Collider;
     private readonly controller: KinematicCharacterController;
     private readonly horizontalVelocity = new Vector3();
+    private readonly previousTranslation = new Vector3();
+    private readonly simulatedTranslation = new Vector3();
+    private readonly renderTranslation = new Vector3();
     private readonly jumpStartSeconds: number;
     private readonly jumpLandSeconds: number;
     private verticalVelocity = 0;
@@ -62,6 +66,11 @@ export class Player extends Character implements IWorldEntity {
         const [spawnX, spawnY, spawnZ] = spawnPosition;
         const cylinderLength = PLAYER.height - PLAYER.radius * 2;
 
+        this.previousTranslation.set(spawnX, spawnY, spawnZ);
+        this.simulatedTranslation.set(spawnX, spawnY, spawnZ);
+        this.renderTranslation.set(spawnX, spawnY, spawnZ);
+        this.sceneObject.position.set(spawnX, spawnY, spawnZ);
+
         this.rigidBody = context.physicsWorld.createRigidBody(
             RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(spawnX, spawnY, spawnZ)
         );
@@ -91,13 +100,34 @@ export class Player extends Character implements IWorldEntity {
         return this.equippedWeapon?.damage ?? PLAYER.unarmedDamage;
     }
 
-    update(deltaSeconds: number): void {
-        const translation = this.rigidBody.translation();
+    fixedUpdate(fixedTimestep: number): void {
+        this.previousTranslation.copy(this.simulatedTranslation);
+        this.applyMovement(fixedTimestep, this.rigidBody.translation());
+    }
 
+    postStep(): void {
+        const translation = this.rigidBody.translation();
+        this.simulatedTranslation.set(translation.x, translation.y, translation.z);
+    }
+
+    update(deltaSeconds: number, interpolationAlpha: number): void {
         this.applyMouseLook();
-        this.applyMovement(deltaSeconds, translation);
-        this.faceTravelDirection(deltaSeconds, translation);
-        this.followCamera.follow(deltaSeconds, translation.x, translation.y, translation.z);
+
+        this.renderTranslation.lerpVectors(
+            this.previousTranslation,
+            this.simulatedTranslation,
+            interpolationAlpha
+        );
+
+        this.sceneObject.position.copy(this.renderTranslation);
+        this.applyFacingRotation(deltaSeconds);
+
+        this.followCamera.follow(
+            deltaSeconds,
+            this.renderTranslation.x,
+            this.renderTranslation.y,
+            this.renderTranslation.z
+        );
         this.animator.update(deltaSeconds);
     }
 
@@ -124,10 +154,10 @@ export class Player extends Character implements IWorldEntity {
     private applyMouseLook(): void {
         this.input.consumeMouseDelta(mouseDelta);
 
-        this.followCamera.turnBy(
-            mouseDelta.x * CAMERA.mouseSensitivity,
-            mouseDelta.y * CAMERA.mouseSensitivity
-        );
+        const sensitivity = CAMERA.mouseSensitivity * settings.mouseSensitivity;
+        const pitchDelta = settings.invertY ? -mouseDelta.y : mouseDelta.y;
+
+        this.followCamera.turnBy(mouseDelta.x * sensitivity, pitchDelta * sensitivity);
     }
 
     private applyMovement(deltaSeconds: number, translation: IBodyTranslation): void {
@@ -221,9 +251,7 @@ export class Player extends Character implements IWorldEntity {
         return isSprinting ? CharacterMotion.Run : CharacterMotion.Walk;
     }
 
-    private faceTravelDirection(deltaSeconds: number, translation: IBodyTranslation): void {
-        this.sceneObject.position.set(translation.x, translation.y, translation.z);
-
+    private applyFacingRotation(deltaSeconds: number): void {
         const turnFactor = 1 - Math.exp(-PLAYER.turnSmoothing * deltaSeconds);
         this.sceneObject.rotation.y += this.shortestAngleTo(this.facingYaw) * turnFactor;
     }
