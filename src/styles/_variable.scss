@@ -1,20 +1,28 @@
-$color-primary: #ffffff;
-$color-secondary: #08080d;
-$color-void: #1a1526;
-$color-haze: #4a3f63;
-$color-stone: #8a7a6d;
-$color-stone-light: #c2ad91;
-$color-ember: #ff7a3c;
-$color-player-body: #c1503c;
-$color-track: #3a3340;
+// Design tokens live in :root (src/app/globals.scss) so they are reusable from
+// any stylesheet, inline style, or runtime code. These aliases exist only so
+// Sass files can reference them without repeating the var() call.
 
-$font-sans:
-    var(--font-geist-sans),
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
-$font-mono:
-    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+$ink-void: var(--ink-void);
+$ink-panel: var(--ink-panel);
+$ink-raised: var(--ink-raised);
+$ink-scrim: var(--ink-scrim);
+
+$ink-line: var(--ink-line);
+$ink-line-strong: var(--ink-line-strong);
+
+$ink-text: var(--ink-text);
+$ink-muted: var(--ink-muted);
+$ink-dim: var(--ink-dim);
+
+$ink-inverse-bg: var(--ink-inverse-bg);
+$ink-inverse-text: var(--ink-inverse-text);
+$ink-focus: var(--ink-focus);
+
+$radius-sm: var(--radius-sm);
+$radius-md: var(--radius-md);
+
+$duration: var(--duration);
+$ease: var(--ease);
+
+$font-sans: var(--font-ui);
+$font-mono: var(--font-numeric);

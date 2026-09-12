@@ -15,6 +15,7 @@ export class World {
     private readonly environment: IThemeEnvironment;
     private readonly worldContext: IWorldContext;
     private readonly entities = new Set<IWorldEntity>();
+    private readonly steppedEntities = new Set<IWorldEntity>();
     private readonly entitiesAwaitingRemoval = new Set<IWorldEntity>();
     private unsimulatedTime = 0;
     private isDisposed = false;
@@ -62,6 +63,7 @@ export class World {
         if (this.isDisposed) return;
 
         this.entities.add(entity);
+        if (entity.fixedUpdate || entity.postStep) this.steppedEntities.add(entity);
         this.sceneRoot.add(entity.sceneObject);
     }
 
@@ -80,14 +82,21 @@ export class World {
 
         let stepsTaken = 0;
         while (this.unsimulatedTime >= fixedTimestep && stepsTaken < maximumStepsPerFrame) {
+            for (const entity of this.steppedEntities) entity.fixedUpdate?.(fixedTimestep);
             this.physicsWorld.step();
+            for (const entity of this.steppedEntities) entity.postStep?.();
             this.unsimulatedTime -= fixedTimestep;
             stepsTaken += 1;
         }
 
-        if (stepsTaken === maximumStepsPerFrame) this.unsimulatedTime = 0;
+        // When the simulation can't keep up and hits the step cap, render at the
+        // latest stepped state rather than resetting to alpha 0, which would snap
+        // entities back to their pre-frame transform for one visible frame.
+        const isCatchingUp = stepsTaken === maximumStepsPerFrame;
+        if (isCatchingUp) this.unsimulatedTime = 0;
 
-        for (const entity of this.entities) entity.update(frameDelta);
+        const interpolationAlpha = isCatchingUp ? 1 : this.unsimulatedTime / fixedTimestep;
+        for (const entity of this.entities) entity.update(frameDelta, interpolationAlpha);
 
         this.applyPendingRemovals();
     }
@@ -100,6 +109,7 @@ export class World {
 
         this.sceneRoot.clear();
         this.entities.clear();
+        this.steppedEntities.clear();
         this.entitiesAwaitingRemoval.clear();
         this.assetLibrary.dispose();
         this.materialLibrary.dispose();
@@ -111,6 +121,7 @@ export class World {
 
         for (const entity of this.entitiesAwaitingRemoval) {
             this.entities.delete(entity);
+            this.steppedEntities.delete(entity);
             this.sceneRoot.remove(entity.sceneObject);
             entity.dispose();
         }
