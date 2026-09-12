@@ -20,13 +20,17 @@ import LandingCameraRig from "@/components/Landing/LandingCameraRig";
 import type { IOrbitInput } from "@/components/Landing/LandingCameraRig";
 import LandingHero from "@/components/Landing/LandingHero";
 import LandingHud from "@/components/Landing/LandingHud";
+import { useFrameLimit } from "@/hooks/useFrameLimit";
+import { useRenderPixelRatio } from "@/hooks/useRenderPixelRatio";
+import { FrameRateMeter } from "@/components/Hud/FrameRateMeter";
+import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
 import { parseRepoInput } from "@/lib/githubRepoInput";
 import { isRequestCancellation, useRequest } from "@/hooks/useRequest";
 import { HttpMethod } from "@/constants/strings";
 import { QUICK_PLAY_FALLBACK_REPOS } from "@/constants/realm";
 import { LANDING_CAMERA, LANDING_SKY } from "@/constants/landing";
-import { POST_PROCESSING, RENDER } from "@/constants/rendering";
+import { POST_PROCESSING } from "@/constants/rendering";
 import { ChapterSeason, ChapterTheme } from "@/types/realm";
 import type { FeaturedRealmResponse } from "@/responses/realm/RealmResponse";
 import { clamp } from "@/lib/helpers";
@@ -73,6 +77,11 @@ const buildLandingManifest = () => {
     };
 };
 
+const LandingFrameLimitDriver = () => {
+    useFrameLimit();
+    return null;
+};
+
 const Landing = () => {
     const router = useRouter();
     const { isPending: isLoadingFeatured, sendRequest } = useRequest();
@@ -80,6 +89,20 @@ const Landing = () => {
     const [validationError, setValidationError] = useState<string | null>(null);
     const [enteringRealmLabel, setEnteringRealmLabel] = useState<string | null>(null);
     const [isDiving, setIsDiving] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const pixelRatio = useRenderPixelRatio();
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "F10") {
+                e.preventDefault();
+                setIsSettingsOpen((prev) => !prev);
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []);
     const hasNavigatedRef = useRef(false);
     const pendingRealmRef = useRef<{ owner: string; name: string } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -171,7 +194,12 @@ const Landing = () => {
         };
 
         const handlePointerDown = (event: PointerEvent) => {
-            if ((event.target as HTMLElement).closest(".landing-hero")) return;
+            if (
+                (event.target as HTMLElement).closest(
+                    ".landing-hero, .landing-settings-trigger, .pause-menu-backdrop"
+                )
+            )
+                return;
 
             const input = orbitInputRef.current;
             input.isDragging = true;
@@ -224,7 +252,8 @@ const Landing = () => {
         <div className="landing-container" ref={containerRef}>
             <Canvas
                 shadows="percentage"
-                dpr={RENDER.pixelRatioRange}
+                frameloop="never"
+                dpr={pixelRatio}
                 camera={{
                     fov: LANDING_CAMERA.fov,
                     near: LANDING_CAMERA.near,
@@ -236,6 +265,7 @@ const Landing = () => {
                     toneMappingExposure: POST_PROCESSING.exposure,
                 }}
             >
+                <LandingFrameLimitDriver />
                 <SkyDome environment={manifest.environment} />
                 <SceneLighting environment={manifest.environment} />
                 <LandingStars />
@@ -254,6 +284,8 @@ const Landing = () => {
                 <PostProcessing environment={manifest.environment} />
                 <PerformanceOverlay />
             </Canvas>
+
+            <FrameRateMeter />
 
             <div className="landing-overlay">
                 <LandingHero
@@ -275,6 +307,22 @@ const Landing = () => {
                     <InlineLoader variant="matrix" size={32} color="#fff" />
                     <p>opening realm/{enteringRealmLabel}</p>
                 </div>
+            )}
+
+            <button
+                type="button"
+                className="landing-settings-trigger"
+                onClick={() => setIsSettingsOpen(true)}
+            >
+                Settings
+            </button>
+
+            {isSettingsOpen && (
+                <PauseMenu
+                    title="Settings"
+                    dismissLabel="Close"
+                    onResume={() => setIsSettingsOpen(false)}
+                />
             )}
         </div>
     );

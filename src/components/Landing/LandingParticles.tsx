@@ -304,7 +304,7 @@ const updateStar: IUpdateParticle<IStar> = (
     const twinkle =
         LANDING_STARS.twinkleFloor +
         (1 - LANDING_STARS.twinkleFloor) *
-        (0.5 + 0.5 * Math.sin(elapsedSeconds * star.speed + star.phase));
+            (0.5 + 0.5 * Math.sin(elapsedSeconds * star.speed + star.phase));
 
     colorAttribute.setXYZ(
         index,
