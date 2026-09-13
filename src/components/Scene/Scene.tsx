@@ -20,6 +20,7 @@ import PerformanceOverlay from "../PerformanceOverlay";
 import { useFrameLimit } from "@/hooks/useFrameLimit";
 import { useRenderPixelRatio } from "@/hooks/useRenderPixelRatio";
 import { usePointerLock } from "@/hooks/usePointerLock";
+import { useFov } from "@/hooks/useFov";
 import { FrameRateMeter } from "@/components/Hud/FrameRateMeter";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
 import "./scene.scss";
@@ -103,6 +104,7 @@ const WorldRuntime = ({
 
 const FrameLimitDriver = () => {
     useFrameLimit();
+    useFov();
     return null;
 };
 
