@@ -129,6 +129,17 @@ export const SETTINGS_CATALOGUE: SettingsCatalogueMap = {
         onLabel: "Inverted",
         offLabel: "Normal",
     },
+    fov: {
+        key: "fov",
+        section: "Controls",
+        type: "slider",
+        label: "Field of view",
+        description: "Widens or narrows the camera's view angle",
+        min: 55,
+        max: 80,
+        step: 1,
+        formatValue: (val: number) => `${val}°`,
+    },
 };
 
 export const SETTING_SECTIONS: readonly SettingSection[] = [

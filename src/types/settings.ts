@@ -19,6 +19,7 @@ export interface IGameSettings {
 
     mouseSensitivity: number;
     invertY: boolean;
+    fov: number;
 }
 
 export type SettingSection = "Display" | "Graphics" | "Controls";
