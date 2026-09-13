@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: IGameSettings = {
 
     mouseSensitivity: 1.0,
     invertY: false,
+    fov: 55,
 };
 
 function isAllowedValue<K extends keyof IGameSettings>(key: K, value: unknown): boolean {
