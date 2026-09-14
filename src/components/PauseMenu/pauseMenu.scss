@@ -56,7 +56,6 @@
             line-height: 1;
         }
 
-        // A repository path is code, so it is set in the numeric/mono face.
         .realm-tag {
             font-family: $font-mono;
             font-size: 0.78rem;
@@ -134,8 +133,6 @@
     scrollbar-color: var(--ink-line-strong) transparent;
 }
 
-// Rows are separated by hairlines rather than boxed into cards, so the eye
-// reads one continuous list instead of a grid of tiles.
 .setting-row {
     display: flex;
     align-items: center;
@@ -197,7 +194,6 @@
             color: $ink-text;
         }
 
-        // State is signalled by inversion, not by an accent hue.
         &.active {
             background: $ink-inverse-bg;
             color: $ink-inverse-text;

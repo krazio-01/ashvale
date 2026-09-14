@@ -44,11 +44,6 @@ function loadStored(): IGameSettings {
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== "object") return { ...DEFAULT_SETTINGS };
 
-        // Only adopt keys the current build knows about, so settings removed in
-        // an earlier version don't linger in storage and get written back out.
-        // Storage is user-editable, so a stored value is only trusted when its type
-        // matches the default it replaces and, for enum/ranged controls, when it is
-        // actually one of the values the catalogue still offers.
         const restored: IGameSettings = { ...DEFAULT_SETTINGS };
         const writable = restored as unknown as Record<string, unknown>;
         const defaults = DEFAULT_SETTINGS as unknown as Record<string, unknown>;
@@ -118,9 +113,6 @@ export function resetSettings(): void {
     Object.assign(settings, DEFAULT_SETTINGS);
     notify();
 }
-
-// The pause menu stages edits in a local draft and only commits on save, so
-// these helpers mirror the mutating functions above without touching the store.
 
 export function draftWithChange(
     draft: IGameSettings,

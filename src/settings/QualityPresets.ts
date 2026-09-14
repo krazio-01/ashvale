@@ -52,8 +52,6 @@ export const SHADOW_MAP_SIZES: Record<ShadowQuality, number> = {
     high: LIGHT.shadowMapSize * 2,
 };
 
-// Resolution of the foliage mask the outline pass samples. This is what makes
-// "low" and "high" outlines actually differ.
 export const OUTLINE_MASK_SCALES: Record<OutlineQuality, number> = {
     off: 0,
     low: 0.25,

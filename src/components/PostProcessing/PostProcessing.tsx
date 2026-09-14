@@ -81,9 +81,6 @@ const PostProcessing = ({ environment }: { environment: IThemeEnvironment }) => 
         [camera, environment.sky, environment.fogDensity]
     );
 
-    // These effects are mounted with `dispose={null}` so toggling them off keeps the
-    // memoised instance reusable; that opts out of R3F's unmount disposal, so the GPU
-    // resources have to be released here instead.
     useEffect(() => () => outline.dispose(), [outline]);
     useEffect(() => () => atmosphere.dispose(), [atmosphere]);
 

@@ -35,8 +35,6 @@ export function lerp(from: number, to: number, ratio: number): number {
     return from + (to - from) * ratio;
 }
 
-/* was copy-pasted verbatim between WaterCourse.ts and WaterSurface.ts, which both already
-   imported from this file. Caught in review. */
 export function catmullRomAt(
     before: number,
     start: number,

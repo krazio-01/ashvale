@@ -389,7 +389,7 @@ function maximumHalfWidthOf(points: IWaterPoint[]): number {
     return widest;
 }
 
-const VERTEX_SHADER = /* glsl */ `
+const VERTEX_SHADER = `
     uniform float time;
     uniform float flowSpeed;
     uniform vec3 waderPosition;
@@ -446,7 +446,7 @@ const VERTEX_SHADER = /* glsl */ `
     }
 `;
 
-const FRAGMENT_SHADER = /* glsl */ `
+const FRAGMENT_SHADER = `
     uniform vec3 shallowColor;
     uniform vec3 deepColor;
     uniform vec3 sunColor;

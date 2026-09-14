@@ -2,7 +2,7 @@ import { BlendFunction, Effect, EffectAttribute } from "postprocessing";
 import { Matrix4, Uniform } from "three";
 import type { Camera, WebGLRenderer } from "three";
 
-const VIEW_POSITION_FUNCTION = /* glsl */ `
+const VIEW_POSITION_FUNCTION = `
     uniform mat4 inverseProjectionMatrix;
 
     vec3 viewPositionAt(const in vec2 uv) {

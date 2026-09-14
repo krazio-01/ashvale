@@ -44,9 +44,6 @@ export const LANDFORM = {
 export const TRAIL = {
     halfWidth: TRAIL_HALF_WIDTH,
     wearFalloffWidth: TRAIL_WEAR_FALLOFF_WIDTH,
-    /* 1.4 rather than a steeper curve: the exponent compounds with the exponential material
-       sharpening in groundMaterialShareAt, and at 2.5 the pair collapsed the soil tint from
-       worn to lush inside a metre, which is what made trails read as stamped out */
     wearFalloffExponent: 1.4,
     edgeWobbleAmplitude: 1.4,
     edgeWobbleScale: 0.055,

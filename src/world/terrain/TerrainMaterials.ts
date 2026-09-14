@@ -9,7 +9,7 @@ const TRAIL_WEAR_BAND: [number, number] = [
     TRAIL.halfWidth + TRAIL.wearFalloffWidth,
 ];
 
-export const GROUND_MATERIAL_GLSL = /* glsl */ `
+export const GROUND_MATERIAL_GLSL = `
     uniform sampler2D groundSplat;
     uniform sampler2D groundDetail;
     uniform vec2 groundSplatScales;

@@ -70,25 +70,6 @@ export const LANDING_FIREFLIES = {
     size: 0.1,
 };
 
-/* A deliberately richer, moodier sky/lighting pass for the landing scene only - shallow-merged
-   onto the resolved Woodland/Summer manifest at render time. Never touches the shared theme
-   files, so real generated realms keep their own (paler, daytime) Woodland palette untouched.
-
-   `keyColor`/`skyFill` are deliberately cool and near-neutral, not part of the warm accent
-   family: MeshToonMaterial output is (base color * light color), so a saturated, non-neutral
-   light washes every surface toward that hue regardless of its own color - a prior version used
-   a saturated pink key light and every asset (green trees included) rendered as a flat brick-red
-   wash. `ember` (the app's existing brand accent, see $color-ember/PALETTE.ember) is reserved for
-   rim light, the sky glow, and particles only - rim light by nature only grazes edges facing away
-   from the key light, so it reads as an accent highlight instead of recoloring whole surfaces.
-
-   Re: SkyDome's gradient - verified against its exact shader math (not guessed): at the current
-   LANDING_CAMERA framing (orbitHeight 2.4m, lookHeight 0.2m, orbitRadius 16m, fov 42deg) the
-   camera's forward direction points ~7.8deg below horizontal, so the top of frame reaches
-   ~13.2deg of altitude, i.e. viewDirection.y ~= sin(13.2deg) ~= 0.228. Against
-   ATMOSPHERE.middleAltitude = 0.32, smoothstep(0, 0.32, 0.228) ~= 0.80 - `middle` is ~80% blended
-   in at the top of the visible sky, so it (unlike `zenith`, which stays out of frame) is a real,
-   visible part of the gradient and should read as a distinct, deliberate step from `horizon`. */
 export const LANDING_SKY = {
     zenith: "#0a0e1c",
     middle: "#161d38",
@@ -117,22 +98,6 @@ export const LANDING_HUD = {
     dotOffset: 1.55,
 };
 
-/* Distant ridge silhouettes ringing the whole scene, so the island reads as a fragment of a
-   much larger world instead of floating alone in a gradient. DoubleSide + a flat unlit color
-   means triangle winding doesn't matter, so this stays simple and cheap: ~2 layers x
-   ~28 segments x 2 tris, no normals, no lighting. The post-process atmosphere pass already
-   haze-fades anything by depth, so the far layer naturally recedes without extra work here.
-   Both layers sit clearly darker/cooler than LANDING_SKY.horizon so they read as a silhouette
-   band instead of blending into the sky.
-
-   peakHeightMin/Max is the peak's absolute world Y (buildLayerGeometry's peakAt() does not offset
-   it by baseY - only the base ring uses baseY, to sit that edge comfortably below the horizon so
-   it never shows a visible bottom edge). It needs to land inside the camera's visible elevation
-   band, or the ridge sits entirely below the horizon (too low) or entirely above the top of frame
-   (too high) and never reads as a skyline. At this camera framing (see the elevation-angle math
-   in LANDING_SKY's comment above: eye height ~2.4m, visible band ~0-13deg), a peak needs world Y
-   roughly in [eyeHeight + radius*tan(2deg), eyeHeight + radius*tan(11deg)] to sit clearly above
-   the horizon without being clipped by the top of frame. */
 export const LANDING_MOUNTAINS = {
     layers: [
         {
@@ -158,13 +123,6 @@ export const LANDING_MOUNTAINS = {
     ],
 };
 
-/* Low-poly puff clusters drifting slowly through the mid-sky, between the mountain rings and
-   the starfield - the thing that reads as genuine "sky" motion rather than a static backdrop.
-   Same unlit-silhouette technique as LANDING_MOUNTAINS (flat color, no normals/lighting needed)
-   for the same reason: cheap, and consistent with how this scene already renders distant
-   background layers. Each cloud is a handful of overlapping icosahedra sharing one geometry and
-   material instance - the puff count only affects mesh count, not draw calls worth worrying
-   about at this scale (well under 40 meshes total). */
 export const LANDING_CLOUDS = {
     count: 7,
     seed: 4471,

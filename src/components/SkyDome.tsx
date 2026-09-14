@@ -6,7 +6,7 @@ import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { IThemeEnvironment } from "@/types/theme";
 import { ATMOSPHERE } from "@/constants/rendering";
 
-const VERTEX_SHADER = /* glsl */ `
+const VERTEX_SHADER = `
     varying vec3 vWorldPosition;
 
     void main() {
@@ -15,7 +15,7 @@ const VERTEX_SHADER = /* glsl */ `
     }
 `;
 
-const FRAGMENT_SHADER = /* glsl */ `
+const FRAGMENT_SHADER = `
     uniform vec3 zenithColor;
     uniform vec3 middleColor;
     uniform vec3 horizonColor;
