@@ -35,7 +35,7 @@ import {
     type IGroundMaterials,
 } from "@/world/terrain/TerrainMaterials";
 
-const VERTEX_SHADER = /* glsl */ `
+const VERTEX_SHADER = `
     ${GROUND_MATERIAL_GLSL}
     ${GROUND_COVER_GLSL}
 
@@ -153,7 +153,7 @@ const VERTEX_SHADER = /* glsl */ `
     }
 `;
 
-const FRAGMENT_SHADER = /* glsl */ `
+const FRAGMENT_SHADER = `
     uniform vec3 lushRootColor;
     uniform vec3 lushTipColor;
     uniform vec3 dryRootColor;

@@ -18,10 +18,6 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
     const shadowTexelSize = (LIGHT.shadowExtent * 2) / shadowMapResolution;
     const keyLightRef = useRef<DirectionalLight>(null);
 
-    // three.js allocates the shadow render target once and ignores later mapSize
-    // changes; disposing it forces reallocation, and also releases the depth
-    // target when shadows are switched off entirely. The render target isn't an
-    // Object3D, so R3F's automatic disposal on unmount doesn't reach it either.
     useEffect(() => {
         const shadow = keyLightRef.current?.shadow;
         if (shadow?.map) {

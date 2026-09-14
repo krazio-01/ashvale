@@ -1,7 +1,3 @@
-// Design tokens live in :root (src/app/globals.scss) so they are reusable from
-// any stylesheet, inline style, or runtime code. These aliases exist only so
-// Sass files can reference them without repeating the var() call.
-
 $ink-void: var(--ink-void);
 $ink-panel: var(--ink-panel);
 $ink-raised: var(--ink-raised);

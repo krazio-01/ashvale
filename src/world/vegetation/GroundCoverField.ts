@@ -3,18 +3,7 @@ import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
 import { GROUND_COVER } from "@/constants/placement";
 import { WORLD_EDGE } from "@/constants/world";
 
-/* Everything GrassField and BloomField both need that isn't specific to blade or petal shape:
-   the shared GLSL vocabulary for reading the terrain sample grid and placing camera-relative
-   instances on it, and the LOD ring geometry each field bakes its instance count into. */
-
-/* Shared vertex-shader vocabulary for every camera-relative ground cover field (grass,
-   blooms). Each field reads the terrain height map as an RGBA texture - r elevation,
-   g trail distance, b steepness, a growth-stop distance - so placement decisions happen on
-   the GPU and the CPU never touches per-instance state.
-
-   Must be concatenated AFTER GROUND_MATERIAL_GLSL, which declares groundGrowthOf and
-   groundMaterialShareAt. */
-export const GROUND_COVER_GLSL = /* glsl */ `
+export const GROUND_COVER_GLSL = `
     uniform sampler2D terrainField;
     uniform vec2 fieldOrigin;
     uniform float fieldCellSize;
@@ -56,12 +45,6 @@ export const GROUND_COVER_GLSL = /* glsl */ `
         return offSteepGround * shortOfStop;
     }
 
-    /* trail wear is passed as zero into the material share on purpose. Folding wear into the
-       material weights runs it through the exponential sharpening the ground colour needs,
-       which collapsed cover from full to bare inside a metre; the explicit metre-scale band
-       below is what makes a path read as worn in rather than stamped out. Patch tone is faded
-       by the same band so the tufts that survive nearest a path keep their dry, trampled
-       colouring instead of standing lush against bare soil. Returns (cover, patchTone). */
     vec2 groundCoverAt(vec2 ground, vec4 field) {
         vec2 growth = groundGrowthOf(groundMaterialShareAt(ground, 0.0));
         float offTrail = smoothstep(coverTrailBand.x, coverTrailBand.y, field.g);
@@ -89,18 +72,7 @@ export const GROUND_COVER_GLSL = /* glsl */ `
     }
 `;
 
-/* Discrete patch structure: cluster centres on a jittered grid, each with its own radius,
-   falloff and species. This replaces gating a field on broad gradient noise, which spreads a
-   uniform low spawn chance across tens of metres and reads as haze rather than as clumps.
-
-   Must be concatenated AFTER GROUND_COVER_GLSL, which declares randomTriple, randomScalar
-   and smoothNoise.
-
-   Cost note: 9 scalar hashes for the cell sweep plus 4 for the one-octave rim warp is 13
-   sin-based hashes per vertex, against the 16 the two driftNoise calls this replaces cost
-   (two octaves, four lattice corners each, twice over) - so this is cheaper per vertex than
-   the gradient-noise gate it supersedes, not merely equivalent. */
-export const PATCH_FIELD_GLSL = /* glsl */ `
+export const PATCH_FIELD_GLSL = `
     uniform float patchSpacing;
     uniform vec2 patchRadiusRange;
     uniform float patchChance;
@@ -108,25 +80,9 @@ export const PATCH_FIELD_GLSL = /* glsl */ `
     uniform float patchEdgeWavelength;
     uniform float patchEdgeStrength;
 
-    /* the 3x3 sweep is not optional: a centre sits anywhere in its cell and reaches up to
-       patchRadiusRange.y, which exceeds one cell, so ignoring neighbours would clip every
-       patch to its cell and the grid would read as square tiles. Cells are gated on a single
-       scalar hash first, so an empty cell - most of them - costs one hash and nothing more.
-
-       Returns (density, speciesPick), the species being drawn from the winning patch so that
-       one patch is one species rather than a blend of three. */
     vec2 patchDensityAt(vec2 ground) {
         vec2 baseCell = floor(ground / patchSpacing);
 
-        /* The rim warp scales each patch's RADIUS before the falloff is evaluated, so the
-           boundary itself moves in and out with position and a disc becomes an irregular
-           blob. Scaling the resulting density instead would do neither of the things this
-           needs to do: outside a patch the density is already zero, so no amount of noise
-           can push the boundary outwards, and inside one it would punch holes through the
-           middle of the patch rather than ragging its edge.
-
-           Sampled once, before the loop, since it depends only on where we are - and at one
-           octave, because a 4.5m wavelength warp does not need a second. */
         float rim = smoothNoise(ground / patchEdgeWavelength);
         float rimScale = mix(1.0 - patchEdgeStrength, 1.0 + patchEdgeStrength, rim);
 
@@ -141,13 +97,6 @@ export const PATCH_FIELD_GLSL = /* glsl */ `
 
                 vec3 placement = randomTriple(vec3(cell, 29.0));
                 vec2 centre = (cell + placement.xy) * patchSpacing;
-                /* floored away from zero, not just left to patchRadiusRange/patchEdgeStrength
-                   staying sane by convention - rimScale can reach 0 (or go negative) once
-                   patchEdgeStrength hits 1.0, and dividing by a zero/negative radius here is a
-                   NaN or Inf that propagates through smoothstep below with undefined results on
-                   at least some mobile GPUs. Current tuning never reaches that, but the guard is
-                   free and the failure mode is silent corruption, not a crash to notice tuning
-                   by. Caught in review. */
                 float radius = max(
                     mix(patchRadiusRange.x, patchRadiusRange.y, placement.z) * rimScale,
                     0.001
@@ -202,12 +151,6 @@ export interface IPatchFieldSettings {
     edgeWavelength: number;
     edgeStrength: number;
 }
-
-/* Concentric level-of-detail rings around the camera. Each band covers an annulus of ground
-   and halves the geometry subdivision of the one inside it, so a tuft near the camera carries
-   the full blade segment count while one at the horizon costs a fraction of it. The cell
-   offsets are baked once into an instanced attribute; only the ring's centre moves each
-   frame, which is what keeps the whole field at two draw calls. */
 
 export interface IDetailBand {
     innerRadius: number;

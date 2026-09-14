@@ -107,8 +107,6 @@ const ChoiceRow = <K extends keyof IGameSettings>({
         <RowHeader label={descriptor.label} description={descriptor.description} />
         <div className="segmented-control" role="group" aria-label={descriptor.label}>
             {descriptor.options.map((option) => {
-                // "Custom" is a derived state (set automatically when individual
-                // graphics options diverge from a named preset), not a real choice.
                 const isDerivedOnly = descriptor.key === "qualityPreset" && option.value === "custom";
 
                 return (

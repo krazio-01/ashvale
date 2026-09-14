@@ -37,7 +37,7 @@ import {
     type IGroundMaterials,
 } from "@/world/terrain/TerrainMaterials";
 
-const VERTEX_SHADER = /* glsl */ `
+const VERTEX_SHADER = `
     ${GROUND_MATERIAL_GLSL}
     ${GROUND_COVER_GLSL}
     ${PATCH_FIELD_GLSL}
@@ -128,7 +128,7 @@ const VERTEX_SHADER = /* glsl */ `
     }
 `;
 
-const FRAGMENT_SHADER = /* glsl */ `
+const FRAGMENT_SHADER = `
     uniform vec3 stemColor;
     uniform vec3 sunColor;
     uniform vec3 ambientColor;

@@ -1,9 +1,5 @@
 @use "../styles/variable" as *;
 
-// The game world behind the interface is warm and heavily saturated, so the
-// interface itself carries no hue at all. State is signalled by inversion —
-// an active control becomes light-on-dark — rather than by an accent colour
-// that would compete with the terrain.
 :root {
     --ink-void: #07080a;
     --ink-panel: #0d0f12;

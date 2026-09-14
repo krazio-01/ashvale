@@ -2,9 +2,6 @@ import { DEFAULT_FAMILY, PropLayer, type IThemeProp } from "@/types/theme";
 
 const MODEL_DIRECTORY = "/models/woodland";
 
-/* family defaults to DEFAULT_FAMILY: only canopy trees currently need biome-region
-   coherence (problem 3 - "mix pine, dead/bare trees, and red-leafed trees in the same small
-   area with no rule for why"), so every other family is left as one shared bucket. */
 const propFamily = (
     names: string[],
     layer: PropLayer,

@@ -89,9 +89,6 @@ export class World {
             stepsTaken += 1;
         }
 
-        // When the simulation can't keep up and hits the step cap, render at the
-        // latest stepped state rather than resetting to alpha 0, which would snap
-        // entities back to their pre-frame transform for one visible frame.
         const isCatchingUp = stepsTaken === maximumStepsPerFrame;
         if (isCatchingUp) this.unsimulatedTime = 0;
 

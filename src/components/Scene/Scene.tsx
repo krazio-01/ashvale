@@ -131,8 +131,6 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key !== "Tab") return;
 
-            // Tab is the menu binding, but once focus is inside the dialog it has to
-            // stay a focus-navigation key or the menu is unusable by keyboard.
             if (isPaused && (e.target as HTMLElement | null)?.closest(".pause-menu-shell")) return;
 
             e.preventDefault();

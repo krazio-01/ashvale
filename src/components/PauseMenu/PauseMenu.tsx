@@ -19,7 +19,6 @@ export interface PauseMenuProps {
     realmTitle?: string;
     title?: string;
     dismissLabel?: string;
-    /** Key that closes the menu, shown as a hint. Omit when no key is bound. */
     dismissKey?: string;
 }
 
@@ -38,16 +37,10 @@ export const PauseMenu = ({
 
     const isDirty = useMemo(() => !settingsMatch(draft, committed), [draft, committed]);
 
-    // The host page's own Tab handler only lets Tab navigate inside the dialog
-    // once focus is already there, so the dialog has to claim focus on open or
-    // the very first Tab press would fall through and dismiss it.
     useEffect(() => {
         shellRef.current?.focus();
     }, []);
 
-    // Traps Tab/Shift+Tab within the dialog since the host page has no
-    // consistent Tab-interception of its own (Landing's F10 settings surface
-    // has none at all).
     useEffect(() => {
         const shell = shellRef.current;
         if (!shell) return;
@@ -101,8 +94,6 @@ export const PauseMenu = ({
         [isDirty]
     );
 
-    // Escape is the near-universal dialog-dismiss convention; it's handled
-    // independently of any host page's own open/close key binding (Tab, F10, …).
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
             if (e.key !== "Escape") return;

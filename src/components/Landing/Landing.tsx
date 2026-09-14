@@ -127,8 +127,6 @@ const Landing = () => {
             pendingRealmRef.current = { owner, name };
             setEnteringRealmLabel(`${owner}/${name}`);
             setIsDiving(true);
-            // Start fetching the destination route's JS during the dive animation, so the
-            // fade-mask below has nothing left to wait on by the time it hides the swap.
             router.prefetch(`/realm/${owner}/${name}`);
         },
         [router]
