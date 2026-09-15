@@ -16,7 +16,21 @@ import {
     MUSHROOMS,
     PEBBLES,
     FALLEN_PETALS,
+    HIGHLANDS_PINE_TREES,
+    HIGHLANDS_DEAD_TREES,
+    HIGHLANDS_BOULDERS,
+    HIGHLANDS_SCREE,
+    HIGHLANDS_SCRUB,
+    HIGHLANDS_GRASS,
+    WAYSIDE_CLUTTER,
+    RUINS_COLUMNS,
+    RUINS_WALLS,
+    RUINS_GATEWAYS,
+    RUINS_RUBBLE,
+    RUINS_MONUMENTS,
+    RUINS_CLUTTER,
 } from "@/themes/PropCatalogue";
+import { SETTLEMENT_EXTRA_PRELOAD_PATHS } from "@/world/settlement/SettlementKit";
 
 const WOODLAND_PROPS: IThemeProp[] = [
     ...CANOPY_TREES,
@@ -34,6 +48,7 @@ const WOODLAND_PROPS: IThemeProp[] = [
     ...MUSHROOMS,
     ...PEBBLES,
     ...FALLEN_PETALS,
+    ...WAYSIDE_CLUTTER,
 ];
 
 export const WOODLAND_MANIFEST: IThemeManifest = {
@@ -85,13 +100,14 @@ export const WOODLAND_MANIFEST: IThemeManifest = {
 };
 
 const HIGHLANDS_PROPS: IThemeProp[] = [
-    ...PINE_TREES,
+    ...HIGHLANDS_PINE_TREES,
+    ...HIGHLANDS_DEAD_TREES,
     ...TWISTED_TREES,
-    ...DEAD_TREES,
-    ...BOULDERS,
-    ...ROCK_SLABS,
-    ...ROCK_CHUNKS,
+    ...HIGHLANDS_BOULDERS,
+    ...HIGHLANDS_SCRUB,
+    ...HIGHLANDS_GRASS,
     ...GRASS_TUFTS,
+    ...HIGHLANDS_SCREE,
     ...PEBBLES,
 ];
 
@@ -146,12 +162,19 @@ export const HIGHLANDS_MANIFEST: IThemeManifest = {
 const RUINS_PROPS: IThemeProp[] = [
     ...TWISTED_TREES,
     ...DEAD_TREES,
-    ...BOULDERS,
-    ...ROCK_SLABS,
-    ...ROCK_CHUNKS,
+    /* Bushes and broad plants are the understory layer Ruins was missing entirely: without one,
+       fillClump places nothing between groundcover and canopy. They also serve the theme - this
+       is meant to read as nature reclaiming stonework. */
+    ...BUSHES,
+    ...BROAD_PLANTS,
     ...UNDERGROWTH,
     ...MUSHROOMS,
-    ...PEBBLES,
+    ...RUINS_COLUMNS,
+    ...RUINS_WALLS,
+    ...RUINS_GATEWAYS,
+    ...RUINS_RUBBLE,
+    ...RUINS_MONUMENTS,
+    ...RUINS_CLUTTER,
 ];
 
 export const RUINS_MANIFEST: IThemeManifest = {
@@ -217,6 +240,7 @@ export const SETTLEMENT_MANIFEST: IThemeManifest = {
     theme: ChapterTheme.Settlement,
     scatterPropsPerFile: 0.45,
     props: SETTLEMENT_PROPS,
+    extraPreloadModelPaths: SETTLEMENT_EXTRA_PRELOAD_PATHS,
     environment: {
         sky: {
             zenith: "#56718a",

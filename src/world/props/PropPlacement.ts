@@ -111,7 +111,7 @@ function commitProp(
         prop,
         collides,
         field.center[0] + localX,
-        elevation,
+        elevation + (prop.groundOffset ?? 0) * scale,
         field.center[2] + localZ,
         field.nextRandom() * FULL_TURN,
         scale

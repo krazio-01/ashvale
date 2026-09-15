@@ -20,7 +20,10 @@ import { plotWaterCourses, type IRegionLink } from "@/world/water/WaterCourse";
 import { WaterSurface } from "@/world/water/WaterSurface";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
-import type { IChapterRegion, IRegionPathway } from "@/types/realm";
+import { ChapterTheme, type IChapterRegion, type IRegionPathway } from "@/types/realm";
+import type { ISettlementLayoutResult } from "@/types/settlement";
+import { buildSettlementLayout } from "@/world/settlement/SettlementLayout";
+import { SettlementColliders } from "@/world/settlement/SettlementColliders";
 import type { IPropGroup, IThemeManifest } from "@/types/theme";
 import type { SpawnProgressListener } from "@/types/world";
 import { PLAYER, SPAWNING } from "@/constants/characters";
@@ -35,6 +38,7 @@ import {
 import { BloomField } from "./vegetation/BloomField";
 
 const SPAWN_TIME_SLICE_MS = 8;
+const MAX_SETTLED_REGIONS = 4;
 
 export async function spawnChapterWorld(
     world: World,
@@ -59,7 +63,7 @@ export async function spawnChapterWorld(
     );
 
     await beginStage("Waking the inhabitants");
-    spawnRegionEnemies(world, chapter, terrain.groundHeightAt);
+    spawnRegionEnemies(world, chapter, terrain.groundHeightAt, terrain.settledRegionIds);
 
     const player = spawnPlayer(world, camera, chapter, positionsByRegionId, terrain);
 
@@ -176,6 +180,14 @@ async function spawnTerrain(
         )
     );
 
+    const { layout: settlementLayout, settledRegionIds } = buildSettlementLayouts(
+        chapter,
+        regionSites,
+        corridorLanes,
+        heightMap,
+        seed + 4
+    );
+
     await beginStage("Planting the woodland");
     const propBuckets = buildPropField({
         manifest,
@@ -187,9 +199,29 @@ async function spawnTerrain(
         fieldRadius: mappedRadius,
         seed: seed + 3,
         waterCourses,
+        extraReservations: settlementLayout
+            ? { discs: settlementLayout.keepOutDiscs, lanes: settlementLayout.keepOutLanes }
+            : undefined,
+        /* placement.hasCollider distinguishes structural modules (false - walls/corners get
+           oriented cuboids from SettlementColliders instead; roof/floor/chimney don't collide)
+           from clutter (true - a real PropBatch cylinder collider, same as any other prop). */
+        extraPlacements: settlementLayout?.placements.map((placement) => ({
+            prop: placement.prop,
+            hasCollider: placement.hasCollider,
+            localX: placement.localX,
+            localZ: placement.localZ,
+            elevation: placement.elevation,
+            rotationY: placement.rotationY,
+            scale: placement.scale,
+        })),
     });
 
     await addPropBuckets(world, camera, propBuckets);
+
+    if (settlementLayout && settlementLayout.colliders.length > 0)
+        world.addEntity(
+            new SettlementColliders("settlement", world.context, center, settlementLayout.colliders)
+        );
 
     return {
         waterSurface,
@@ -197,7 +229,61 @@ async function spawnTerrain(
             heightMap.surfaceElevationAt(worldX - centerX, worldZ - centerZ),
         groundSteepnessAt: (worldX, worldZ) =>
             heightMap.steepnessAt(worldX - centerX, worldZ - centerZ),
+        settledRegionIds,
     };
+}
+
+/* A Settlement chapter settles every region it reasonably can, not just one: with a single
+   village the player can cross a whole "settlement" chapter and never meet a building. The spawn
+   and boss regions stay clear so arrival and the boss arena are unobstructed, and the roomiest
+   regions are taken first because villages need floor space. */
+function buildSettlementLayouts(
+    chapter: ChapterResponse,
+    regionSites: IRegionSite[],
+    lanes: ICorridorLane[],
+    heightMap: TerrainSampleGrid,
+    seed: number
+): { layout: ISettlementLayoutResult | null; settledRegionIds: Set<string> } {
+    const settledRegionIds = new Set<string>();
+    if (chapter.theme !== ChapterTheme.Settlement) return { layout: null, settledRegionIds };
+
+    const candidates: { index: number; extent: number }[] = [];
+
+    for (let index = 0; index < chapter.regions.length; index += 1) {
+        const region = chapter.regions[index];
+        const site = regionSites[index];
+        if (!region || !site) continue;
+        if (region.regionId === chapter.spawnRegionId) continue;
+        if (region.regionId === chapter.bossRegionId) continue;
+
+        candidates.push({ index, extent: Math.min(site.halfWidth, site.halfDepth) });
+    }
+
+    candidates.sort((first, second) => second.extent - first.extent);
+
+    const merged: ISettlementLayoutResult = {
+        placements: [],
+        colliders: [],
+        keepOutDiscs: [],
+        keepOutLanes: [],
+    };
+
+    for (const [order, candidate] of candidates.slice(0, MAX_SETTLED_REGIONS).entries()) {
+        const site = regionSites[candidate.index];
+        const region = chapter.regions[candidate.index];
+        if (!site || !region) continue;
+
+        const layout = buildSettlementLayout({ site, lanes, heightMap, seed: seed + order * 101 });
+        if (layout.placements.length === 0) continue;
+
+        merged.placements.push(...layout.placements);
+        merged.colliders.push(...layout.colliders);
+        merged.keepOutDiscs.push(...layout.keepOutDiscs);
+        merged.keepOutLanes.push(...layout.keepOutLanes);
+        settledRegionIds.add(region.regionId);
+    }
+
+    return { layout: merged.placements.length > 0 ? merged : null, settledRegionIds };
 }
 
 async function addPropBuckets(
@@ -293,10 +379,12 @@ function spawnBoss(
 function spawnRegionEnemies(
     world: World,
     chapter: ChapterResponse,
-    groundHeightAt: GroundHeightLookup
+    groundHeightAt: GroundHeightLookup,
+    excludeRegionIds: Set<string>
 ): void {
     for (const region of chapter.regions) {
         if (region.regionId === chapter.bossRegionId) continue;
+        if (excludeRegionIds.has(region.regionId)) continue;
         spawnEnemyRing(world, region, groundHeightAt);
     }
 }
@@ -495,6 +583,7 @@ interface ITerrainContext {
     waterSurface: WaterSurface | null;
     groundHeightAt: GroundHeightLookup;
     groundSteepnessAt: GroundHeightLookup;
+    settledRegionIds: Set<string>;
 }
 
 type GroundHeightLookup = (worldX: number, worldZ: number) => number;
