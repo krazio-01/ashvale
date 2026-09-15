@@ -18,6 +18,11 @@ export interface IThemeProp {
     footprintRadius: number;
     scaleRange: [number, number];
     family: string;
+    pack: string;
+    /* Metres to raise the model so its base meets the terrain. Packs vary: some model a prop with
+       its pivot at the base (offset 0), others centre the pivot, which buries half the mesh.
+       Scaled with the prop, since the gap scales with it. */
+    groundOffset?: number;
 }
 
 export interface IPropGroup {
@@ -114,4 +119,8 @@ export interface IThemeManifest {
     props: IThemeProp[];
     scatterPropsPerFile: number;
     environment: IThemeEnvironment;
+    /* Preloaded into AssetLibrary but never scattered: groupSpeciesByLayer buckets everything in
+       `props` by layer and every bucket feeds a scatter function, so there is no opt-out flag on
+       IThemeProp. Hand-placed models (settlement structures, clutter) belong here. */
+    extraPreloadModelPaths?: string[];
 }
