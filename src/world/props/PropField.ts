@@ -32,6 +32,7 @@ export function buildPropField(input: IPropFieldInput): IPropGroup[][] {
     };
 
     reserveGameplayZones(field, input);
+    reserveExtraZones(field, input);
 
     for (const course of input.waterCourses ?? [])
         decorateWaterCourse(course, speciesByLayer, field);
@@ -42,7 +43,30 @@ export function buildPropField(input: IPropFieldInput): IPropGroup[][] {
     scatterDebris(input, speciesByLayer.debris, field);
     scatterDistantTreeline(input, speciesByLayer.canopy, field);
 
+    const [fieldCenterX, , fieldCenterZ] = field.center;
+
+    for (const placement of input.extraPlacements ?? [])
+        field.collector.add(
+            placement.prop,
+            placement.hasCollider,
+            fieldCenterX + placement.localX,
+            placement.elevation,
+            fieldCenterZ + placement.localZ,
+            placement.rotationY,
+            placement.scale
+        );
+
     return field.collector.toBuckets();
+}
+
+function reserveExtraZones(field: IFieldContext, input: IPropFieldInput): void {
+    const extra = input.extraReservations;
+    if (!extra) return;
+
+    for (const disc of extra.discs) field.occupancy.reserve(disc.localX, disc.localZ, disc.radius);
+
+    for (const lane of extra.lanes)
+        field.occupancy.reserveLane(lane.fromX, lane.fromZ, lane.toX, lane.toZ, lane.halfWidth);
 }
 
 function reserveGameplayZones(field: IFieldContext, input: IPropFieldInput): void {
@@ -103,6 +127,24 @@ export interface IPropFieldInput {
     fieldRadius: number;
     seed: number;
     waterCourses?: IWaterCourse[] | null;
+    extraReservations?: { discs: IExtraReservationDisc[]; lanes: ICorridorLane[] };
+    extraPlacements?: IExtraPlacement[];
+}
+
+export interface IExtraReservationDisc {
+    localX: number;
+    localZ: number;
+    radius: number;
+}
+
+export interface IExtraPlacement {
+    prop: IThemeProp;
+    hasCollider: boolean;
+    localX: number;
+    localZ: number;
+    elevation: number;
+    rotationY: number;
+    scale: number;
 }
 
 export interface IRegionSite {
