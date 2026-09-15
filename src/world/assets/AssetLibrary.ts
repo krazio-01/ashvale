@@ -19,21 +19,40 @@ export class AssetLibrary {
     ): Promise<AssetLibrary> {
         const loader = new GLTFLoader();
         const library = new AssetLibrary();
-        const uniqueModelPaths = [...new Set(manifest.props.map((prop) => prop.modelPath))];
+        const uniqueModelPaths = [
+            ...new Set([
+                ...manifest.props.map((prop) => prop.modelPath),
+                ...(manifest.extraPreloadModelPaths ?? []),
+            ]),
+        ];
 
         const [loadedModels, characterModel, clipLibraries] = await Promise.all([
-            Promise.all(
-                uniqueModelPaths.map(async (modelPath) => ({
-                    modelPath,
-                    scene: (await loader.loadAsync(modelPath)).scene,
-                }))
-            ),
+            Promise.all(uniqueModelPaths.map((modelPath) => loadPropScene(loader, modelPath))),
             loader.loadAsync(CHARACTER.modelPath),
             Promise.all(CHARACTER.clipLibraryPaths.map((path) => loader.loadAsync(path))),
         ]);
 
-        for (const { modelPath, scene } of loadedModels)
-            library.templatesByPath.set(modelPath, flattenForInstancing(scene, materialLibrary));
+        const unavailablePaths: string[] = [];
+
+        for (const loaded of loadedModels) {
+            if (!loaded.scene) {
+                unavailablePaths.push(loaded.modelPath);
+                continue;
+            }
+
+            library.templatesByPath.set(
+                loaded.modelPath,
+                flattenForInstancing(loaded.scene, materialLibrary)
+            );
+        }
+
+        /* One aggregated report rather than a warning per path: a mistyped or unsourced model is
+           otherwise a single line that scrolls past, and this is the only signal that a theme
+           silently lost a whole prop family. */
+        if (unavailablePaths.length > 0)
+            console.error(
+                `[AssetLibrary] ${unavailablePaths.length} prop model(s) failed to load and will not render:\n  ${unavailablePaths.join("\n  ")}`
+            );
 
         library.skinnedModelsByPath.set(
             CHARACTER.modelPath,
@@ -62,6 +81,21 @@ export class AssetLibrary {
 
         this.templatesByPath.clear();
         this.skinnedModelsByPath.clear();
+    }
+}
+
+/* A prop model that fails to load must not take the whole chapter down with it: an unsourced or
+   renamed .gltf degrades to that prop simply not appearing (getTemplate returns null, which every
+   consumer already handles), rather than rejecting the Promise.all and aborting world spawn.
+   The caller aggregates the failures into one report. */
+async function loadPropScene(
+    loader: GLTFLoader,
+    modelPath: string
+): Promise<{ modelPath: string; scene: Object3D | null }> {
+    try {
+        return { modelPath, scene: (await loader.loadAsync(modelPath)).scene };
+    } catch {
+        return { modelPath, scene: null };
     }
 }
 
