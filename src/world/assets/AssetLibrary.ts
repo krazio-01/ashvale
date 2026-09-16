@@ -46,9 +46,6 @@ export class AssetLibrary {
             );
         }
 
-        /* One aggregated report rather than a warning per path: a mistyped or unsourced model is
-           otherwise a single line that scrolls past, and this is the only signal that a theme
-           silently lost a whole prop family. */
         if (unavailablePaths.length > 0)
             console.error(
                 `[AssetLibrary] ${unavailablePaths.length} prop model(s) failed to load and will not render:\n  ${unavailablePaths.join("\n  ")}`
@@ -84,10 +81,6 @@ export class AssetLibrary {
     }
 }
 
-/* A prop model that fails to load must not take the whole chapter down with it: an unsourced or
-   renamed .gltf degrades to that prop simply not appearing (getTemplate returns null, which every
-   consumer already handles), rather than rejecting the Promise.all and aborting world spawn.
-   The caller aggregates the failures into one report. */
 async function loadPropScene(
     loader: GLTFLoader,
     modelPath: string
@@ -148,7 +141,20 @@ export function flattenForInstancing(
         });
     });
 
-    return { parts, height: bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y };
+    const halfExtents = new Vector3();
+    const centerOffset = new Vector3();
+
+    if (!bounds.isEmpty()) {
+        bounds.getSize(halfExtents).multiplyScalar(0.5);
+        bounds.getCenter(centerOffset);
+    }
+
+    return {
+        parts,
+        height: bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y,
+        halfExtents,
+        centerOffset,
+    };
 }
 
 function isFoliage(source: Material | Material[]): boolean {
