@@ -124,7 +124,7 @@ export const WATER_SURFACE = {
     wetQuadMargin: 0.12,
     depthFadeRange: 1.8,
     depthColorCurve: 1.1,
-    shallowAlpha: 0.18,
+    shallowAlpha: 0.55,
     deepAlpha: 0.88,
     flowSpeed: 1.0,
     rippleWavelengths: quad(4.5, 2.4, 1.1, 0.5),

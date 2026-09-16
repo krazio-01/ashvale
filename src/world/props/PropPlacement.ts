@@ -18,14 +18,22 @@ export enum PlacementOutcome {
     Thinned = "thinned",
 }
 
-export const collidesWithPlayer = (layer: PropLayer): boolean =>
-    layer === PropLayer.Canopy || layer === PropLayer.Rock;
+export const collidesWithPlayer = (prop: IThemeProp): boolean =>
+    prop.collides ?? (prop.layer === PropLayer.Canopy || prop.layer === PropLayer.Rock);
 
 export function pickSpecies(species: IThemeProp[], nextRandom: () => number): IThemeProp | null {
     if (species.length === 0) return null;
     if (species.length === 1) return species[0] ?? null;
 
     return species[Math.floor(nextRandom() * species.length)] ?? null;
+}
+
+function randomRotationFor(prop: IThemeProp, nextRandom: () => number): number {
+    if (!prop.rotationSteps || prop.rotationSteps <= 1) return nextRandom() * FULL_TURN;
+
+    const stepIndex = Math.floor(nextRandom() * prop.rotationSteps);
+
+    return (stepIndex / prop.rotationSteps) * FULL_TURN;
 }
 
 export function placeProp(
@@ -35,7 +43,7 @@ export function placeProp(
     rules: IPlacementRules,
     field: IFieldContext
 ): PlacementOutcome {
-    const collides = collidesWithPlayer(prop.layer);
+    const collides = collidesWithPlayer(prop);
     if (collides && field.remainingColliderBudget <= 0) return PlacementOutcome.Blocked;
 
     const scale =
@@ -43,7 +51,7 @@ export function placeProp(
         lerp(rules.scaleBoost[0], rules.scaleBoost[1], field.nextRandom());
     const footprintRadius = prop.footprintRadius * scale;
 
-    const sample = passesHardLimits(localX, localZ, footprintRadius, collides, rules, field);
+    const sample = passesHardLimits(prop, localX, localZ, footprintRadius, collides, rules, field);
     if (!sample) return PlacementOutcome.Blocked;
 
     if (SOFT_EDGED_LAYERS.has(prop.layer) && field.nextRandom() >= edgeDensityAt(sample, rules))
@@ -55,6 +63,7 @@ export function placeProp(
 }
 
 function passesHardLimits(
+    prop: IThemeProp,
     localX: number,
     localZ: number,
     footprintRadius: number,
@@ -65,12 +74,17 @@ function passesHardLimits(
     if (!field.occupancy.isClear(localX, localZ, footprintRadius + rules.spacingGap))
         return undefined;
 
+    const slopeLimit = prop.slopeLimit ?? rules.slopeLimit;
     const sample = field.heightMap.sampleAt(localX, localZ, field.heightSample);
     if (sample.footprintDistance > WORLD_EDGE.groundApron) return undefined;
     if (sample.waterDepth > -WATER_CHANNEL.propBankMargin) return undefined;
-    if (sample.steepness > rules.slopeLimit) return undefined;
-    if (sample.trailDistance < PROP_FIELD.softEdges.trailClearance) return undefined;
-    if (collides && !hasLevelRim(localX, localZ, footprintRadius, rules.slopeLimit, field))
+    if (sample.steepness > slopeLimit) return undefined;
+    if (sample.trailDistance < PROP_FIELD.softEdges.trailClearance + footprintRadius)
+        return undefined;
+    if (
+        collides &&
+        !hasLevelRim(localX, localZ, footprintRadius, slopeLimit, field, sample.elevation)
+    )
         return undefined;
 
     return sample;
@@ -99,10 +113,11 @@ function commitProp(
     field: IFieldContext,
     embedClutter = true
 ): void {
-    const collides = collidesWithPlayer(prop.layer);
+    const collides = collidesWithPlayer(prop);
     const footprintRadius = prop.footprintRadius * scale;
 
-    if (collides && embedClutter) embedClutterAroundHost(localX, localZ, footprintRadius, field);
+    if (collides && embedClutter && prop.pack !== "architecture" && prop.layer !== PropLayer.Debris)
+        embedClutterAroundHost(localX, localZ, footprintRadius, field);
 
     field.occupancy.reserve(localX, localZ, footprintRadius);
     if (collides) field.remainingColliderBudget -= 1;
@@ -113,7 +128,7 @@ function commitProp(
         field.center[0] + localX,
         elevation + (prop.groundOffset ?? 0) * scale,
         field.center[2] + localZ,
-        field.nextRandom() * FULL_TURN,
+        randomRotationFor(prop, field.nextRandom),
         scale
     );
 }
@@ -159,6 +174,7 @@ function embedClutterAroundHost(
             const footprintRadius = prop.footprintRadius * scale;
 
             const sample = passesHardLimits(
+                prop,
                 localX,
                 localZ,
                 footprintRadius,
@@ -211,8 +227,11 @@ function hasLevelRim(
     localZ: number,
     clearanceRadius: number,
     slopeLimit: number,
-    field: IFieldContext
+    field: IFieldContext,
+    centerElevation: number
 ): boolean {
+    const elevationDeltaLimit = Math.max(0.4, clearanceRadius * 0.4);
+
     for (let probe = 0; probe < RIM_PROBE_COUNT; probe += 1) {
         const angle = (probe / RIM_PROBE_COUNT) * FULL_TURN;
 
@@ -223,6 +242,7 @@ function hasLevelRim(
         );
 
         if (rimSample.steepness > slopeLimit) return false;
+        if (Math.abs(rimSample.elevation - centerElevation) > elevationDeltaLimit) return false;
         if (rimSample.waterDepth > -WATER_CHANNEL.propBankMargin) return false;
         if (rimSample.footprintDistance > WORLD_EDGE.groundApron) return false;
         if (rimSample.trailDistance < PROP_FIELD.softEdges.trailClearance) return false;
