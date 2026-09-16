@@ -73,8 +73,8 @@ export const PROP_FIELD = {
     richnessRange: pair(0.5, 2),
 
     softEdges: {
-        trailClearance: 2.25,
-        trailFadeWidth: TRAIL.halfWidth + TRAIL.wearFalloffWidth - 2.25,
+        trailClearance: 8.0,
+        trailFadeWidth: 3.5,
         slopeFadeRatio: 0.7,
         apronFadeWidth: WORLD_EDGE_FADE_WIDTH,
     },

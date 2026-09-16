@@ -7,8 +7,6 @@ const D = SettlementCellKind.Door;
 const N = SettlementCellKind.Window;
 const F = SettlementCellKind.Floor;
 
-/* Anchors sit a little beyond the wall line: offsetCell* equal to widthCells/depthCells is the
-   wall plane itself, which buries the prop in the masonry. */
 const ANCHOR_CLEARANCE = 0.75;
 
 const clutterPathsNamed = (...names: string[]): string[] => {
@@ -19,10 +17,8 @@ const clutterPathsNamed = (...names: string[]): string[] => {
     ).map((prop) => prop.modelPath);
 };
 
-/* Small enough to sit beside a doorway without blocking it. */
 const DOORSIDE_CLUTTER = clutterPathsNamed("Barrel", "Crate", "Prop_Crate", "Pot1", "Pot2", "Pot3");
 
-/* Larger yard pieces, placed against a side wall where their footprint has room. */
 const YARD_CLUTTER = clutterPathsNamed("Cart", "Prop_Wagon", "Chest", "Torch");
 
 const SMALL_HOUSE: ISettlementBuildingTemplate = {

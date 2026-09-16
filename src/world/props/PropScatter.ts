@@ -226,12 +226,13 @@ function scatterAroundCentre(
             const outcome = placeProp(prop, localX, localZ, rules, field);
             if (outcome === PlacementOutcome.Blocked) continue;
 
-            if (outcome === PlacementOutcome.Placed && collidesWithPlayer(prop.layer))
+            if (outcome === PlacementOutcome.Placed && collidesWithPlayer(prop))
                 placed.push({
                     localX,
                     localZ,
                     maxFootprintRadius:
                         prop.footprintRadius * prop.scaleRange[1] * rules.scaleBoost[1],
+                    pack: prop.pack,
                 });
 
             break;
@@ -250,15 +251,16 @@ function scatterAgainstNeighbours(
 ): void {
     if (species.length === 0) return;
 
+    const naturalHosts = neighbours.filter((neighbour) => neighbour.pack !== "architecture");
     const { huddleRatio, huddleRadius, huddleCentreBias } = PROP_FIELD.understory;
 
     for (let index = 0; index < count; index += 1) {
         const prop = pickSpecies(species, field.nextRandom);
         if (!prop) continue;
 
-        const huddles = neighbours.length > 0 && field.nextRandom() < huddleRatio;
+        const huddles = naturalHosts.length > 0 && field.nextRandom() < huddleRatio;
         const host = huddles
-            ? neighbours[Math.floor(field.nextRandom() * neighbours.length)]
+            ? naturalHosts[Math.floor(field.nextRandom() * naturalHosts.length)]
             : undefined;
 
         const understoryFootprint =
@@ -398,6 +400,7 @@ interface IPlacedStanding {
     localX: number;
     localZ: number;
     maxFootprintRadius: number;
+    pack: string;
 }
 
 export function scatterDebris(
@@ -441,9 +444,12 @@ function proposeTrailShoulder(input: IPropFieldInput, field: IFieldContext): IGr
 
     const alongRatio = field.nextRandom();
     const side = field.nextRandom() < 0.5 ? -1 : 1;
-    const [nearShoulder, farShoulder] = PROP_FIELD.debris.shoulderOffsetRatio;
-    const lateralDistance =
-        lane.halfWidth * lerp(1 + nearShoulder, 1 + farShoulder, field.nextRandom());
+    const [nearShoulder] = PROP_FIELD.debris.shoulderOffsetRatio;
+    const baseDistance = Math.max(
+        lane.halfWidth * (1 + nearShoulder),
+        PROP_FIELD.softEdges.trailClearance + 0.8
+    );
+    const lateralDistance = baseDistance + lerp(0, 2.5, field.nextRandom());
 
     return {
         localX: lane.fromX + spanX * alongRatio + (-spanZ / spanLength) * side * lateralDistance,

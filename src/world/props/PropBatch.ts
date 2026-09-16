@@ -41,7 +41,7 @@ export class PropBatch extends Entity implements IWorldEntity {
             if (!template) continue;
 
             this.addBatches(group, template);
-            if (group.hasCollider) this.addColliders(group, template.height);
+            if (group.hasCollider) this.addColliders(group, template);
         }
 
         this.sceneObject.updateMatrixWorld(true);
@@ -95,22 +95,49 @@ export class PropBatch extends Entity implements IWorldEntity {
         }
     }
 
-    private addColliders(group: IPropGroup, modelHeight: number): void {
+    private addColliders(group: IPropGroup, template: IModelTemplate): void {
+        const isCuboid = group.colliderShape === "cuboid";
+
         for (let instance = 0; instance < group.instanceCount; instance += 1) {
             const offset = instance * PROP_TRANSFORM_STRIDE;
             const scale = group.transforms[offset + 4] ?? 1;
-            const halfHeight = (modelHeight * scale) / 2;
-            const radius = group.footprintRadius * scale;
+            const x = group.transforms[offset] ?? 0;
+            const y = group.transforms[offset + 1] ?? 0;
+            const z = group.transforms[offset + 2] ?? 0;
+            const yaw = group.transforms[offset + 3] ?? 0;
 
-            if (!(halfHeight > 0) || !(radius > 0)) continue;
+            if (isCuboid) {
+                const hx = template.halfExtents.x * scale;
+                const hy = template.halfExtents.y * scale;
+                const hz = template.halfExtents.z * scale;
+                if (!(hx > 0) || !(hy > 0) || !(hz > 0)) continue;
 
-            const colliderDesc = RAPIER.ColliderDesc.cylinder(halfHeight, radius).setTranslation(
-                group.transforms[offset] ?? 0,
-                (group.transforms[offset + 1] ?? 0) + halfHeight,
-                group.transforms[offset + 2] ?? 0
-            );
+                const cosYaw = Math.cos(yaw);
+                const sinYaw = Math.sin(yaw);
+                const offsetX =
+                    (template.centerOffset.x * cosYaw + template.centerOffset.z * sinYaw) * scale;
+                const offsetY = template.centerOffset.y * scale;
+                const offsetZ =
+                    (-template.centerOffset.x * sinYaw + template.centerOffset.z * cosYaw) * scale;
 
-            this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
+                const halfYaw = yaw / 2;
+                const colliderDesc = RAPIER.ColliderDesc.cuboid(hx, hy, hz)
+                    .setTranslation(x + offsetX, y + offsetY, z + offsetZ)
+                    .setRotation({ x: 0, y: Math.sin(halfYaw), z: 0, w: Math.cos(halfYaw) });
+
+                this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
+            } else {
+                const halfHeight = (template.height * scale) / 2;
+                const radius = group.footprintRadius * scale;
+                if (!(halfHeight > 0) || !(radius > 0)) continue;
+
+                const colliderDesc = RAPIER.ColliderDesc.cylinder(
+                    halfHeight,
+                    radius
+                ).setTranslation(x, y + halfHeight, z);
+
+                this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
+            }
         }
     }
 

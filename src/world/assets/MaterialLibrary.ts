@@ -36,11 +36,6 @@ export class MaterialLibrary {
     }
 
     getToonMaterialForSource(source: MeshStandardMaterial): MeshToonMaterial {
-        /* transparent/alphaTest/side must be copied from the source, or an alpha-cutout texture
-           (leaf cards, banners, fences) renders every "empty" pixel opaque - some packs pad the
-           cutout area with white rather than a matching colour, so this reads as a solid textured
-           card floating in place of a leafy silhouette. side matters for the same reason: a
-           single-sided cutout plane viewed from behind would otherwise cull to nothing. */
         const cacheKey = [
             source.map?.uuid ?? "untextured",
             source.color.getHexString(),

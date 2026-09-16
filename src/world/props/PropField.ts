@@ -153,6 +153,7 @@ export interface IRegionSite {
     halfWidth: number;
     halfDepth: number;
     fileCount: number;
+    floorElevation: number;
 }
 
 export interface ICorridorLane {

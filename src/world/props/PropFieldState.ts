@@ -150,8 +150,12 @@ const BUCKET_KEY_OFFSET = 1 << 20;
 export class PropCollector {
     private readonly buildersByBucket = new Map<number, Map<string, IGroupBuilder>>();
 
-    private static groupKeyFor(modelPath: string, hasCollider: boolean): string {
-        return `${modelPath}:${hasCollider ? 1 : 0}`;
+    private static groupKeyFor(
+        modelPath: string,
+        hasCollider: boolean,
+        colliderShape?: "cylinder" | "cuboid"
+    ): string {
+        return `${modelPath}:${hasCollider ? 1 : 0}:${colliderShape ?? "cylinder"}`;
     }
 
     add(
@@ -178,6 +182,7 @@ export class PropCollector {
                     modelPath: builder.prop.modelPath,
                     layer: builder.prop.layer,
                     hasCollider: builder.hasCollider,
+                    colliderShape: builder.prop.colliderShape,
                     footprintRadius: builder.prop.footprintRadius,
                     instanceCount: builder.transformValues.length / PROP_TRANSFORM_STRIDE,
                     transforms: new Float32Array(builder.transformValues),
@@ -203,7 +208,7 @@ export class PropCollector {
             this.buildersByBucket.set(bucketKey, buildersByModelPath);
         }
 
-        const groupKey = PropCollector.groupKeyFor(prop.modelPath, hasCollider);
+        const groupKey = PropCollector.groupKeyFor(prop.modelPath, hasCollider, prop.colliderShape);
         const existing = buildersByModelPath.get(groupKey);
         if (existing) return existing;
 
