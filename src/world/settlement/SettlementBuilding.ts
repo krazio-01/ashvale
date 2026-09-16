@@ -5,6 +5,7 @@ import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
 import {
     CELL_SIZE,
     CHIMNEY_ELEVATION,
+    CORNER_COURSE_HEIGHT,
     MODULE_SCALE,
     ROOF_ELEVATION,
     ROOF_OVERHANG,
@@ -22,8 +23,6 @@ const HALF_TURN = Math.PI;
 const THREE_QUARTER_TURN = QUARTER_TURN * 3;
 const CORNER_HALF_EXTENT = metres(0.15);
 
-/* Outward direction of each perimeter edge in the template's own frame, used both to yaw the
-   module (rotationY = 0 faces local -Z) and to push the collider out to the wall's face. */
 const enum Edge {
     North,
     South,
@@ -42,10 +41,10 @@ export interface IGenerateBuildingInput {
     template: ISettlementBuildingTemplate;
     originLocalX: number;
     originLocalZ: number;
-    /* The building's own yaw; rotationY = 0 means a module's front face points local -Z. */
     yaw: number;
     heightMap: TerrainSampleGrid;
     nextRandom: () => number;
+    floorElevation: number;
 }
 
 export interface IGeneratedBuilding {
@@ -57,7 +56,8 @@ export interface IGeneratedBuilding {
 }
 
 export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuilding {
-    const { template, originLocalX, originLocalZ, yaw, heightMap, nextRandom } = input;
+    const { template, originLocalX, originLocalZ, yaw, heightMap, nextRandom, floorElevation } =
+        input;
     const { widthCells, depthCells, footprint } = template;
 
     const cosYaw = Math.cos(yaw);
@@ -70,19 +70,25 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
     let doorLocalX = originLocalX;
     let doorLocalZ = originLocalZ;
 
-    /* Must match three's Object3D.rotation.y matrix, which PropBatch applies to the instances:
-       x' = x*cos + z*sin, z' = -x*sin + z*cos. */
     const rotatedX = (cellX: number, cellZ: number): number =>
         originLocalX + cellX * cosYaw + cellZ * sinYaw;
     const rotatedZ = (cellX: number, cellZ: number): number =>
         originLocalZ - cellX * sinYaw + cellZ * cosYaw;
 
-    /* One sample for the whole building: per-module terrain sampling shears the rigid kit apart
-       on any slope. Region sites are flattened plateaus, so a single sample is accurate. */
-    const baseElevation = heightMap.surfaceElevationAt(
-        rotatedX(eastEdgeLocalX / 2, southEdgeLocalZ / 2),
-        rotatedZ(eastEdgeLocalX / 2, southEdgeLocalZ / 2)
-    );
+    const groundElevations = [
+        heightMap.surfaceElevationAt(rotatedX(0, 0), rotatedZ(0, 0)),
+        heightMap.surfaceElevationAt(rotatedX(eastEdgeLocalX, 0), rotatedZ(eastEdgeLocalX, 0)),
+        heightMap.surfaceElevationAt(rotatedX(0, southEdgeLocalZ), rotatedZ(0, southEdgeLocalZ)),
+        heightMap.surfaceElevationAt(
+            rotatedX(eastEdgeLocalX, southEdgeLocalZ),
+            rotatedZ(eastEdgeLocalX, southEdgeLocalZ)
+        ),
+        heightMap.surfaceElevationAt(
+            rotatedX(eastEdgeLocalX / 2, southEdgeLocalZ / 2),
+            rotatedZ(eastEdgeLocalX / 2, southEdgeLocalZ / 2)
+        ),
+    ];
+    const baseElevation = Math.min(...groundElevations, floorElevation) - 0.05;
 
     const addPlacement = (
         prop: IThemeProp,
@@ -90,7 +96,8 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
         cellZ: number,
         localYaw: number,
         heightAboveFloor: number,
-        hasCollider = false
+        hasCollider = false,
+        scale = MODULE_SCALE
     ): void => {
         placements.push({
             prop,
@@ -98,7 +105,7 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
             localZ: rotatedZ(cellX, cellZ),
             elevation: baseElevation + heightAboveFloor,
             rotationY: yaw + localYaw,
-            scale: MODULE_SCALE,
+            scale,
             hasCollider,
         });
     };
@@ -114,8 +121,6 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
 
         addPlacement(groundModule, cellX, cellZ, edgeYaw, 0);
 
-        /* Upper courses never carry a door - a first-floor doorway opens onto nothing - so a door
-           cell becomes a window above, which also gives the facade some rhythm. */
         const upperModule =
             kind === SettlementCellKind.Wall
                 ? SETTLEMENT_MODULES.wall
@@ -131,10 +136,6 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
             return;
         }
 
-        /* The wall body sits WALL_FACE_OFFSET outboard of the module origin, so the collider is
-           pushed along the edge's outward normal to line up with what the player can see. Its
-           half-extents describe the module before rotation - a wall always spans X and is thin in
-           Z - and rotationY is what turns it onto the correct edge. */
         const outwardX = edge === Edge.West ? -1 : edge === Edge.East ? 1 : 0;
         const outwardZ = edge === Edge.North ? -1 : edge === Edge.South ? 1 : 0;
 
@@ -176,9 +177,6 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
                 continue;
             }
 
-            /* A corner cell lies on two edges and owes a wall to each: emitting only the corner
-               post would leave most of every face open. Interior wall cells are not supported in
-               v1 (no partitions), and are skipped rather than silently snapped to an edge. */
             if (isNorthEdge) addWall(kind, Edge.North, cellCenterX, 0);
             if (isSouthEdge) addWall(kind, Edge.South, cellCenterX, southEdgeLocalZ);
             if (isWestEdge) addWall(kind, Edge.West, 0, cellCenterZ);
@@ -197,21 +195,31 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
                   ? QUARTER_TURN
                   : HALF_TURN;
 
+            const outwardX = isWestEdge ? -1 : 1;
+            const outwardZ = isNorthEdge ? -1 : 1;
+            const cornerPosX = cornerX + outwardX * WALL_FACE_OFFSET;
+            const cornerPosZ = cornerZ + outwardZ * WALL_FACE_OFFSET;
+            const cornerScale = MODULE_SCALE * (WALL_COURSE_HEIGHT / CORNER_COURSE_HEIGHT);
+
             for (let course = 0; course < WALL_COURSES; course += 1)
                 addPlacement(
                     SETTLEMENT_MODULES.corner,
-                    cornerX,
-                    cornerZ,
+                    cornerPosX,
+                    cornerPosZ,
                     cornerYaw,
-                    WALL_COURSE_HEIGHT * course
+                    WALL_COURSE_HEIGHT * course,
+                    false,
+                    cornerScale
                 );
 
+            const cornerStackHeight = WALL_COURSE_HEIGHT * WALL_COURSES;
+
             colliders.push({
-                localX: rotatedX(cornerX, cornerZ),
-                localZ: rotatedZ(cornerX, cornerZ),
+                localX: rotatedX(cornerPosX, cornerPosZ),
+                localZ: rotatedZ(cornerPosX, cornerPosZ),
                 elevation: baseElevation,
                 halfWidth: CORNER_HALF_EXTENT,
-                halfHeight: WALL_HEIGHT / 2,
+                halfHeight: cornerStackHeight / 2,
                 halfDepth: CORNER_HALF_EXTENT,
                 rotationY: yaw + cornerYaw,
             });
@@ -241,13 +249,9 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
             prop: clutter,
             localX: anchorX,
             localZ: anchorZ,
-            /* Anchors sit outside the footprint, off the flattened pad the building shares, so
-               these do sample the terrain individually. */
             elevation: heightMap.surfaceElevationAt(anchorX, anchorZ),
             rotationY: yaw + anchor.rotationY,
             scale: MODULE_SCALE,
-            /* Free-standing clutter, not part of the shell - a real cylinder collider via
-               PropBatch.addColliders, same mechanism every other Rock-layer prop already uses. */
             hasCollider: true,
         });
     }
@@ -255,8 +259,6 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
     return {
         placements,
         colliders,
-        /* Includes the roof overhang: the roof is what neighbours and scattered props must clear,
-           not the wall footprint. */
         footprintRadius: Math.hypot(eastEdgeLocalX, southEdgeLocalZ) / 2 + ROOF_OVERHANG,
         doorLocalX,
         doorLocalZ,

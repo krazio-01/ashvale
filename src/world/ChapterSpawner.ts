@@ -202,9 +202,6 @@ async function spawnTerrain(
         extraReservations: settlementLayout
             ? { discs: settlementLayout.keepOutDiscs, lanes: settlementLayout.keepOutLanes }
             : undefined,
-        /* placement.hasCollider distinguishes structural modules (false - walls/corners get
-           oriented cuboids from SettlementColliders instead; roof/floor/chimney don't collide)
-           from clutter (true - a real PropBatch cylinder collider, same as any other prop). */
         extraPlacements: settlementLayout?.placements.map((placement) => ({
             prop: placement.prop,
             hasCollider: placement.hasCollider,
@@ -233,10 +230,6 @@ async function spawnTerrain(
     };
 }
 
-/* A Settlement chapter settles every region it reasonably can, not just one: with a single
-   village the player can cross a whole "settlement" chapter and never meet a building. The spawn
-   and boss regions stay clear so arrival and the boss arena are unobstructed, and the roomiest
-   regions are taken first because villages need floor space. */
 function buildSettlementLayouts(
     chapter: ChapterResponse,
     regionSites: IRegionSite[],
@@ -460,6 +453,7 @@ function buildRegionGeometry(
             halfWidth,
             halfDepth,
             fileCount: region.fileCount,
+            floorElevation: y,
         };
 
         regionFloors[i] = {
