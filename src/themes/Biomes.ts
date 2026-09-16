@@ -22,13 +22,14 @@ import {
     HIGHLANDS_SCREE,
     HIGHLANDS_SCRUB,
     HIGHLANDS_GRASS,
+    WAYSIDE_CRATES,
     WAYSIDE_CLUTTER,
+    WAYSIDE_BOUNDARY,
     RUINS_COLUMNS,
     RUINS_WALLS,
     RUINS_GATEWAYS,
     RUINS_RUBBLE,
     RUINS_MONUMENTS,
-    RUINS_CLUTTER,
 } from "@/themes/PropCatalogue";
 import { SETTLEMENT_EXTRA_PRELOAD_PATHS } from "@/world/settlement/SettlementKit";
 
@@ -48,7 +49,9 @@ const WOODLAND_PROPS: IThemeProp[] = [
     ...MUSHROOMS,
     ...PEBBLES,
     ...FALLEN_PETALS,
+    ...WAYSIDE_CRATES,
     ...WAYSIDE_CLUTTER,
+    ...WAYSIDE_BOUNDARY,
 ];
 
 export const WOODLAND_MANIFEST: IThemeManifest = {
@@ -162,9 +165,6 @@ export const HIGHLANDS_MANIFEST: IThemeManifest = {
 const RUINS_PROPS: IThemeProp[] = [
     ...TWISTED_TREES,
     ...DEAD_TREES,
-    /* Bushes and broad plants are the understory layer Ruins was missing entirely: without one,
-       fillClump places nothing between groundcover and canopy. They also serve the theme - this
-       is meant to read as nature reclaiming stonework. */
     ...BUSHES,
     ...BROAD_PLANTS,
     ...UNDERGROWTH,
@@ -174,7 +174,6 @@ const RUINS_PROPS: IThemeProp[] = [
     ...RUINS_GATEWAYS,
     ...RUINS_RUBBLE,
     ...RUINS_MONUMENTS,
-    ...RUINS_CLUTTER,
 ];
 
 export const RUINS_MANIFEST: IThemeManifest = {
