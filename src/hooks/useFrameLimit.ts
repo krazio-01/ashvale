@@ -1,51 +1,78 @@
 "use client";
-import { useEffect } from "react";
-import { useThree } from "@react-three/fiber";
+import { useEffect, useRef } from "react";
+import { useStore } from "@react-three/fiber";
 import { useSettings } from "@/settings/SettingsStore";
 
 const VSYNC_TOLERANCE_MS = 2;
 const MAXIMUM_ADVANCE_DELTA_MS = 100;
+const UNCAPPED_FRAME_RATE_THRESHOLD = 240;
+const FALLBACK_FRAME_RATE = 60;
 
 let renderedFrameCount = 0;
 
-export function getRenderedFrameCount(): number {
-    return renderedFrameCount;
-}
+export const getRenderedFrameCount = (): number => renderedFrameCount;
 
-export function useFrameLimit(): void {
+export const useFrameLimit = (): void => {
     const { frameRateLimit } = useSettings();
-    const advance = useThree((state) => state.advance);
-    const clock = useThree((state) => state.clock);
+    const store = useStore();
+    const targetIntervalMsRef = useRef(1000 / FALLBACK_FRAME_RATE);
 
     useEffect(() => {
-        if (typeof window === "undefined") return;
+        const isUncapped = frameRateLimit <= 0 || frameRateLimit >= UNCAPPED_FRAME_RATE_THRESHOLD;
+        targetIntervalMsRef.current = isUncapped ? 0 : 1000 / frameRateLimit;
+    }, [frameRateLimit]);
 
-        const targetIntervalMs = 1000 / frameRateLimit;
+    useEffect(() => {
         let rafId = 0;
-        let lastAdvanceMs = performance.now();
+        let isDocumentVisible = document.visibilityState === "visible";
+        let lastScheduleMs = performance.now();
+        let lastRenderMs = lastScheduleMs;
+
+        const resetTimers = () => {
+            isDocumentVisible = document.visibilityState === "visible";
+            const nowMs = performance.now();
+            lastScheduleMs = nowMs;
+            lastRenderMs = nowMs;
+        };
 
         const tick = (nowMs: number) => {
             rafId = requestAnimationFrame(tick);
 
-            if (document.visibilityState === "hidden") {
-                lastAdvanceMs = nowMs;
+            if (!isDocumentVisible) {
+                lastScheduleMs = nowMs;
+                lastRenderMs = nowMs;
                 return;
             }
 
-            const elapsedMs = nowMs - lastAdvanceMs;
-            if (elapsedMs < targetIntervalMs - VSYNC_TOLERANCE_MS) return;
+            const targetIntervalMs = targetIntervalMsRef.current;
+            const elapsedScheduleMs = nowMs - lastScheduleMs;
 
-            lastAdvanceMs = nowMs - (elapsedMs % targetIntervalMs);
+            if (elapsedScheduleMs < targetIntervalMs - VSYNC_TOLERANCE_MS) return;
+
+            lastScheduleMs =
+                elapsedScheduleMs > targetIntervalMs * 2
+                    ? nowMs
+                    : lastScheduleMs + targetIntervalMs;
+
+            const deltaMs = nowMs - lastRenderMs;
+            lastRenderMs = nowMs;
             renderedFrameCount += 1;
 
-            const deltaSeconds = Math.min(elapsedMs, MAXIMUM_ADVANCE_DELTA_MS) / 1000;
+            const deltaSeconds = Math.min(Math.max(deltaMs, 0), MAXIMUM_ADVANCE_DELTA_MS) / 1000;
+            const { advance, clock } = store.getState();
             advance(clock.elapsedTime + deltaSeconds);
         };
 
+        document.addEventListener("visibilitychange", resetTimers);
+        window.addEventListener("focus", resetTimers);
         rafId = requestAnimationFrame(tick);
 
-        return () => cancelAnimationFrame(rafId);
-    }, [frameRateLimit, advance, clock]);
-}
+        return () => {
+            cancelAnimationFrame(rafId);
+            document.removeEventListener("visibilitychange", resetTimers);
+            window.removeEventListener("focus", resetTimers);
+        };
+    }, [store]);
+};
 
 export default useFrameLimit;
