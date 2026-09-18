@@ -12,10 +12,10 @@ import {
     SkinnedMesh,
 } from "three";
 import type { AnimationAction } from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { flattenForInstancing, prepareSkinnedModel } from "@/world/assets/AssetLibrary";
+import { createGltfLoader } from "@/world/assets/GltfLoaderFactory";
 import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 import { FractalNoise } from "@/lib/noise";
@@ -39,13 +39,14 @@ interface IIslandScene {
 }
 
 const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
+    const renderer = useThree((state) => state.gl);
     const islandScene = useMemo(() => buildIslandScene(environment), [environment]);
     const [materialLibrary] = useState(() => new MaterialLibrary());
     const [propTemplates, setPropTemplates] = useState<Map<string, IModelTemplate> | null>(null);
     const [characterModel, setCharacterModel] = useState<ISkinnedModel | null>(null);
 
     useEffect(() => {
-        const loader = new GLTFLoader();
+        const loader = createGltfLoader(renderer);
         let isCancelled = false;
         let loadedTemplates: Map<string, IModelTemplate> | null = null;
 
@@ -74,10 +75,10 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
             isCancelled = true;
             if (loadedTemplates) disposeTemplates(loadedTemplates);
         };
-    }, [materialLibrary]);
+    }, [materialLibrary, renderer]);
 
     useEffect(() => {
-        const loader = new GLTFLoader();
+        const loader = createGltfLoader(renderer);
         let isCancelled = false;
         let loadedModel: ISkinnedModel | null = null;
 
@@ -99,7 +100,7 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
             isCancelled = true;
             if (loadedModel) disposeSkinnedModel(loadedModel);
         };
-    }, [materialLibrary]);
+    }, [materialLibrary, renderer]);
 
     useEffect(() => () => materialLibrary.dispose(), [materialLibrary]);
     useEffect(() => () => islandScene.geometry.dispose(), [islandScene]);

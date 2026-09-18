@@ -38,6 +38,9 @@ export class MaterialLibrary {
     getToonMaterialForSource(source: MeshStandardMaterial): MeshToonMaterial {
         const cacheKey = [
             source.map?.uuid ?? "untextured",
+            source.normalMap?.uuid ?? "unmapped",
+            source.normalScale.x,
+            source.normalScale.y,
             source.color.getHexString(),
             source.transparent,
             source.alphaTest,
@@ -49,6 +52,8 @@ export class MaterialLibrary {
         const material = new MeshToonMaterial({
             color: source.color,
             map: source.map,
+            normalMap: source.normalMap,
+            normalScale: source.normalScale.clone(),
             gradientMap: this.gradientMap,
             transparent: source.transparent,
             alphaTest: source.alphaTest,
