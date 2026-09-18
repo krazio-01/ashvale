@@ -1,7 +1,17 @@
-import { Box3, Material, Mesh, MeshStandardMaterial, Object3D, SkinnedMesh, Vector3 } from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import {
+    Box3,
+    BufferAttribute,
+    Material,
+    Mesh,
+    MeshStandardMaterial,
+    Object3D,
+    SkinnedMesh,
+    Vector3,
+} from "three";
+import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { BufferGeometry } from "three";
+import type { BufferGeometry, WebGLRenderer } from "three";
+import { createGltfLoader } from "@/world/assets/GltfLoaderFactory";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { IThemeManifest } from "@/types/theme";
 import type { IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
@@ -15,9 +25,10 @@ export class AssetLibrary {
 
     static async create(
         manifest: IThemeManifest,
-        materialLibrary: MaterialLibrary
+        materialLibrary: MaterialLibrary,
+        renderer: WebGLRenderer
     ): Promise<AssetLibrary> {
-        const loader = new GLTFLoader();
+        const loader = createGltfLoader(renderer);
         const library = new AssetLibrary();
         const uniqueModelPaths = [
             ...new Set([
@@ -126,6 +137,7 @@ export function flattenForInstancing(
         if (!(object instanceof Mesh)) return;
 
         const geometry = object.geometry.clone();
+        expandQuantizedAttributes(geometry);
         geometry.applyMatrix4(object.matrixWorld);
 
         const partIsFoliage = isFoliage(object.material);
@@ -155,6 +167,21 @@ export function flattenForInstancing(
         halfExtents,
         centerOffset,
     };
+}
+
+function expandQuantizedAttributes(geometry: BufferGeometry): void {
+    for (const [name, attribute] of Object.entries(geometry.attributes)) {
+        if (!attribute.normalized && attribute.array instanceof Float32Array) continue;
+
+        const itemSize = attribute.itemSize;
+        const values = new Float32Array(attribute.count * itemSize);
+
+        for (let index = 0; index < attribute.count; index += 1)
+            for (let component = 0; component < itemSize; component += 1)
+                values[index * itemSize + component] = attribute.getComponent(index, component);
+
+        geometry.setAttribute(name, new BufferAttribute(values, itemSize));
+    }
 }
 
 function isFoliage(source: Material | Material[]): boolean {

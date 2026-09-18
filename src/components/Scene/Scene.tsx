@@ -53,7 +53,7 @@ const WorldRuntime = ({
         const createWorld = async () => {
             onStageChange(FIRST_SPAWN_STAGE);
 
-            const createdWorld = await World.create(manifest);
+            const createdWorld = await World.create(manifest, glRenderer);
             if (isCancelled) {
                 createdWorld.dispose();
                 return;

@@ -1,6 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Group } from "three";
+import type { WebGLRenderer } from "three";
 import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import { AssetLibrary } from "@/world/assets/AssetLibrary";
 import type { IThemeEnvironment, IThemeManifest } from "@/types/theme";
@@ -40,12 +41,12 @@ export class World {
         };
     }
 
-    static async create(manifest: IThemeManifest): Promise<World> {
+    static async create(manifest: IThemeManifest, renderer: WebGLRenderer): Promise<World> {
         const materialLibrary = new MaterialLibrary();
 
         const [, assetLibrary] = await Promise.all([
             RAPIER.init(),
-            AssetLibrary.create(manifest, materialLibrary),
+            AssetLibrary.create(manifest, materialLibrary, renderer),
         ]);
 
         return new World(materialLibrary, assetLibrary, manifest.environment);
