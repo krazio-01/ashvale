@@ -1,1 +1,232 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "extensionsUsed": ["KHR_materials_specular"], "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Bush_2x1", "rotation": [0, 1, 0, 1.9470718370939721e-07]}], "materials": [{"doubleSided": true, "extensions": {"KHR_materials_specular": {"specularColorFactor": [2.0, 2.0, 2.0]}}, "name": "Texture_Leaves", "pbrMetallicRoughness": {"baseColorFactor": [0.800000011920929, 0.800000011920929, 0.800000011920929, 1], "roughnessFactor": 0.5527864098548889, "baseColorTexture": {"index": 0}}}], "meshes": [{"name": "Cube.017", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, "indices": 3, "material": 0}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 708, "max": [0.5940510034561157, 1.455990195274353, 0.5940510630607605], "min": [-0.5940511226654053, -0.17367371916770935, -0.59405118227005], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 708, "type": "VEC3"}, {"bufferView": 2, "componentType": 5126, "count": 708, "type": "VEC2"}, {"bufferView": 3, "componentType": 5123, "count": 1956, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 8496, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 8496, "byteOffset": 8496, "target": 34962}, {"buffer": 0, "byteLength": 5664, "byteOffset": 16992, "target": 34962}, {"buffer": 0, "byteLength": 3912, "byteOffset": 22656, "target": 34963}], "buffers": [{"byteLength": 26568, "uri": "Bush_2x1.bin"}], "images": [{"uri": "Leaf_Texture.png"}], "textures": [{"source": 0}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1956,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 708,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 708,
+      "max": [
+        23890,
+        32767,
+        23890
+      ],
+      "min": [
+        -23890,
+        -32767,
+        -23890
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 708,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 3912,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 671,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 1956
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 3912,
+      "byteLength": 2832,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 672,
+          "byteLength": 1504,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 708
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 6744,
+      "byteLength": 5664,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2176,
+          "byteLength": 4068,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 708
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 12408,
+      "byteLength": 2832,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 6244,
+          "byteLength": 2008,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 708
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Leaf_Texture.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Bush_2x1.bin",
+      "byteLength": 8252
+    },
+    {
+      "byteLength": 15240,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Texture_Leaves",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929,
+          1
+        ],
+        "roughnessFactor": 0.5527864098548889,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.017",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2,
+            "TEXCOORD_0": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Bush_2x1",
+      "translation": [
+        5.9604621564485585e-8,
+        0.6411582380533218,
+        5.960466798629567e-8
+      ],
+      "rotation": [
+        0,
+        0.999999999999981,
+        0,
+        1.9470718370938615e-7
+      ],
+      "scale": [
+        0.814831957221093,
+        0.8148319572210312,
+        0.814831957221093
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}

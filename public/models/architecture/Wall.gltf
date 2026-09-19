@@ -1,1 +1,266 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Wall"}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Main", "pbrMetallicRoughness": {"baseColorFactor": [0.15896087884902954, 0.16202940046787262, 0.1247718334197998, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Highlights", "pbrMetallicRoughness": {"baseColorFactor": [0.289932519197464, 0.29568690061569214, 0.22595453262329102, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cube.354", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}, {"attributes": {"POSITION": 3, "NORMAL": 4}, "indices": 5, "material": 1}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 2144, "max": [0.9993463754653931, 1.9997763633728027, 0.03299354016780853], "min": [-0.9990781545639038, -0.00106331380084157, -0.25294965505599976], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 2144, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 3624, "type": "SCALAR"}, {"bufferView": 3, "componentType": 5126, "count": 184, "max": [0.9810592532157898, 1.6865431070327759, 0.02482674829661846], "min": [-0.9204298257827759, 0.295421838760376, -0.24478286504745483], "type": "VEC3"}, {"bufferView": 4, "componentType": 5126, "count": 184, "type": "VEC3"}, {"bufferView": 5, "componentType": 5123, "count": 264, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 25728, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 25728, "byteOffset": 25728, "target": 34962}, {"buffer": 0, "byteLength": 7248, "byteOffset": 51456, "target": 34963}, {"buffer": 0, "byteLength": 2208, "byteOffset": 58704, "target": 34962}, {"buffer": 0, "byteLength": 2208, "byteOffset": 60912, "target": 34962}, {"buffer": 0, "byteLength": 528, "byteOffset": 63120, "target": 34963}], "buffers": [{"byteLength": 63648, "uri": "Wall.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 3624,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 2144,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 264,
+      "normalized": false,
+      "byteOffset": 7248,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 184,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 2144,
+      "max": [
+        32727,
+        32767,
+        4684
+      ],
+      "min": [
+        -32727,
+        -32767,
+        -4684
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 184,
+      "max": [
+        32127,
+        22506,
+        4416
+      ],
+      "min": [
+        -30151,
+        -23058,
+        -4416
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 7776,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 1314,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 3888
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 7776,
+      "byteLength": 8576,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1316,
+          "byteLength": 2103,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 2144
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 16352,
+      "byteLength": 736,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3420,
+          "byteLength": 224,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 184
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 17088,
+      "byteLength": 17152,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3644,
+          "byteLength": 11812,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 2144
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 34240,
+      "byteLength": 1472,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 15456,
+          "byteLength": 944,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 184
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Wall.bin",
+      "byteLength": 16400
+    },
+    {
+      "byteLength": 35712,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15896087884902954,
+          0.16202940046787262,
+          0.1247718334197998,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Highlights",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.289932519197464,
+          0.29568690061569214,
+          0.22595453262329102,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.354",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 5
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Wall",
+      "translation": [
+        0.0001341104507446289,
+        0.9993565247859806,
+        -0.10997805744409561
+      ],
+      "scale": [
+        1.0004198385868222,
+        1.0004198385868222,
+        1.0004198385868222
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

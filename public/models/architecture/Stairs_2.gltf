@@ -1,1 +1,266 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Stairs_2", "scale": [1.424695611000061, 1.424695611000061, 1.4403623342514038]}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Main", "pbrMetallicRoughness": {"baseColorFactor": [0.15896087884902954, 0.16202940046787262, 0.1247718334197998, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Highlights", "pbrMetallicRoughness": {"baseColorFactor": [0.289932519197464, 0.29568690061569214, 0.22595453262329102, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cylinder.024", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}, {"attributes": {"POSITION": 3, "NORMAL": 4}, "indices": 5, "material": 1}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3214, "max": [0.7545782327651978, 1.2484469413757324, 0.6976832747459412], "min": [-0.7558525204658508, -0.0021257400512695312, -0.7015356421470642], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 3214, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 5925, "type": "SCALAR"}, {"bufferView": 3, "componentType": 5126, "count": 269, "max": [0.7281988859176636, 1.2484469413757324, 0.6939276456832886], "min": [-0.7438945174217224, -0.0021257400512695312, -0.7011802792549133], "type": "VEC3"}, {"bufferView": 4, "componentType": 5126, "count": 269, "type": "VEC3"}, {"bufferView": 5, "componentType": 5123, "count": 291, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 38568, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 38568, "byteOffset": 38568, "target": 34962}, {"buffer": 0, "byteLength": 11850, "byteOffset": 77136, "target": 34963}, {"buffer": 0, "byteLength": 3228, "byteOffset": 88988, "target": 34962}, {"buffer": 0, "byteLength": 3228, "byteOffset": 92216, "target": 34962}, {"buffer": 0, "byteLength": 582, "byteOffset": 95444, "target": 34963}], "buffers": [{"byteLength": 96028, "uri": "Stairs_2.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 5925,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 3214,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 291,
+      "normalized": false,
+      "byteOffset": 11850,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 269,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 3214,
+      "max": [
+        32767,
+        27131,
+        30355
+      ],
+      "min": [
+        -32767,
+        -27131,
+        -30355
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 269,
+      "max": [
+        31623,
+        27131,
+        30191
+      ],
+      "min": [
+        -32247,
+        -27131,
+        -30339
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 12432,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 2090,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 6216
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 12432,
+      "byteLength": 12856,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2092,
+          "byteLength": 3034,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 3214
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 25288,
+      "byteLength": 1076,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 5128,
+          "byteLength": 353,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 269
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 26364,
+      "byteLength": 25712,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 5484,
+          "byteLength": 16169,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 3214
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 52076,
+      "byteLength": 2152,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 21656,
+          "byteLength": 1476,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 269
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Stairs_2.bin",
+      "byteLength": 23132
+    },
+    {
+      "byteLength": 54228,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15896087884902954,
+          0.16202940046787262,
+          0.1247718334197998,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Highlights",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.289932519197464,
+          0.29568690061569214,
+          0.22595453262329102,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cylinder.024",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 5
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Stairs_2",
+      "translation": [
+        -0.0009077360471358986,
+        0.8878141727116429,
+        -0.002774402451137803
+      ],
+      "scale": [
+        1.0759520324238956,
+        1.0759520324238956,
+        1.0877837827244896
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

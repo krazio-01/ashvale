@@ -1,1 +1,174 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Column_Round_Short"}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Main", "pbrMetallicRoughness": {"baseColorFactor": [0.15896087884902954, 0.16202940046787262, 0.1247718334197998, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cylinder.047", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 900, "max": [0.24469494819641113, 1.8296836614608765, 0.24469512701034546], "min": [-0.24469494819641113, 0, -0.24469512701034546], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 900, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 1902, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 10800, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 10800, "byteOffset": 10800, "target": 34962}, {"buffer": 0, "byteLength": 3804, "byteOffset": 21600, "target": 34963}], "buffers": [{"byteLength": 25404, "uri": "Column_Round_Short.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1902,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 900,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 900,
+      "max": [
+        8765,
+        32767,
+        8765
+      ],
+      "min": [
+        -8765,
+        -32767,
+        -8765
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 3804,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 666,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 1902
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 3804,
+      "byteLength": 3600,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 668,
+          "byteLength": 1083,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 900
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 7404,
+      "byteLength": 7200,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1752,
+          "byteLength": 4236,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 900
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Column_Round_Short.bin",
+      "byteLength": 5988
+    },
+    {
+      "byteLength": 14604,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15896087884902954,
+          0.16202940046787262,
+          0.1247718334197998,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cylinder.047",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Column_Round_Short",
+      "translation": [
+        0,
+        0.9148418307304382,
+        0
+      ],
+      "scale": [
+        0.9148418307304382,
+        0.9148418307304382,
+        0.9148418307304382
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

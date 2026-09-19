@@ -1,1 +1,358 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Arch_Gothic_RoundColumn"}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Main", "pbrMetallicRoughness": {"baseColorFactor": [0.15896087884902954, 0.16202940046787262, 0.1247718334197998, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Black", "pbrMetallicRoughness": {"baseColorFactor": [0.04425261169672012, 0.04425261169672012, 0.04425261169672012, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Highlights", "pbrMetallicRoughness": {"baseColorFactor": [0.289932519197464, 0.29568690061569214, 0.22595453262329102, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cylinder.021", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}, {"attributes": {"POSITION": 3, "NORMAL": 4}, "indices": 5, "material": 1}, {"attributes": {"POSITION": 6, "NORMAL": 7}, "indices": 8, "material": 2}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3342, "max": [1.5459725856781006, 3.7604541778564453, 0.12498906999826431], "min": [-1.5459725856781006, 0.0017501115798950195, -0.3644011914730072], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 3342, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 7932, "type": "SCALAR"}, {"bufferView": 3, "componentType": 5126, "count": 800, "max": [1.5411016941070557, 3.6226303577423096, 0.09225999563932419], "min": [-1.5411016941070557, 1.964309573173523, -0.3316721022129059], "type": "VEC3"}, {"bufferView": 4, "componentType": 5126, "count": 800, "type": "VEC3"}, {"bufferView": 5, "componentType": 5123, "count": 1536, "type": "SCALAR"}, {"bufferView": 6, "componentType": 5126, "count": 124, "max": [1.5459725856781006, 3.7604541778564453, 0.09486345201730728], "min": [-1.5459725856781006, 1.7357739210128784, -0.33427557349205017], "type": "VEC3"}, {"bufferView": 7, "componentType": 5126, "count": 124, "type": "VEC3"}, {"bufferView": 8, "componentType": 5123, "count": 204, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 40104, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 40104, "byteOffset": 40104, "target": 34962}, {"buffer": 0, "byteLength": 15864, "byteOffset": 80208, "target": 34963}, {"buffer": 0, "byteLength": 9600, "byteOffset": 96072, "target": 34962}, {"buffer": 0, "byteLength": 9600, "byteOffset": 105672, "target": 34962}, {"buffer": 0, "byteLength": 3072, "byteOffset": 115272, "target": 34963}, {"buffer": 0, "byteLength": 1488, "byteOffset": 118344, "target": 34962}, {"buffer": 0, "byteLength": 1488, "byteOffset": 119832, "target": 34962}, {"buffer": 0, "byteLength": 408, "byteOffset": 121320, "target": 34963}], "buffers": [{"byteLength": 121728, "uri": "Arch_Gothic_RoundColumn.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 7932,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 3342,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1536,
+      "normalized": false,
+      "byteOffset": 15864,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 800,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 204,
+      "normalized": false,
+      "byteOffset": 18936,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 124,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 3342,
+      "max": [
+        26955,
+        32767,
+        4264
+      ],
+      "min": [
+        -26955,
+        -32767,
+        -4264
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 800,
+      "max": [
+        26871,
+        30363,
+        3696
+      ],
+      "min": [
+        -26871,
+        1452,
+        -3696
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 124,
+      "max": [
+        26955,
+        32767,
+        3740
+      ],
+      "min": [
+        -26955,
+        -2532,
+        -3740
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 19344,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 3314,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 9672
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 19344,
+      "byteLength": 13368,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3316,
+          "byteLength": 3999,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 3342
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 32712,
+      "byteLength": 3200,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 7316,
+          "byteLength": 1053,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 800
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 35912,
+      "byteLength": 496,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 8372,
+          "byteLength": 295,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 124
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 36408,
+      "byteLength": 26736,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 8668,
+          "byteLength": 15491,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 3342
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 63144,
+      "byteLength": 6400,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 24160,
+          "byteLength": 3779,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 800
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 69544,
+      "byteLength": 992,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 27940,
+          "byteLength": 690,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 124
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Arch_Gothic_RoundColumn.bin",
+      "byteLength": 28632
+    },
+    {
+      "byteLength": 70536,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15896087884902954,
+          0.16202940046787262,
+          0.1247718334197998,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Black",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.04425261169672012,
+          0.04425261169672012,
+          0.04425261169672012,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Highlights",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.289932519197464,
+          0.29568690061569214,
+          0.22595453262329102,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cylinder.021",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 6
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 7
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        },
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 8
+          },
+          "mode": 4,
+          "material": 2,
+          "indices": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Arch_Gothic_RoundColumn",
+      "translation": [
+        0,
+        1.8811021447181702,
+        -0.11970606073737144
+      ],
+      "scale": [
+        1.8793520331382751,
+        1.8793520331382751,
+        1.8793520331382751
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

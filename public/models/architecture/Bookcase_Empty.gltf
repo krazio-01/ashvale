@@ -1,1 +1,402 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Bookcase_Empty"}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Wood", "pbrMetallicRoughness": {"baseColorFactor": [0.15292437374591827, 0.10439527034759521, 0.05163053795695305, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363, "baseColorTexture": {"index": 0}}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "DarkWood", "pbrMetallicRoughness": {"baseColorFactor": [0.08713703602552414, 0.05797602981328964, 0.02801351808011532, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363, "baseColorTexture": {"index": 0}}}], "meshes": [{"name": "Cylinder.050", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "COLOR_0": 3, "COLOR_1": 4}, "indices": 5, "material": 0}, {"attributes": {"POSITION": 6, "NORMAL": 7, "TEXCOORD_0": 8, "COLOR_0": 9, "COLOR_1": 10}, "indices": 11, "material": 1}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 324, "max": [1.0392625331878662, 2.6295032501220703, 0.3131300210952759], "min": [-1.0392625331878662, -0.024672389030456543, -0.34508392214775085], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 324, "type": "VEC3"}, {"bufferView": 2, "componentType": 5126, "count": 324, "type": "VEC2"}, {"bufferView": 3, "componentType": 5121, "count": 324, "normalized": true, "type": "VEC4"}, {"bufferView": 4, "componentType": 5123, "count": 324, "normalized": true, "type": "VEC4"}, {"bufferView": 5, "componentType": 5123, "count": 744, "type": "SCALAR"}, {"bufferView": 6, "componentType": 5126, "count": 1164, "max": [0.9977239370346069, 2.5696072578430176, 0.3118046224117279], "min": [-0.9977239370346069, 0.10621362924575806, -0.3193744719028473], "type": "VEC3"}, {"bufferView": 7, "componentType": 5126, "count": 1164, "type": "VEC3"}, {"bufferView": 8, "componentType": 5126, "count": 1164, "type": "VEC2"}, {"bufferView": 9, "componentType": 5121, "count": 1164, "normalized": true, "type": "VEC4"}, {"bufferView": 10, "componentType": 5123, "count": 1164, "normalized": true, "type": "VEC4"}, {"bufferView": 11, "componentType": 5123, "count": 3036, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 3888, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 3888, "byteOffset": 3888, "target": 34962}, {"buffer": 0, "byteLength": 2592, "byteOffset": 7776, "target": 34962}, {"buffer": 0, "byteLength": 1296, "byteOffset": 10368, "target": 34962}, {"buffer": 0, "byteLength": 2592, "byteOffset": 11664, "target": 34962}, {"buffer": 0, "byteLength": 1488, "byteOffset": 14256, "target": 34963}, {"buffer": 0, "byteLength": 13968, "byteOffset": 15744, "target": 34962}, {"buffer": 0, "byteLength": 13968, "byteOffset": 29712, "target": 34962}, {"buffer": 0, "byteLength": 9312, "byteOffset": 43680, "target": 34962}, {"buffer": 0, "byteLength": 4656, "byteOffset": 52992, "target": 34962}, {"buffer": 0, "byteLength": 9312, "byteOffset": 57648, "target": 34962}, {"buffer": 0, "byteLength": 6072, "byteOffset": 66960, "target": 34963}], "buffers": [{"byteLength": 73032, "uri": "Bookcase_Empty.bin"}], "images": [{"uri": "Bark_Texture.jpg"}], "textures": [{"source": 0}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 744,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 324,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC4",
+      "componentType": 5121,
+      "count": 324,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 3036,
+      "normalized": false,
+      "byteOffset": 1488,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 1164,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC4",
+      "componentType": 5121,
+      "count": 1164,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 324,
+      "max": [
+        25659,
+        32767,
+        8124
+      ],
+      "min": [
+        -25659,
+        -32767,
+        -8124
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 324,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 1164,
+      "max": [
+        24635,
+        31287,
+        8092
+      ],
+      "min": [
+        -24635,
+        -29535,
+        -7492
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 7
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 1164,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 8
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 7560,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 1316,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 3780
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 7560,
+      "byteLength": 1296,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1316,
+          "byteLength": 278,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 324
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 8856,
+      "byteLength": 1296,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1596,
+          "byteLength": 57,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 324
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 10152,
+      "byteLength": 4656,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1656,
+          "byteLength": 884,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 1164
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 14808,
+      "byteLength": 4656,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2540,
+          "byteLength": 109,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 1164
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 19464,
+      "byteLength": 2592,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2652,
+          "byteLength": 1435,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 324
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 22056,
+      "byteLength": 1296,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4088,
+          "byteLength": 57,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 324
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 23352,
+      "byteLength": 9312,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4148,
+          "byteLength": 5090,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1164
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 32664,
+      "byteLength": 4656,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 9240,
+          "byteLength": 109,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 1164
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Bark_Texture.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Bookcase_Empty.bin",
+      "byteLength": 9352
+    },
+    {
+      "byteLength": 37320,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Wood",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15292437374591827,
+          0.10439527034759521,
+          0.05163053795695305,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    },
+    {
+      "name": "DarkWood",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.08713703602552414,
+          0.05797602981328964,
+          0.02801351808011532,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cylinder.050",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "COLOR_0": 2,
+            "POSITION": 6,
+            "TEXCOORD_0": 7,
+            "COLOR_1": 2
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 4,
+            "COLOR_0": 5,
+            "POSITION": 8,
+            "TEXCOORD_0": 9,
+            "COLOR_1": 5
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 3
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Bookcase_Empty",
+      "translation": [
+        0,
+        1.3024154305458069,
+        -0.015976950526237488
+      ],
+      "scale": [
+        1.3270878195762634,
+        1.3270878195762634,
+        1.3270878195762634
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}

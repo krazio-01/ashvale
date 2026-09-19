@@ -1,296 +1,430 @@
 {
-	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
-		"version":"2.0"
-	},
-	"scene":0,
-	"scenes":[
-		{
-			"name":"Scene",
-			"nodes":[
-				0
-			]
-		}
-	],
-	"nodes":[
-		{
-			"mesh":0,
-			"name":"Roof_RoundTiles_6x6"
-		}
-	],
-	"materials":[
-		{
-			"doubleSided":true,
-			"name":"MI_WoodTrim",
-			"normalTexture":{
-				"index":0
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":1
-				},
-				"metallicFactor":0,
-				"metallicRoughnessTexture":{
-					"index":2
-				}
-			}
-		},
-		{
-			"doubleSided":true,
-			"name":"MI_RoundTiles",
-			"normalTexture":{
-				"index":3
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":4
-				},
-				"metallicFactor":0,
-				"metallicRoughnessTexture":{
-					"index":5
-				}
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"Cube.152",
-			"primitives":[
-				{
-					"attributes":{
-						"POSITION":0,
-						"NORMAL":1,
-						"TEXCOORD_0":2,
-						"TEXCOORD_1":3
-					},
-					"indices":4,
-					"material":0
-				},
-				{
-					"attributes":{
-						"POSITION":5,
-						"NORMAL":6,
-						"TEXCOORD_0":7,
-						"TEXCOORD_1":8
-					},
-					"indices":9,
-					"material":1
-				}
-			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		},
-		{
-			"sampler":0,
-			"source":1
-		},
-		{
-			"sampler":0,
-			"source":2
-		},
-		{
-			"sampler":0,
-			"source":3
-		},
-		{
-			"sampler":0,
-			"source":4
-		},
-		{
-			"sampler":0,
-			"source":5
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"T_WoodTrim_Normal",
-			"uri":"T_WoodTrim_Normal.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_WoodTrim_BaseColor",
-			"uri":"T_WoodTrim_BaseColor.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_WoodTrim_Roughness",
-			"uri":"T_WoodTrim_Roughness.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_RoundTiles_Normal",
-			"uri":"T_RoundTiles_Normal.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_RoundTiles_BaseColor",
-			"uri":"T_RoundTiles_BaseColor.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_RoundTiles_Roughness",
-			"uri":"T_RoundTiles_Roughness.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5126,
-			"count":1740,
-			"max":[
-				3.958951234817505,
-				4.342607498168945,
-				3.7993175983428955
-			],
-			"min":[
-				-3.958951234817505,
-				-0.7821269035339355,
-				-3.7874298095703125
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":1740,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":1740,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":3,
-			"componentType":5126,
-			"count":1740,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":4,
-			"componentType":5123,
-			"count":3048,
-			"type":"SCALAR"
-		},
-		{
-			"bufferView":5,
-			"componentType":5126,
-			"count":1960,
-			"max":[
-				4.124891757965088,
-				4.890044689178467,
-				4.093986511230469
-			],
-			"min":[
-				-4.124891757965088,
-				-0.6384454965591431,
-				-3.9382028579711914
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":6,
-			"componentType":5126,
-			"count":1960,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":7,
-			"componentType":5126,
-			"count":1960,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":8,
-			"componentType":5126,
-			"count":1960,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":9,
-			"componentType":5123,
-			"count":6684,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":20880,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":20880,
-			"byteOffset":20880,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":13920,
-			"byteOffset":41760,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":13920,
-			"byteOffset":55680,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":6096,
-			"byteOffset":69600,
-			"target":34963
-		},
-		{
-			"buffer":0,
-			"byteLength":23520,
-			"byteOffset":75696,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":23520,
-			"byteOffset":99216,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":15680,
-			"byteOffset":122736,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":15680,
-			"byteOffset":138416,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":13368,
-			"byteOffset":154096,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":167464,
-			"uri":"Roof_RoundTiles_6x6.bin"
-		}
-	]
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 3048,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 1740,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 1740,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 6684,
+      "normalized": false,
+      "byteOffset": 6096,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 1960,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 1960,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 1960,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 1740,
+      "max": [
+        31447,
+        18182,
+        29563
+      ],
+      "min": [
+        -31447,
+        -22530,
+        -30707
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 1740,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 7
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 1960,
+      "max": [
+        32767,
+        22530,
+        31903
+      ],
+      "min": [
+        -32767,
+        -21386,
+        -31903
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 8
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 19464,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 3424,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 9732
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 19464,
+      "byteLength": 6960,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3424,
+          "byteLength": 1280,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 1740
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 26424,
+      "byteLength": 13920,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4704,
+          "byteLength": 10474,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1740
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 40344,
+      "byteLength": 7840,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 15180,
+          "byteLength": 2151,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 1960
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 48184,
+      "byteLength": 15680,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 17332,
+          "byteLength": 10991,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1960
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 63864,
+      "byteLength": 15680,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 28324,
+          "byteLength": 7220,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1960
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 79544,
+      "byteLength": 13920,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 35544,
+          "byteLength": 8045,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1740
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 93464,
+      "byteLength": 6960,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 43592,
+          "byteLength": 145,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 1740
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 100424,
+      "byteLength": 15680,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 43740,
+          "byteLength": 10311,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1960
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 1
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 3
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 2
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_WoodTrim_Normal.ktx2"
+    },
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_WoodTrim_BaseColor.ktx2"
+    },
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_RoundTiles_Normal.ktx2"
+    },
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_RoundTiles_BaseColor.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Roof_RoundTiles_6x6.bin",
+      "byteLength": 54052
+    },
+    {
+      "byteLength": 116104,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "MI_WoodTrim",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      }
+    },
+    {
+      "name": "MI_RoundTiles",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 2
+        }
+      },
+      "normalTexture": {
+        "index": 3
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.152",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "POSITION": 7,
+            "TEXCOORD_1": 8
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 4,
+            "TEXCOORD_0": 5,
+            "TEXCOORD_1": 6,
+            "POSITION": 9
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 3
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Roof_RoundTiles_6x6",
+      "translation": [
+        0,
+        2.0539588928222656,
+        0.07789182662963867
+      ],
+      "scale": [
+        4.124891757965088,
+        4.124891757965088,
+        4.124891757965088
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
 }

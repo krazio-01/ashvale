@@ -1,1 +1,296 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Crate", "scale": [5.142258644104004, 5.142258644104004, 5.142258644104004]}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "DarkWood", "pbrMetallicRoughness": {"baseColorFactor": [0.08713703602552414, 0.05797602981328964, 0.02801351808011532, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363, "baseColorTexture": {"index": 0}}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Wood", "pbrMetallicRoughness": {"baseColorFactor": [0.15292437374591827, 0.10439527034759521, 0.05163053795695305, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363, "baseColorTexture": {"index": 0}}}], "meshes": [{"name": "Cube.259", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}, {"attributes": {"POSITION": 3, "NORMAL": 4}, "indices": 5, "material": 1}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 840, "max": [0.0788017064332962, 0.15525305271148682, 0.07711216062307358], "min": [-0.0788017213344574, 0.0010287687182426453, -0.0788017213344574], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 840, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 1512, "type": "SCALAR"}, {"bufferView": 3, "componentType": 5126, "count": 340, "max": [0.08011595159769058, 0.1582554578781128, 0.08010999113321304], "min": [-0.08011507987976074, -0.0019760727882385254, -0.08013409376144409], "type": "VEC3"}, {"bufferView": 4, "componentType": 5126, "count": 340, "type": "VEC3"}, {"bufferView": 5, "componentType": 5123, "count": 840, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 10080, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 10080, "byteOffset": 10080, "target": 34962}, {"buffer": 0, "byteLength": 3024, "byteOffset": 20160, "target": 34963}, {"buffer": 0, "byteLength": 4080, "byteOffset": 23184, "target": 34962}, {"buffer": 0, "byteLength": 4080, "byteOffset": 27264, "target": 34962}, {"buffer": 0, "byteLength": 1680, "byteOffset": 31344, "target": 34963}], "buffers": [{"byteLength": 33024, "uri": "Crate.bin"}], "images": [{"uri": "Bark_Texture.jpg"}], "textures": [{"source": 0}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1512,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 840,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 840,
+      "normalized": false,
+      "byteOffset": 3024,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 340,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 840,
+      "max": [
+        32227,
+        31535,
+        31543
+      ],
+      "min": [
+        -32227,
+        -31535,
+        -32223
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 340,
+      "max": [
+        32763,
+        32763,
+        32767
+      ],
+      "min": [
+        -32763,
+        -32763,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 4704,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 808,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 2352
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 4704,
+      "byteLength": 3360,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 808,
+          "byteLength": 791,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 840
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 8064,
+      "byteLength": 1360,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1600,
+          "byteLength": 478,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 340
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 9424,
+      "byteLength": 6720,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2080,
+          "byteLength": 3947,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 840
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 16144,
+      "byteLength": 2720,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 6028,
+          "byteLength": 2019,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 340
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Bark_Texture.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Crate.bin",
+      "byteLength": 8048
+    },
+    {
+      "byteLength": 18864,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "DarkWood",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.08713703602552414,
+          0.05797602981328964,
+          0.02801351808011532,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    },
+    {
+      "name": "Wood",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15292437374591827,
+          0.10439527034759521,
+          0.05163053795695305,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.259",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 5
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Crate",
+      "translation": [
+        0.0000022412995299703198,
+        0.40181450943683217,
+        -0.00006197097418336739
+      ],
+      "scale": [
+        0.41200826535804325,
+        0.41200826535804325,
+        0.41200826535804325
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}
