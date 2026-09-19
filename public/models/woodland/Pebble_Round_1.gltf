@@ -1,136 +1,222 @@
 {
-	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
-		"version":"2.0"
-	},
-	"scene":0,
-	"scenes":[
-		{
-			"name":"Scene",
-			"nodes":[
-				0
-			]
-		}
-	],
-	"nodes":[
-		{
-			"mesh":0,
-			"name":"Pebble_Round_1"
-		}
-	],
-	"materials":[
-		{
-			"doubleSided":true,
-			"name":"PathRocks",
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":0
-				},
-				"metallicFactor":0
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"Cube.017_Retopology.008",
-			"primitives":[
-				{
-					"attributes":{
-						"POSITION":0,
-						"NORMAL":1,
-						"TEXCOORD_0":2
-					},
-					"indices":3,
-					"material":0
-				}
-			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"PathRocks_Diffuse",
-			"uri":"PathRocks_Diffuse.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5126,
-			"count":292,
-			"max":[
-				0.28022968769073486,
-				0.08767858147621155,
-				0.20741015672683716
-			],
-			"min":[
-				-0.21980905532836914,
-				-0.0077979713678359985,
-				-0.15961268544197083
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":292,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":292,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":3,
-			"componentType":5123,
-			"count":408,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":3504,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":3504,
-			"byteOffset":3504,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":2336,
-			"byteOffset":7008,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":816,
-			"byteOffset":9344,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":10160,
-			"uri":"Pebble_Round_1.bin"
-		}
-	]
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 408,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 292,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 292,
+      "max": [
+        32767,
+        6256,
+        24050
+      ],
+      "min": [
+        -32767,
+        -6256,
+        -24050
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 292,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 816,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 153,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 408
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 816,
+      "byteLength": 1168,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 156,
+          "byteLength": 345,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 292
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1984,
+      "byteLength": 2336,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 504,
+          "byteLength": 1798,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 292
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 4320,
+      "byteLength": 1168,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2304,
+          "byteLength": 1088,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 292
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "PathRocks_Diffuse.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Pebble_Round_1.bin",
+      "byteLength": 3392
+    },
+    {
+      "byteLength": 5488,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "PathRocks",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.017_Retopology.008",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2,
+            "TEXCOORD_0": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Pebble_Round_1",
+      "translation": [
+        0.03021031618118286,
+        0.039940305054187775,
+        0.023898735642433167
+      ],
+      "scale": [
+        0.250019371509552,
+        0.250019371509552,
+        0.250019371509552
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
 }

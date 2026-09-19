@@ -1,1 +1,174 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Rail_Corner"}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Main", "pbrMetallicRoughness": {"baseColorFactor": [0.15896087884902954, 0.16202940046787262, 0.1247718334197998, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cylinder.010", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 544, "max": [1, 0.48577630519866943, 1], "min": [-0.16782188415527344, -0.0025026793591678143, -0.16782186925411224], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 544, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 1404, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 6528, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 6528, "byteOffset": 6528, "target": 34962}, {"buffer": 0, "byteLength": 2808, "byteOffset": 13056, "target": 34963}], "buffers": [{"byteLength": 15864, "uri": "Rail_Corner.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1404,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 544,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 544,
+      "max": [
+        32767,
+        13701,
+        32767
+      ],
+      "min": [
+        -32767,
+        -13701,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 2808,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 499,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 1404
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 2808,
+      "byteLength": 2176,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 500,
+          "byteLength": 609,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 544
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 4984,
+      "byteLength": 4352,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1112,
+          "byteLength": 2672,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 544
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Rail_Corner.bin",
+      "byteLength": 3784
+    },
+    {
+      "byteLength": 9336,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15896087884902954,
+          0.16202940046787262,
+          0.1247718334197998,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cylinder.010",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Rail_Corner",
+      "translation": [
+        0.4160890579223633,
+        0.2416368129197508,
+        0.4160890653729439
+      ],
+      "scale": [
+        0.5839109420776367,
+        0.5839109420776367,
+        0.5839109420776367
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

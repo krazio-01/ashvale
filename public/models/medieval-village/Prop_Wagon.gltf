@@ -1,173 +1,263 @@
 {
-	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
-		"version":"2.0"
-	},
-	"scene":0,
-	"scenes":[
-		{
-			"name":"Scene",
-			"nodes":[
-				0
-			]
-		}
-	],
-	"nodes":[
-		{
-			"mesh":0,
-			"name":"Prop_Wagon"
-		}
-	],
-	"materials":[
-		{
-			"doubleSided":true,
-			"name":"MI_WoodTrim_Wear",
-			"normalTexture":{
-				"index":0
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":1
-				},
-				"metallicFactor":0,
-				"metallicRoughnessTexture":{
-					"index":2
-				}
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"Cube.043",
-			"primitives":[
-				{
-					"attributes":{
-						"POSITION":0,
-						"NORMAL":1,
-						"TEXCOORD_0":2,
-						"TEXCOORD_1":3
-					},
-					"indices":4,
-					"material":0
-				}
-			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		},
-		{
-			"sampler":0,
-			"source":1
-		},
-		{
-			"sampler":0,
-			"source":2
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"T_WoodTrim_Normal",
-			"uri":"T_WoodTrim_Normal.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_WoodTrim_BaseColor",
-			"uri":"T_WoodTrim_BaseColor.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_WoodTrim_Roughness",
-			"uri":"T_WoodTrim_Roughness.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5126,
-			"count":2331,
-			"max":[
-				0.9720492362976074,
-				1.5323269367218018,
-				0.8735843896865845
-			],
-			"min":[
-				-0.9793591499328613,
-				0.00312984362244606,
-				-3.1504321098327637
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":2331,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":2331,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":3,
-			"componentType":5126,
-			"count":2331,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":4,
-			"componentType":5123,
-			"count":5016,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":27972,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":27972,
-			"byteOffset":27972,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":18648,
-			"byteOffset":55944,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":18648,
-			"byteOffset":74592,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":10032,
-			"byteOffset":93240,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":103272,
-			"uri":"Prop_Wagon.bin"
-		}
-	]
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 5016,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 2331,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 2331,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 2331,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 2331,
+      "max": [
+        15889,
+        12453,
+        32767
+      ],
+      "min": [
+        -15889,
+        -12453,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 10032,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 1769,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 5016
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 10032,
+      "byteLength": 9324,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1772,
+          "byteLength": 2296,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 2331
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 19356,
+      "byteLength": 18648,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4068,
+          "byteLength": 13318,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 2331
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 38004,
+      "byteLength": 18648,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 17388,
+          "byteLength": 13399,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 2331
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 56652,
+      "byteLength": 18648,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 30788,
+          "byteLength": 10911,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 2331
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 1
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_WoodTrim_Normal.ktx2"
+    },
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_WoodTrim_BaseColor.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Prop_Wagon.bin",
+      "byteLength": 41700
+    },
+    {
+      "byteLength": 75300,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "MI_WoodTrim_Wear",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.043",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "TEXCOORD_1": 3,
+            "POSITION": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Prop_Wagon",
+      "translation": [
+        -0.003654956817626953,
+        0.7677283901721239,
+        -1.1384238600730896
+      ],
+      "scale": [
+        2.012008249759674,
+        2.012008249759674,
+        2.012008249759674
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
 }

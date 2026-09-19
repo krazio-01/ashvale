@@ -1,152 +1,250 @@
 {
-	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
-		"version":"2.0"
-	},
-	"scene":0,
-	"scenes":[
-		{
-			"name":"Scene",
-			"nodes":[
-				0
-			]
-		}
-	],
-	"nodes":[
-		{
-			"mesh":0,
-			"name":"Fern_1"
-		}
-	],
-	"materials":[
-		{
-			"alphaCutoff":0.20000000298023224,
-			"alphaMode":"MASK",
-			"doubleSided":true,
-			"name":"Leaves",
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":0
-				},
-				"metallicFactor":0
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"Plane.023",
-			"primitives":[
-				{
-					"attributes":{
-						"COLOR_0":0,
-						"POSITION":1,
-						"NORMAL":2,
-						"TEXCOORD_0":3
-					},
-					"indices":4,
-					"material":0
-				}
-			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"Leaves",
-			"uri":"Leaves.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5123,
-			"count":243,
-			"normalized":true,
-			"type":"VEC4"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":243,
-			"max":[
-				4.626213073730469,
-				2.4413082599639893,
-				4.396108150482178
-			],
-			"min":[
-				-4.419975280761719,
-				-0.2474701851606369,
-				-4.091315746307373
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":243,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":3,
-			"componentType":5126,
-			"count":243,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":4,
-			"componentType":5123,
-			"count":864,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":1944,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":2916,
-			"byteOffset":1944,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":2916,
-			"byteOffset":4860,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":1944,
-			"byteOffset":7776,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":1728,
-			"byteOffset":9720,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":11448,
-			"uri":"Fern_1.bin"
-		}
-	]
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 864,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 243,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC4",
+      "componentType": 5121,
+      "count": 243,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 243,
+      "max": [
+        32767,
+        9741,
+        30743
+      ],
+      "min": [
+        -32767,
+        -9741,
+        -30743
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 243,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 1728,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 332,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 864
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1728,
+      "byteLength": 972,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 332,
+          "byteLength": 535,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 243
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 2700,
+      "byteLength": 972,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 868,
+          "byteLength": 688,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 243
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 3672,
+      "byteLength": 1944,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1556,
+          "byteLength": 1503,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 243
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 5616,
+      "byteLength": 972,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3060,
+          "byteLength": 1009,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 243
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Leaves.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Fern_1.bin",
+      "byteLength": 4072
+    },
+    {
+      "byteLength": 6588,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Leaves",
+      "alphaMode": "MASK",
+      "alphaCutoff": 0.20000000298023224,
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Plane.023",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "COLOR_0": 2,
+            "POSITION": 3,
+            "TEXCOORD_0": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Fern_1",
+      "translation": [
+        0.03222465515136719,
+        0.3427871912717819,
+        0.04762387275695801
+      ],
+      "scale": [
+        1.4134669303894043,
+        1.4134669303894043,
+        1.4134669303894043
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
 }

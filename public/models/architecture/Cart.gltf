@@ -1,1 +1,394 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Cart", "rotation": [-0.01968047209084034, 0.4643206298351288, -0.3139220178127289, 0.8279323577880859], "scale": [4.0438313484191895, 4.043830871582031, 4.043832302093506]}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Wood", "pbrMetallicRoughness": {"baseColorFactor": [0.15292437374591827, 0.10439527034759521, 0.05163053795695305, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363, "baseColorTexture": {"index": 0}}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "DarkWood", "pbrMetallicRoughness": {"baseColorFactor": [0.08713703602552414, 0.05797602981328964, 0.02801351808011532, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363, "baseColorTexture": {"index": 0}}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Metal", "pbrMetallicRoughness": {"baseColorFactor": [0.09704122692346573, 0.10234932601451874, 0.11927313357591629, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cube.350", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}, {"attributes": {"POSITION": 3, "NORMAL": 4}, "indices": 5, "material": 1}, {"attributes": {"POSITION": 6, "NORMAL": 7}, "indices": 8, "material": 2}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 1428, "max": [0.2560083866119385, 0.34160053730010986, 0.36604440212249756], "min": [-0.2310917228460312, -0.13603030145168304, -0.3919926881790161], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 1428, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 3384, "type": "SCALAR"}, {"bufferView": 3, "componentType": 5126, "count": 336, "max": [0.2332882434129715, 0.3323284983634949, 0.2428179830312729], "min": [-0.2082907110452652, -0.1118188351392746, -0.38377493619918823], "type": "VEC3"}, {"bufferView": 4, "componentType": 5126, "count": 336, "type": "VEC3"}, {"bufferView": 5, "componentType": 5123, "count": 516, "type": "SCALAR"}, {"bufferView": 6, "componentType": 5126, "count": 132, "max": [-0.09101905673742294, 0.17548060417175293, -0.0472545363008976], "min": [-0.17760352790355682, -0.14303824305534363, -0.36524444818496704], "type": "VEC3"}, {"bufferView": 7, "componentType": 5126, "count": 132, "type": "VEC3"}, {"bufferView": 8, "componentType": 5123, "count": 396, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 17136, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 17136, "byteOffset": 17136, "target": 34962}, {"buffer": 0, "byteLength": 6768, "byteOffset": 34272, "target": 34963}, {"buffer": 0, "byteLength": 4032, "byteOffset": 41040, "target": 34962}, {"buffer": 0, "byteLength": 4032, "byteOffset": 45072, "target": 34962}, {"buffer": 0, "byteLength": 1032, "byteOffset": 49104, "target": 34963}, {"buffer": 0, "byteLength": 1584, "byteOffset": 50136, "target": 34962}, {"buffer": 0, "byteLength": 1584, "byteOffset": 51720, "target": 34962}, {"buffer": 0, "byteLength": 792, "byteOffset": 53304, "target": 34963}], "buffers": [{"byteLength": 54096, "uri": "Cart.bin"}], "images": [{"uri": "Bark_Texture.jpg"}], "textures": [{"source": 0}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 3384,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 1428,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 516,
+      "normalized": false,
+      "byteOffset": 6768,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 336,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 396,
+      "normalized": false,
+      "byteOffset": 7800,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 132,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 1428,
+      "max": [
+        21054,
+        20950,
+        32767
+      ],
+      "min": [
+        -21054,
+        -20342,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 336,
+      "max": [
+        19090,
+        20146,
+        22114
+      ],
+      "min": [
+        -19086,
+        -18250,
+        -32055
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 132,
+      "max": [
+        -8945,
+        6588,
+        -2964
+      ],
+      "min": [
+        -16430,
+        -20950,
+        -30455
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 8592,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 1474,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 4296
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 8592,
+      "byteLength": 5712,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1476,
+          "byteLength": 1561,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 1428
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 14304,
+      "byteLength": 1344,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3040,
+          "byteLength": 389,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 336
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 15648,
+      "byteLength": 528,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3432,
+          "byteLength": 159,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 132
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 16176,
+      "byteLength": 11424,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3592,
+          "byteLength": 7752,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1428
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 27600,
+      "byteLength": 2688,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 11344,
+          "byteLength": 1821,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 336
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 30288,
+      "byteLength": 1056,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 13168,
+          "byteLength": 764,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 132
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Bark_Texture.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Cart.bin",
+      "byteLength": 13932
+    },
+    {
+      "byteLength": 31344,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Wood",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15292437374591827,
+          0.10439527034759521,
+          0.05163053795695305,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    },
+    {
+      "name": "DarkWood",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.08713703602552414,
+          0.05797602981328964,
+          0.02801351808011532,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    },
+    {
+      "name": "Metal",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.09704122692346573,
+          0.10234932601451874,
+          0.11927313357591629,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.350",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 6
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 7
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        },
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 8
+          },
+          "mode": 4,
+          "material": 2,
+          "indices": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Cart",
+      "translation": [
+        0.1790955272651219,
+        0.30851299844701263,
+        -0.1980361616121304
+      ],
+      "rotation": [
+        -0.01968047179933002,
+        0.46432062845268485,
+        -0.3139220165600864,
+        0.8279323643611467
+      ],
+      "scale": [
+        1.532687065472958,
+        1.5326868909357427,
+        1.532687429757913
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}

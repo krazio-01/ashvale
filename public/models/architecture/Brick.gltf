@@ -1,1 +1,272 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Brick", "rotation": [-0.70710688829422, 0, 0, 0.7071066498756409], "scale": [1, 0.05973000079393387, 1]}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Main", "pbrMetallicRoughness": {"baseColorFactor": [0.15896087884902954, 0.16202940046787262, 0.1247718334197998, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Highlights", "pbrMetallicRoughness": {"baseColorFactor": [0.289932519197464, 0.29568690061569214, 0.22595453262329102, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cube.676", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}, {"attributes": {"POSITION": 3, "NORMAL": 4}, "indices": 5, "material": 1}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 120, "max": [0.2761094570159912, 2.625544786453247, 0.3176478147506714], "min": [-0.253953218460083, -2.143651008605957, -0.0017421285156160593], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 120, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 216, "type": "SCALAR"}, {"bufferView": 3, "componentType": 5126, "count": 12, "max": [0.24814409017562866, 2.624356985092163, 0.3039749264717102], "min": [-0.23752684891223907, -2.1180694103240967, 0.09614905714988708], "type": "VEC3"}, {"bufferView": 4, "componentType": 5126, "count": 12, "type": "VEC3"}, {"bufferView": 5, "componentType": 5123, "count": 12, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 1440, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 1440, "byteOffset": 1440, "target": 34962}, {"buffer": 0, "byteLength": 432, "byteOffset": 2880, "target": 34963}, {"buffer": 0, "byteLength": 144, "byteOffset": 3312, "target": 34962}, {"buffer": 0, "byteLength": 144, "byteOffset": 3456, "target": 34962}, {"buffer": 0, "byteLength": 24, "byteOffset": 3600, "target": 34963}], "buffers": [{"byteLength": 3624, "uri": "Brick.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 216,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 120,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 12,
+      "normalized": false,
+      "byteOffset": 432,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 12,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 120,
+      "max": [
+        3640,
+        32767,
+        2196
+      ],
+      "min": [
+        -3640,
+        -32767,
+        -2196
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 12,
+      "max": [
+        3256,
+        32751,
+        2008
+      ],
+      "min": [
+        -3416,
+        -32415,
+        -848
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 456,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 94,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 228
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 456,
+      "byteLength": 480,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 96,
+          "byteLength": 152,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 120
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 936,
+      "byteLength": 48,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 248,
+          "byteLength": 51,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 12
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 984,
+      "byteLength": 960,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 300,
+          "byteLength": 679,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 120
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1944,
+      "byteLength": 96,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 980,
+          "byteLength": 115,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 12
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Brick.bin",
+      "byteLength": 1096
+    },
+    {
+      "byteLength": 2040,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15896087884902954,
+          0.16202940046787262,
+          0.1247718334197998,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Highlights",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.289932519197464,
+          0.29568690061569214,
+          0.22595453262329102,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.676",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 5
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Brick",
+      "translation": [
+        0.011078119277954102,
+        0.15795283335109833,
+        -0.014391805225320412
+      ],
+      "rotation": [
+        -0.7071068882942236,
+        0,
+        0,
+        0.7071066740788552
+      ],
+      "scale": [
+        2.384597897529602,
+        0.1424320294374178,
+        2.3845978159083354
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

@@ -1,160 +1,237 @@
 {
-	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
-		"version":"2.0"
-	},
-	"scene":0,
-	"scenes":[
-		{
-			"name":"Scene",
-			"nodes":[
-				0
-			]
-		}
-	],
-	"nodes":[
-		{
-			"mesh":0,
-			"name":"Prop_WoodenFence_Extension2"
-		}
-	],
-	"materials":[
-		{
-			"doubleSided":true,
-			"name":"MI_WoodTrim",
-			"normalTexture":{
-				"index":0
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":1
-				},
-				"metallicFactor":0,
-				"metallicRoughnessTexture":{
-					"index":2
-				}
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"Cube.098",
-			"primitives":[
-				{
-					"attributes":{
-						"POSITION":0,
-						"NORMAL":1,
-						"TEXCOORD_0":2
-					},
-					"indices":3,
-					"material":0
-				}
-			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		},
-		{
-			"sampler":0,
-			"source":1
-		},
-		{
-			"sampler":0,
-			"source":2
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"T_WoodTrim_Normal",
-			"uri":"T_WoodTrim_Normal.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_WoodTrim_BaseColor",
-			"uri":"T_WoodTrim_BaseColor.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_WoodTrim_Roughness",
-			"uri":"T_WoodTrim_Roughness.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5126,
-			"count":56,
-			"max":[
-				1.0326489210128784,
-				0.8098565340042114,
-				0.055178605020046234
-			],
-			"min":[
-				-0.9943826794624329,
-				-0.02825251966714859,
-				-0.05517866089940071
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":56,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":56,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":3,
-			"componentType":5123,
-			"count":84,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":672,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":672,
-			"byteOffset":672,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":448,
-			"byteOffset":1344,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":168,
-			"byteOffset":1792,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":1960,
-			"uri":"Prop_WoodenFence_Extension2.bin"
-		}
-	]
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 84,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 56,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 56,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 56,
+      "max": [
+        32767,
+        13549,
+        1784
+      ],
+      "min": [
+        -32767,
+        -13549,
+        -1784
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 168,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 45,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 84
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 168,
+      "byteLength": 224,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 48,
+          "byteLength": 93,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 56
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 392,
+      "byteLength": 448,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 144,
+          "byteLength": 318,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 56
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 840,
+      "byteLength": 448,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 464,
+          "byteLength": 327,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 56
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 1
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_WoodTrim_Normal.ktx2"
+    },
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_WoodTrim_BaseColor.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Prop_WoodenFence_Extension2.bin",
+      "byteLength": 792
+    },
+    {
+      "byteLength": 1288,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "MI_WoodTrim",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.098",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "POSITION": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Prop_WoodenFence_Extension2",
+      "translation": [
+        0.01913312077522278,
+        0.3908020071685314,
+        -2.7939677238464355e-8
+      ],
+      "scale": [
+        1.0135158002376556,
+        1.0135158002376556,
+        1.0135158002376556
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
 }

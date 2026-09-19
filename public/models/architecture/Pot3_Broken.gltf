@@ -1,1 +1,174 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Pot3_Broken"}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Pot_Main", "pbrMetallicRoughness": {"baseColorFactor": [0.3626789152622223, 0.2465943545103073, 0.10028184950351715, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cube.110", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 206, "max": [0.23167188465595245, 0.3267585039138794, 0.23167188465595245], "min": [-0.23167188465595245, -0.0003777969104703516, -0.23167188465595245], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 206, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 564, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 2472, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 2472, "byteOffset": 2472, "target": 34962}, {"buffer": 0, "byteLength": 1128, "byteOffset": 4944, "target": 34963}], "buffers": [{"byteLength": 6072, "uri": "Pot3_Broken.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 564,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 206,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 206,
+      "max": [
+        32767,
+        23134,
+        32767
+      ],
+      "min": [
+        -32767,
+        -23134,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 1128,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 218,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 564
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1128,
+      "byteLength": 824,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 220,
+          "byteLength": 333,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 206
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1952,
+      "byteLength": 1648,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 556,
+          "byteLength": 1260,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 206
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Pot3_Broken.bin",
+      "byteLength": 1816
+    },
+    {
+      "byteLength": 3600,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Pot_Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.3626789152622223,
+          0.2465943545103073,
+          0.10028184950351715,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.110",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Pot3_Broken",
+      "translation": [
+        0,
+        0.16319035350170452,
+        0
+      ],
+      "scale": [
+        0.23167188465595245,
+        0.23167188465595245,
+        0.23167188465595245
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

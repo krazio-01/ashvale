@@ -1,159 +1,236 @@
 {
-	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
-		"version":"2.0"
-	},
-	"scene":0,
-	"scenes":[
-		{
-			"name":"Scene",
-			"nodes":[
-				0
-			]
-		}
-	],
-	"nodes":[
-		{
-			"mesh":0,
-			"name":"Prop_Brick3"
-		}
-	],
-	"materials":[
-		{
-			"doubleSided":true,
-			"name":"MI_RockTrim",
-			"normalTexture":{
-				"index":0
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":1
-				},
-				"metallicRoughnessTexture":{
-					"index":2
-				}
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"Cube.017_Retopology.002",
-			"primitives":[
-				{
-					"attributes":{
-						"POSITION":0,
-						"NORMAL":1,
-						"TEXCOORD_0":2
-					},
-					"indices":3,
-					"material":0
-				}
-			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		},
-		{
-			"sampler":0,
-			"source":1
-		},
-		{
-			"sampler":0,
-			"source":2
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"T_RockTrim_Normal",
-			"uri":"T_RockTrim_Normal.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_RockTrim_BaseColor",
-			"uri":"T_RockTrim_BaseColor.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"T_RockTrim_ORM",
-			"uri":"T_RockTrim_ORM.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5126,
-			"count":98,
-			"max":[
-				0.19818253815174103,
-				0.13483846187591553,
-				0.10690490901470184
-			],
-			"min":[
-				-0.18320874869823456,
-				-0.11486761271953583,
-				-0.10872507840394974
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":98,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":98,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":3,
-			"componentType":5123,
-			"count":378,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":1176,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":1176,
-			"byteOffset":1176,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":784,
-			"byteOffset":2352,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":756,
-			"byteOffset":3136,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":3892,
-			"uri":"Prop_Brick3.bin"
-		}
-	]
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 378,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 98,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 98,
+      "max": [
+        32767,
+        21454,
+        18526
+      ],
+      "min": [
+        -32767,
+        -21454,
+        -18526
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 98,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 756,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 149,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 378
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 756,
+      "byteLength": 392,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 152,
+          "byteLength": 245,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 98
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1148,
+      "byteLength": 784,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 400,
+          "byteLength": 644,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 98
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1932,
+      "byteLength": 392,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1044,
+          "byteLength": 403,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 98
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 1
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_RockTrim_Normal.ktx2"
+    },
+    {
+      "mimeType": "image/ktx2",
+      "uri": "T_RockTrim_BaseColor.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Prop_Brick3.bin",
+      "byteLength": 1448
+    },
+    {
+      "byteLength": 2324,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "MI_RockTrim",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.017_Retopology.002",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2,
+            "TEXCOORD_0": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Prop_Brick3",
+      "translation": [
+        0.007486894726753235,
+        0.00998542457818985,
+        -0.0009100846946239471
+      ],
+      "scale": [
+        0.1906956434249878,
+        0.1906956434249878,
+        0.1906956434249878
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
 }

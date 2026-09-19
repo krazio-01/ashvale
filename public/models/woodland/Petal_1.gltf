@@ -1,138 +1,224 @@
 {
-	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
-		"version":"2.0"
-	},
-	"scene":0,
-	"scenes":[
-		{
-			"name":"Scene",
-			"nodes":[
-				0
-			]
-		}
-	],
-	"nodes":[
-		{
-			"mesh":0,
-			"name":"Petal_1"
-		}
-	],
-	"materials":[
-		{
-			"alphaCutoff":0.20000000298023224,
-			"alphaMode":"MASK",
-			"doubleSided":true,
-			"name":"Flowers",
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":0
-				},
-				"metallicFactor":0
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"Plane.028",
-			"primitives":[
-				{
-					"attributes":{
-						"POSITION":0,
-						"NORMAL":1,
-						"TEXCOORD_0":2
-					},
-					"indices":3,
-					"material":0
-				}
-			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"Flowers",
-			"uri":"Flowers.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5126,
-			"count":14,
-			"max":[
-				0.20332272350788116,
-				0.24367444217205048,
-				0.22596585750579834
-			],
-			"min":[
-				-0.256916344165802,
-				1.184918232866039e-06,
-				-0.22899580001831055
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":14,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":14,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":3,
-			"componentType":5123,
-			"count":39,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":168,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":168,
-			"byteOffset":168,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":112,
-			"byteOffset":336,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":78,
-			"byteOffset":448,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":528,
-			"uri":"Petal_1.bin"
-		}
-	]
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 39,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 14,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 14,
+      "max": [
+        32767,
+        17350,
+        32391
+      ],
+      "min": [
+        -32767,
+        -17350,
+        -32391
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 14,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 78,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 31,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 39
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 80,
+      "byteLength": 56,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 32,
+          "byteLength": 69,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 14
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 136,
+      "byteLength": 112,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 104,
+          "byteLength": 136,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 14
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 248,
+      "byteLength": 56,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 240,
+          "byteLength": 101,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 14
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Flowers.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Petal_1.bin",
+      "byteLength": 344
+    },
+    {
+      "byteLength": 304,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Flowers",
+      "alphaMode": "MASK",
+      "alphaCutoff": 0.20000000298023224,
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Plane.028",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2,
+            "TEXCOORD_0": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Petal_1",
+      "translation": [
+        -0.02679681032896042,
+        0.12183781354514167,
+        -0.0015149712562561035
+      ],
+      "scale": [
+        0.23011953383684158,
+        0.23011953383684158,
+        0.23011953383684158
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
 }

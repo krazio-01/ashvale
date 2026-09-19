@@ -1,1 +1,388 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Barrel", "scale": [5.255073070526123, 5.255073070526123, 5.255073070526123]}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Wood", "pbrMetallicRoughness": {"baseColorFactor": [0.15292437374591827, 0.10439527034759521, 0.05163053795695305, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363, "baseColorTexture": {"index": 0}}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Metal", "pbrMetallicRoughness": {"baseColorFactor": [0.09704122692346573, 0.10234932601451874, 0.11927313357591629, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "DarkWood", "pbrMetallicRoughness": {"baseColorFactor": [0.08713703602552414, 0.05797602981328964, 0.02801351808011532, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363, "baseColorTexture": {"index": 0}}}], "meshes": [{"name": "Cylinder.037", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}, {"attributes": {"POSITION": 3, "NORMAL": 4}, "indices": 5, "material": 1}, {"attributes": {"POSITION": 6, "NORMAL": 7}, "indices": 8, "material": 2}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 894, "max": [0.0791020318865776, 0.2052011340856552, 0.0781424343585968], "min": [-0.0791020318865776, 0.0019831969402730465, -0.0786862000823021], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 894, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 2136, "type": "SCALAR"}, {"bufferView": 3, "componentType": 5126, "count": 360, "max": [0.07500802725553513, 0.20147517323493958, 0.07368902862071991], "min": [-0.07500802725553513, 0.003979012835770845, -0.0736890435218811], "type": "VEC3"}, {"bufferView": 4, "componentType": 5126, "count": 360, "type": "VEC3"}, {"bufferView": 5, "componentType": 5123, "count": 672, "type": "SCALAR"}, {"bufferView": 6, "componentType": 5126, "count": 442, "max": [0.0743829682469368, 0.20515313744544983, 0.07307495921850204], "min": [-0.0743829682469368, 0.000871309544891119, -0.07307495921850204], "type": "VEC3"}, {"bufferView": 7, "componentType": 5126, "count": 442, "type": "VEC3"}, {"bufferView": 8, "componentType": 5123, "count": 1128, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 10728, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 10728, "byteOffset": 10728, "target": 34962}, {"buffer": 0, "byteLength": 4272, "byteOffset": 21456, "target": 34963}, {"buffer": 0, "byteLength": 4320, "byteOffset": 25728, "target": 34962}, {"buffer": 0, "byteLength": 4320, "byteOffset": 30048, "target": 34962}, {"buffer": 0, "byteLength": 1344, "byteOffset": 34368, "target": 34963}, {"buffer": 0, "byteLength": 5304, "byteOffset": 35712, "target": 34962}, {"buffer": 0, "byteLength": 5304, "byteOffset": 41016, "target": 34962}, {"buffer": 0, "byteLength": 2256, "byteOffset": 46320, "target": 34963}], "buffers": [{"byteLength": 48576, "uri": "Barrel.bin"}], "images": [{"uri": "Bark_Texture.jpg"}], "textures": [{"source": 0}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 2136,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 894,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 672,
+      "normalized": false,
+      "byteOffset": 4272,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 360,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1128,
+      "normalized": false,
+      "byteOffset": 5616,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 442,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 894,
+      "max": [
+        25371,
+        32767,
+        25151
+      ],
+      "min": [
+        -25371,
+        -32411,
+        -25151
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 360,
+      "max": [
+        24058,
+        31571,
+        23722
+      ],
+      "min": [
+        -24058,
+        -31771,
+        -23546
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 442,
+      "max": [
+        23858,
+        32751,
+        23526
+      ],
+      "min": [
+        -23858,
+        -32767,
+        -23350
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 7872,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 1361,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 3936
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 7872,
+      "byteLength": 3576,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1364,
+          "byteLength": 1142,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 894
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 11448,
+      "byteLength": 1440,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2508,
+          "byteLength": 360,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 360
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 12888,
+      "byteLength": 1768,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2868,
+          "byteLength": 743,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 442
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 14656,
+      "byteLength": 7152,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3612,
+          "byteLength": 4998,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 894
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 21808,
+      "byteLength": 2880,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 8612,
+          "byteLength": 1893,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 360
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 24688,
+      "byteLength": 3536,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 10508,
+          "byteLength": 2451,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 442
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Bark_Texture.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Barrel.bin",
+      "byteLength": 12960
+    },
+    {
+      "byteLength": 28224,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Wood",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15292437374591827,
+          0.10439527034759521,
+          0.05163053795695305,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    },
+    {
+      "name": "Metal",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.09704122692346573,
+          0.10234932601451874,
+          0.11927313357591629,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "DarkWood",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.08713703602552414,
+          0.05797602981328964,
+          0.02801351808011532,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cylinder.037",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 6
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 7
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        },
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 8
+          },
+          "mode": 4,
+          "material": 2,
+          "indices": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Barrel",
+      "translation": [
+        0,
+        0.5414628745501983,
+        -0.0014287643056594135
+      ],
+      "scale": [
+        0.5368840792247486,
+        0.5368840792247486,
+        0.5368840792247486
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}

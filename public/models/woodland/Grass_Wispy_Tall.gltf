@@ -1,150 +1,248 @@
 {
-	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
-		"version":"2.0"
-	},
-	"scene":0,
-	"scenes":[
-		{
-			"name":"Scene",
-			"nodes":[
-				0
-			]
-		}
-	],
-	"nodes":[
-		{
-			"mesh":0,
-			"name":"Grass_Wispy_Tall"
-		}
-	],
-	"materials":[
-		{
-			"doubleSided":true,
-			"name":"Grass",
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":0
-				},
-				"metallicFactor":0
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"Plane.017",
-			"primitives":[
-				{
-					"attributes":{
-						"COLOR_0":0,
-						"POSITION":1,
-						"NORMAL":2,
-						"TEXCOORD_0":3
-					},
-					"indices":4,
-					"material":0
-				}
-			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"Grass",
-			"uri":"Grass.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5123,
-			"count":644,
-			"normalized":true,
-			"type":"VEC4"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":644,
-			"max":[
-				0.8008279800415039,
-				1.6357505321502686,
-				0.7751253247261047
-			],
-			"min":[
-				-0.7392446994781494,
-				-0.03605181723833084,
-				-0.8185906410217285
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":644,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":3,
-			"componentType":5126,
-			"count":644,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":4,
-			"componentType":5123,
-			"count":1866,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":5152,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":7728,
-			"byteOffset":5152,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":7728,
-			"byteOffset":12880,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":5152,
-			"byteOffset":20608,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":3732,
-			"byteOffset":25760,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":29492,
-			"uri":"Grass_Wispy_Tall.bin"
-		}
-	]
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1866,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 644,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC4",
+      "componentType": 5121,
+      "count": 644,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 644,
+      "max": [
+        30187,
+        32767,
+        31235
+      ],
+      "min": [
+        -30187,
+        -32767,
+        -31235
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 644,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 3732,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 682,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 1866
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 3732,
+      "byteLength": 2576,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 684,
+          "byteLength": 113,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 644
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 6308,
+      "byteLength": 2576,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 800,
+          "byteLength": 1808,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 644
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 8884,
+      "byteLength": 5152,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2608,
+          "byteLength": 3621,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 644
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 14036,
+      "byteLength": 2576,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 6232,
+          "byteLength": 1971,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 644
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Grass.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Grass_Wispy_Tall.bin",
+      "byteLength": 8204
+    },
+    {
+      "byteLength": 16612,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Grass",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Plane.017",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "COLOR_0": 2,
+            "POSITION": 3,
+            "TEXCOORD_0": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Grass_Wispy_Tall",
+      "translation": [
+        0.030791640281677246,
+        0.7998493574559689,
+        -0.02173265814781189
+      ],
+      "scale": [
+        0.8359011746942997,
+        0.8359011746942997,
+        0.8359011746942997
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
 }

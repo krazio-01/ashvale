@@ -1,1 +1,174 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Flag_Wall"}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Flag", "pbrMetallicRoughness": {"baseColorFactor": [0.2633514106273651, 0.0846899077296257, 0.022547682747244835, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cylinder.040", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 202, "max": [0.4617334008216858, 1.98466157913208, 0.20340757071971893], "min": [-0.4617334008216858, -0.033263564109802246, -0.11263348907232285], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 202, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 612, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 2424, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 2424, "byteOffset": 2424, "target": 34962}, {"buffer": 0, "byteLength": 1224, "byteOffset": 4848, "target": 34963}], "buffers": [{"byteLength": 6072, "uri": "Flag_Wall.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 612,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 202,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 202,
+      "max": [
+        14993,
+        32767,
+        5132
+      ],
+      "min": [
+        -14993,
+        -32767,
+        -5132
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 1224,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 235,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 612
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1224,
+      "byteLength": 808,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 236,
+          "byteLength": 218,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 202
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 2032,
+      "byteLength": 1616,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 456,
+          "byteLength": 1095,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 202
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Flag_Wall.bin",
+      "byteLength": 1552
+    },
+    {
+      "byteLength": 3648,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Flag",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.2633514106273651,
+          0.0846899077296257,
+          0.022547682747244835,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cylinder.040",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Flag_Wall",
+      "translation": [
+        0,
+        0.9756990075111389,
+        0.045387040823698044
+      ],
+      "scale": [
+        1.0089625716209412,
+        1.0089625716209412,
+        1.0089625716209412
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

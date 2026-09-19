@@ -1,1 +1,358 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Candles_1", "scale": [0.09908800572156906, 0.09908800572156906, 0.09908800572156906]}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Candle", "pbrMetallicRoughness": {"baseColorFactor": [0.42522579431533813, 0.3761412501335144, 0.13521644473075867, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Light", "pbrMetallicRoughness": {"baseColorFactor": [0.6985164880752563, 0.10983259975910187, 0.06794875115156174, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Black", "pbrMetallicRoughness": {"baseColorFactor": [0.04425261169672012, 0.04425261169672012, 0.04425261169672012, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cube.003", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}, {"attributes": {"POSITION": 3, "NORMAL": 4}, "indices": 5, "material": 1}, {"attributes": {"POSITION": 6, "NORMAL": 7}, "indices": 8, "material": 2}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 427, "max": [5.006426811218262, 4.720642566680908, 3.7174155712127686], "min": [-3.884899139404297, -0.02787645161151886, -4.796032428741455], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 427, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 1944, "type": "SCALAR"}, {"bufferView": 3, "componentType": 5126, "count": 196, "max": [3.5242223739624023, 6.095333099365234, 2.887148141860962], "min": [-2.8889386653900146, 2.648653984069824, -3.984623908996582], "type": "VEC3"}, {"bufferView": 4, "componentType": 5126, "count": 196, "type": "VEC3"}, {"bufferView": 5, "componentType": 5123, "count": 420, "type": "SCALAR"}, {"bufferView": 6, "componentType": 5126, "count": 112, "max": [3.415869951248169, 4.873340606689453, 2.805426597595215], "min": [-2.827313184738159, 2.4645237922668457, -3.902902126312256], "type": "VEC3"}, {"bufferView": 7, "componentType": 5126, "count": 112, "type": "VEC3"}, {"bufferView": 8, "componentType": 5123, "count": 168, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 5124, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 5124, "byteOffset": 5124, "target": 34962}, {"buffer": 0, "byteLength": 3888, "byteOffset": 10248, "target": 34963}, {"buffer": 0, "byteLength": 2352, "byteOffset": 14136, "target": 34962}, {"buffer": 0, "byteLength": 2352, "byteOffset": 16488, "target": 34962}, {"buffer": 0, "byteLength": 840, "byteOffset": 18840, "target": 34963}, {"buffer": 0, "byteLength": 1344, "byteOffset": 19680, "target": 34962}, {"buffer": 0, "byteLength": 1344, "byteOffset": 21024, "target": 34962}, {"buffer": 0, "byteLength": 336, "byteOffset": 22368, "target": 34963}], "buffers": [{"byteLength": 22704, "uri": "Candles_1.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1944,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 427,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 420,
+      "normalized": false,
+      "byteOffset": 3888,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 196,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 168,
+      "normalized": false,
+      "byteOffset": 4728,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 112,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 427,
+      "max": [
+        32767,
+        12433,
+        31375
+      ],
+      "min": [
+        -32767,
+        -22566,
+        -31375
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 196,
+      "max": [
+        21842,
+        22566,
+        25255
+      ],
+      "min": [
+        -25427,
+        -2836,
+        -25395
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 112,
+      "max": [
+        21042,
+        13557,
+        24655
+      ],
+      "min": [
+        -24971,
+        -4196,
+        -24791
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 5064,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 932,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 2532
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 5064,
+      "byteLength": 1708,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 932,
+          "byteLength": 870,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 427
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 6772,
+      "byteLength": 784,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1804,
+          "byteLength": 335,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 196
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 7556,
+      "byteLength": 448,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2140,
+          "byteLength": 251,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 112
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 8004,
+      "byteLength": 3416,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2392,
+          "byteLength": 2415,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 427
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 11420,
+      "byteLength": 1568,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4808,
+          "byteLength": 1024,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 196
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 12988,
+      "byteLength": 896,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 5832,
+          "byteLength": 537,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 112
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Candles_1.bin",
+      "byteLength": 6372
+    },
+    {
+      "byteLength": 13884,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Candle",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.42522579431533813,
+          0.3761412501335144,
+          0.13521644473075867,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Light",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.6985164880752563,
+          0.10983259975910187,
+          0.06794875115156174,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Black",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.04425261169672012,
+          0.04425261169672012,
+          0.04425261169672012,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.003",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 6
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 7
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        },
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 8
+          },
+          "mode": 4,
+          "material": 2,
+          "indices": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Candles_1",
+      "translation": [
+        0.05556497018080009,
+        0.3006060895139962,
+        -0.053438996675091666
+      ],
+      "scale": [
+        0.4405118783338118,
+        0.4405118783338118,
+        0.4405118783338118
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

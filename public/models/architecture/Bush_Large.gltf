@@ -1,1 +1,226 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "extensionsUsed": ["KHR_materials_specular"], "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Bush_Large"}], "materials": [{"doubleSided": true, "extensions": {"KHR_materials_specular": {"specularColorFactor": [2.0, 2.0, 2.0]}}, "name": "Texture_Leaves", "pbrMetallicRoughness": {"baseColorFactor": [0.800000011920929, 0.800000011920929, 0.800000011920929, 1], "roughnessFactor": 0.5527864098548889, "baseColorTexture": {"index": 0}}}], "meshes": [{"name": "Cylinder.005", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, "indices": 3, "material": 0}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 255, "max": [1.0428105592727661, 0.8996034860610962, 1.0295714139938354], "min": [-1.026179552078247, -0.2886202037334442, -1.0356031656265259], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 255, "type": "VEC3"}, {"bufferView": 2, "componentType": 5126, "count": 255, "type": "VEC2"}, {"bufferView": 3, "componentType": 5123, "count": 1080, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 3060, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 3060, "byteOffset": 3060, "target": 34962}, {"buffer": 0, "byteLength": 2040, "byteOffset": 6120, "target": 34962}, {"buffer": 0, "byteLength": 2160, "byteOffset": 8160, "target": 34963}], "buffers": [{"byteLength": 10320, "uri": "Bush_Large.bin"}], "images": [{"uri": "Leaf_Texture.png"}], "textures": [{"source": 0}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1080,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 255,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 255,
+      "max": [
+        32767,
+        18818,
+        32707
+      ],
+      "min": [
+        -32767,
+        -18818,
+        -32707
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 255,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 2160,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 392,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 1080
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 2160,
+      "byteLength": 1020,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 392,
+          "byteLength": 561,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 255
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 3180,
+      "byteLength": 2040,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 956,
+          "byteLength": 1601,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 255
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 5220,
+      "byteLength": 1020,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2560,
+          "byteLength": 1073,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 255
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Leaf_Texture.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Bush_Large.bin",
+      "byteLength": 3636
+    },
+    {
+      "byteLength": 6240,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Texture_Leaves",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929,
+          1
+        ],
+        "roughnessFactor": 0.5527864098548889,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cylinder.005",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 2,
+            "TEXCOORD_0": 3
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Bush_Large",
+      "translation": [
+        0.008315503597259521,
+        0.305491641163826,
+        -0.003015875816345215
+      ],
+      "scale": [
+        1.0344950556755066,
+        1.0344950556755066,
+        1.0344950556755066
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}

@@ -1,1 +1,324 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Wall_ArchRound", "rotation": [0.7071068286895752, 0, 0, 0.7071068286895752], "scale": [1, 0.05973000079393387, 1]}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Main", "pbrMetallicRoughness": {"baseColorFactor": [0.15896087884902954, 0.16202940046787262, 0.1247718334197998, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Highlights", "pbrMetallicRoughness": {"baseColorFactor": [0.289932519197464, 0.29568690061569214, 0.22595453262329102, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cube.042", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, "indices": 3, "material": 0}, {"attributes": {"POSITION": 4, "NORMAL": 5, "TEXCOORD_0": 6}, "indices": 7, "material": 1}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3858, "max": [2.002013683319092, 0.9994008541107178, -0.002668793313205242], "min": [-2.002013683319092, -4.190529823303223, -3.9967992305755615], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 3858, "type": "VEC3"}, {"bufferView": 2, "componentType": 5126, "count": 3858, "type": "VEC2"}, {"bufferView": 3, "componentType": 5123, "count": 6516, "type": "SCALAR"}, {"bufferView": 4, "componentType": 5126, "count": 400, "max": [1.9817774295806885, 0.4570901393890381, -0.3105178475379944], "min": [-1.9817774295806885, -4.0567169189453125, -3.712609052658081], "type": "VEC3"}, {"bufferView": 5, "componentType": 5126, "count": 400, "type": "VEC3"}, {"bufferView": 6, "componentType": 5126, "count": 400, "type": "VEC2"}, {"bufferView": 7, "componentType": 5123, "count": 576, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 46296, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 46296, "byteOffset": 46296, "target": 34962}, {"buffer": 0, "byteLength": 30864, "byteOffset": 92592, "target": 34962}, {"buffer": 0, "byteLength": 13032, "byteOffset": 123456, "target": 34963}, {"buffer": 0, "byteLength": 4800, "byteOffset": 136488, "target": 34962}, {"buffer": 0, "byteLength": 4800, "byteOffset": 141288, "target": 34962}, {"buffer": 0, "byteLength": 3200, "byteOffset": 146088, "target": 34962}, {"buffer": 0, "byteLength": 1152, "byteOffset": 149288, "target": 34963}], "buffers": [{"byteLength": 150440, "uri": "Wall_ArchRound.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 6516,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 3858,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 576,
+      "normalized": false,
+      "byteOffset": 13032,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 400,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 3858,
+      "max": [
+        25279,
+        32767,
+        25219
+      ],
+      "min": [
+        -25279,
+        -32767,
+        -25219
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 3858,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 400,
+      "max": [
+        25023,
+        25919,
+        21330
+      ],
+      "min": [
+        -25023,
+        -31079,
+        -21630
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 400,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 14184,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 2386,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 7092
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 14184,
+      "byteLength": 15432,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2388,
+          "byteLength": 3851,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 3858
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 29616,
+      "byteLength": 1600,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 6240,
+          "byteLength": 445,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 400
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 31216,
+      "byteLength": 30864,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 6688,
+          "byteLength": 20741,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 3858
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 62080,
+      "byteLength": 15432,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 27432,
+          "byteLength": 277,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 3858
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 77512,
+      "byteLength": 3200,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 27712,
+          "byteLength": 1954,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 400
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 80712,
+      "byteLength": 1600,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 29668,
+          "byteLength": 61,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 400
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Wall_ArchRound.bin",
+      "byteLength": 29732
+    },
+    {
+      "byteLength": 82312,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15896087884902954,
+          0.16202940046787262,
+          0.1247718334197998,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Highlights",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.289932519197464,
+          0.29568690061569214,
+          0.22595453262329102,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.042",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 4,
+            "TEXCOORD_0": 5
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 6,
+            "TEXCOORD_0": 7
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Wall_ArchRound",
+      "translation": [
+        0,
+        1.9997342934311697,
+        -0.09530281205454295
+      ],
+      "rotation": [
+        0.7071068286895688,
+        0,
+        0,
+        0.7071067336835231
+      ],
+      "scale": [
+        2.59496533870697,
+        0.15499730256645713,
+        2.5949656873635694
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}

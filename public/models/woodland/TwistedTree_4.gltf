@@ -1,262 +1,417 @@
 {
-	"asset":{
-		"generator":"Khronos glTF Blender I/O v4.0.44",
-		"version":"2.0"
-	},
-	"scene":0,
-	"scenes":[
-		{
-			"name":"Scene",
-			"nodes":[
-				0
-			]
-		}
-	],
-	"nodes":[
-		{
-			"mesh":0,
-			"name":"TwistedTree_4"
-		}
-	],
-	"materials":[
-		{
-			"doubleSided":true,
-			"name":"Bark_TwistedTree",
-			"normalTexture":{
-				"index":0
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":1
-				},
-				"metallicFactor":0
-			}
-		},
-		{
-			"alphaCutoff":0.20000000298023224,
-			"alphaMode":"MASK",
-			"doubleSided":true,
-			"name":"Leaves_TwistedTree",
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":2
-				},
-				"metallicFactor":0
-			}
-		}
-	],
-	"meshes":[
-		{
-			"name":"tree.041",
-			"primitives":[
-				{
-					"attributes":{
-						"COLOR_0":0,
-						"POSITION":1,
-						"NORMAL":2,
-						"TEXCOORD_0":3
-					},
-					"indices":4,
-					"material":0
-				},
-				{
-					"attributes":{
-						"COLOR_0":5,
-						"POSITION":6,
-						"NORMAL":7,
-						"TEXCOORD_0":8
-					},
-					"indices":9,
-					"material":1
-				}
-			]
-		}
-	],
-	"textures":[
-		{
-			"sampler":0,
-			"source":0
-		},
-		{
-			"sampler":0,
-			"source":1
-		},
-		{
-			"sampler":0,
-			"source":2
-		}
-	],
-	"images":[
-		{
-			"mimeType":"image/png",
-			"name":"Bark_TwistedTree_Normal",
-			"uri":"Bark_TwistedTree_Normal.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"Bark_TwistedTree",
-			"uri":"Bark_TwistedTree.png"
-		},
-		{
-			"mimeType":"image/png",
-			"name":"Leaves_TwistedTree_C",
-			"uri":"Leaves_TwistedTree_C.png"
-		}
-	],
-	"accessors":[
-		{
-			"bufferView":0,
-			"componentType":5126,
-			"count":9176,
-			"type":"VEC4"
-		},
-		{
-			"bufferView":1,
-			"componentType":5126,
-			"count":9176,
-			"max":[
-				4.80446195602417,
-				17.352516174316406,
-				2.777181386947632
-			],
-			"min":[
-				-2.732177972793579,
-				-0.20147468149662018,
-				-6.009294033050537
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":2,
-			"componentType":5126,
-			"count":9176,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":3,
-			"componentType":5126,
-			"count":9176,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":4,
-			"componentType":5123,
-			"count":20700,
-			"type":"SCALAR"
-		},
-		{
-			"bufferView":5,
-			"componentType":5126,
-			"count":5400,
-			"type":"VEC4"
-		},
-		{
-			"bufferView":6,
-			"componentType":5126,
-			"count":5400,
-			"max":[
-				6.053491592407227,
-				18.536760330200195,
-				4.150291442871094
-			],
-			"min":[
-				-4.327320098876953,
-				2.1321682929992676,
-				-7.142794609069824
-			],
-			"type":"VEC3"
-		},
-		{
-			"bufferView":7,
-			"componentType":5126,
-			"count":5400,
-			"type":"VEC3"
-		},
-		{
-			"bufferView":8,
-			"componentType":5126,
-			"count":5400,
-			"type":"VEC2"
-		},
-		{
-			"bufferView":9,
-			"componentType":5123,
-			"count":8100,
-			"type":"SCALAR"
-		}
-	],
-	"bufferViews":[
-		{
-			"buffer":0,
-			"byteLength":146816,
-			"byteOffset":0,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":110112,
-			"byteOffset":146816,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":110112,
-			"byteOffset":256928,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":73408,
-			"byteOffset":367040,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":41400,
-			"byteOffset":440448,
-			"target":34963
-		},
-		{
-			"buffer":0,
-			"byteLength":86400,
-			"byteOffset":481848,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":64800,
-			"byteOffset":568248,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":64800,
-			"byteOffset":633048,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":43200,
-			"byteOffset":697848,
-			"target":34962
-		},
-		{
-			"buffer":0,
-			"byteLength":16200,
-			"byteOffset":741048,
-			"target":34963
-		}
-	],
-	"samplers":[
-		{
-			"magFilter":9729,
-			"minFilter":9987
-		}
-	],
-	"buffers":[
-		{
-			"byteLength":757248,
-			"uri":"TwistedTree_4.bin"
-		}
-	]
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 20700,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 9176,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 9176,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 8100,
+      "normalized": false,
+      "byteOffset": 41400,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 5400,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC4",
+      "componentType": 5121,
+      "count": 9176,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 9176,
+      "max": [
+        13785,
+        28627,
+        14945
+      ],
+      "min": [
+        -12573,
+        -32767,
+        -15785
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC4",
+      "componentType": 5121,
+      "count": 5400,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 5400,
+      "max": [
+        18154,
+        32767,
+        19750
+      ],
+      "min": [
+        -18154,
+        -24607,
+        -19750
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 7
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 5400,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 8
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 57600,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 12789,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 28800
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 57600,
+      "byteLength": 36704,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 12792,
+          "byteLength": 18836,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 9176
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 94304,
+      "byteLength": 73408,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 31628,
+          "byteLength": 55555,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 9176
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 167712,
+      "byteLength": 21600,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 87184,
+          "byteLength": 11157,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 5400
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 189312,
+      "byteLength": 36704,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 98344,
+          "byteLength": 1553,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 9176
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 226016,
+      "byteLength": 73408,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 99900,
+          "byteLength": 41148,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 9176
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 299424,
+      "byteLength": 21600,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 141048,
+          "byteLength": 373,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 5400
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 321024,
+      "byteLength": 43200,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 141424,
+          "byteLength": 32944,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 5400
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 364224,
+      "byteLength": 21600,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 174368,
+          "byteLength": 16351,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 5400
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 1
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 2
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Bark_TwistedTree_Normal.ktx2"
+    },
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Bark_TwistedTree.ktx2"
+    },
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Leaves_TwistedTree_C.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "TwistedTree_4.bin",
+      "byteLength": 190720
+    },
+    {
+      "byteLength": 385824,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Bark_TwistedTree",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      },
+      "normalTexture": {
+        "index": 1
+      }
+    },
+    {
+      "name": "Leaves_TwistedTree",
+      "alphaMode": "MASK",
+      "alphaCutoff": 0.20000000298023224,
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 2
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "tree.041",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "TEXCOORD_0": 2,
+            "COLOR_0": 5,
+            "POSITION": 6
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 4,
+            "COLOR_0": 7,
+            "POSITION": 8,
+            "TEXCOORD_0": 9
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 3
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "TwistedTree_4",
+      "translation": [
+        0.8630857467651367,
+        9.167642824351788,
+        -1.4962515830993652
+      ],
+      "scale": [
+        9.369117505848408,
+        9.369117505848408,
+        9.369117505848408
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
 }

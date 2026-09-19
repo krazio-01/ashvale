@@ -1,1 +1,585 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "extensionsUsed": ["KHR_materials_specular"], "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Wall_ArchRound_Overgrown_Broken", "rotation": [0.7071068286895752, 0, 0, 0.7071068286895752], "scale": [1, 0.05973000079393387, 1]}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Main", "pbrMetallicRoughness": {"baseColorFactor": [0.15896087884902954, 0.16202940046787262, 0.1247718334197998, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Highlights", "pbrMetallicRoughness": {"baseColorFactor": [0.289932519197464, 0.29568690061569214, 0.22595453262329102, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"doubleSided": true, "extensions": {"KHR_materials_specular": {"specularColorFactor": [2.0, 2.0, 2.0]}}, "name": "Leaf_Texture", "pbrMetallicRoughness": {"baseColorFactor": [0.800000011920929, 0.800000011920929, 0.800000011920929, 1], "roughnessFactor": 0.5527864098548889, "baseColorTexture": {"index": 0}}}, {"doubleSided": true, "extensions": {"KHR_materials_specular": {"specularColorFactor": [2.0, 2.0, 2.0]}}, "name": "Green", "pbrMetallicRoughness": {"baseColorFactor": [0.800000011920929, 0.800000011920929, 0.800000011920929, 1], "roughnessFactor": 0.5527864098548889}}], "meshes": [{"name": "Cube.006", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, "indices": 3, "material": 0}, {"attributes": {"POSITION": 4, "NORMAL": 5, "TEXCOORD_0": 6}, "indices": 7, "material": 1}, {"attributes": {"POSITION": 8, "NORMAL": 9, "TEXCOORD_0": 10}, "indices": 11, "material": 2}, {"attributes": {"POSITION": 12, "NORMAL": 13, "TEXCOORD_0": 14}, "indices": 15, "material": 3}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 2610, "max": [1.9961416721343994, 0.9994008541107178, -0.002668793313205242], "min": [-1.997028112411499, -4.190529823303223, -3.9874372482299805], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 2610, "type": "VEC3"}, {"bufferView": 2, "componentType": 5126, "count": 2610, "type": "VEC2"}, {"bufferView": 3, "componentType": 5123, "count": 4380, "type": "SCALAR"}, {"bufferView": 4, "componentType": 5126, "count": 296, "max": [1.9204298257827759, 0.4570901393890381, -0.3105178475379944], "min": [-1.9817774295806885, -4.05671501159668, -3.6512808799743652], "type": "VEC3"}, {"bufferView": 5, "componentType": 5126, "count": 296, "type": "VEC3"}, {"bufferView": 6, "componentType": 5126, "count": 296, "type": "VEC2"}, {"bufferView": 7, "componentType": 5123, "count": 432, "type": "SCALAR"}, {"bufferView": 8, "componentType": 5126, "count": 156, "max": [1.9786008596420288, 0.8605268001556396, -0.1966683715581894], "min": [-1.9786008596420288, -4.29266881942749, -3.6630680561065674], "type": "VEC3"}, {"bufferView": 9, "componentType": 5126, "count": 156, "type": "VEC3"}, {"bufferView": 10, "componentType": 5126, "count": 156, "type": "VEC2"}, {"bufferView": 11, "componentType": 5123, "count": 234, "type": "SCALAR"}, {"bufferView": 12, "componentType": 5126, "count": 206, "max": [1.9606040716171265, 0.04496049880981445, -0.0032004578970372677], "min": [-1.9606040716171265, -3.4770989418029785, -3.9203388690948486], "type": "VEC3"}, {"bufferView": 13, "componentType": 5126, "count": 206, "type": "VEC3"}, {"bufferView": 14, "componentType": 5126, "count": 206, "type": "VEC2"}, {"bufferView": 15, "componentType": 5123, "count": 432, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 31320, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 31320, "byteOffset": 31320, "target": 34962}, {"buffer": 0, "byteLength": 20880, "byteOffset": 62640, "target": 34962}, {"buffer": 0, "byteLength": 8760, "byteOffset": 83520, "target": 34963}, {"buffer": 0, "byteLength": 3552, "byteOffset": 92280, "target": 34962}, {"buffer": 0, "byteLength": 3552, "byteOffset": 95832, "target": 34962}, {"buffer": 0, "byteLength": 2368, "byteOffset": 99384, "target": 34962}, {"buffer": 0, "byteLength": 864, "byteOffset": 101752, "target": 34963}, {"buffer": 0, "byteLength": 1872, "byteOffset": 102616, "target": 34962}, {"buffer": 0, "byteLength": 1872, "byteOffset": 104488, "target": 34962}, {"buffer": 0, "byteLength": 1248, "byteOffset": 106360, "target": 34962}, {"buffer": 0, "byteLength": 468, "byteOffset": 107608, "target": 34963}, {"buffer": 0, "byteLength": 2472, "byteOffset": 108076, "target": 34962}, {"buffer": 0, "byteLength": 2472, "byteOffset": 110548, "target": 34962}, {"buffer": 0, "byteLength": 1648, "byteOffset": 113020, "target": 34962}, {"buffer": 0, "byteLength": 864, "byteOffset": 114668, "target": 34963}], "buffers": [{"byteLength": 115532, "uri": "Wall_ArchRound_Overgrown_Broken.bin"}], "images": [{"uri": "Leaf_Texture.png"}], "textures": [{"source": 0}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 4380,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 2610,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 432,
+      "normalized": false,
+      "byteOffset": 8760,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 296,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 234,
+      "normalized": false,
+      "byteOffset": 9624,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 156,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 432,
+      "normalized": false,
+      "byteOffset": 10092,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 206,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 2610,
+      "max": [
+        24727,
+        32767,
+        24675
+      ],
+      "min": [
+        -24727,
+        -31503,
+        -24675
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 2610,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 296,
+      "max": [
+        23786,
+        26051,
+        20862
+      ],
+      "min": [
+        -24534,
+        -29847,
+        -20510
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 7
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 296,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 8
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 156,
+      "max": [
+        24506,
+        31047,
+        22270
+      ],
+      "min": [
+        -24498,
+        -32767,
+        -20654
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 9
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 156,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 10
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 206,
+      "max": [
+        24286,
+        20946,
+        24667
+      ],
+      "min": [
+        -24274,
+        -22666,
+        -23842
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 11
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 206,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 12
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 10956,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 1848,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 5478
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 10956,
+      "byteLength": 10440,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1848,
+          "byteLength": 2619,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 2610
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 21396,
+      "byteLength": 1184,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4468,
+          "byteLength": 343,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 296
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 22580,
+      "byteLength": 624,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4812,
+          "byteLength": 176,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 156
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 23204,
+      "byteLength": 824,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 4988,
+          "byteLength": 202,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 206
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 24028,
+      "byteLength": 20880,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 5192,
+          "byteLength": 14024,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 2610
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 44908,
+      "byteLength": 10440,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 19216,
+          "byteLength": 197,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 2610
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 55348,
+      "byteLength": 2368,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 19416,
+          "byteLength": 1438,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 296
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 57716,
+      "byteLength": 1184,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 20856,
+          "byteLength": 53,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 296
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 58900,
+      "byteLength": 1248,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 20912,
+          "byteLength": 688,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 156
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 60148,
+      "byteLength": 624,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 21600,
+          "byteLength": 369,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 156
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 60772,
+      "byteLength": 1648,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 21972,
+          "byteLength": 969,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 206
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 62420,
+      "byteLength": 824,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 22944,
+          "byteLength": 496,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 206
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "Leaf_Texture.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Wall_ArchRound_Overgrown_Broken.bin",
+      "byteLength": 23440
+    },
+    {
+      "byteLength": 63244,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.15896087884902954,
+          0.16202940046787262,
+          0.1247718334197998,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Highlights",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.289932519197464,
+          0.29568690061569214,
+          0.22595453262329102,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Leaf_Texture",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929,
+          1
+        ],
+        "roughnessFactor": 0.5527864098548889,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    },
+    {
+      "name": "Green",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.800000011920929,
+          0.800000011920929,
+          0.800000011920929,
+          1
+        ],
+        "roughnessFactor": 0.5527864098548889
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.006",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 8,
+            "TEXCOORD_0": 9
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 10,
+            "TEXCOORD_0": 11
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        },
+        {
+          "attributes": {
+            "NORMAL": 5,
+            "POSITION": 12,
+            "TEXCOORD_0": 13
+          },
+          "mode": 4,
+          "material": 2,
+          "indices": 4
+        },
+        {
+          "attributes": {
+            "NORMAL": 7,
+            "POSITION": 14,
+            "TEXCOORD_0": 15
+          },
+          "mode": 4,
+          "material": 3,
+          "indices": 6
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Wall_ArchRound_Overgrown_Broken",
+      "translation": [
+        -0.0004432201385498047,
+        1.9950533020392922,
+        -0.09835319425311835
+      ],
+      "rotation": [
+        0.7071068286895688,
+        0,
+        0,
+        0.7071067336835231
+      ],
+      "scale": [
+        2.646034836769104,
+        0.15804768413609993,
+        2.646035192287343
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}

@@ -1,1 +1,266 @@
-{"asset": {"generator": "Khronos glTF Blender I/O v5.2.40", "version": "2.0"}, "scene": 0, "scenes": [{"name": "Scene", "nodes": [0]}], "nodes": [{"mesh": 0, "name": "Pot3"}], "materials": [{"alphaMode": "OPAQUE", "doubleSided": true, "name": "Pot_Main", "pbrMetallicRoughness": {"baseColorFactor": [0.3626789152622223, 0.2465943545103073, 0.10028184950351715, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}, {"alphaMode": "OPAQUE", "doubleSided": true, "name": "Pot_Detail", "pbrMetallicRoughness": {"baseColorFactor": [0.4385388493537903, 0.09992167353630066, 0.058856524527072906, 1.0], "metallicFactor": 0, "roughnessFactor": 0.690034806728363}}], "meshes": [{"name": "Cube.104", "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}, {"attributes": {"POSITION": 3, "NORMAL": 4}, "indices": 5, "material": 1}]}], "accessors": [{"bufferView": 0, "componentType": 5126, "count": 624, "max": [0.23167188465595245, 0.8349438309669495, 0.23167188465595245], "min": [-0.23167188465595245, -0.0003777969104703516, -0.23167188465595245], "type": "VEC3"}, {"bufferView": 1, "componentType": 5126, "count": 624, "type": "VEC3"}, {"bufferView": 2, "componentType": 5123, "count": 2154, "type": "SCALAR"}, {"bufferView": 3, "componentType": 5126, "count": 32, "max": [0.18101593852043152, 0.6341180801391602, 0.18078972399234772], "min": [-0.18101593852043152, 0.5286708474159241, -0.18078972399234772], "type": "VEC3"}, {"bufferView": 4, "componentType": 5126, "count": 32, "type": "VEC3"}, {"bufferView": 5, "componentType": 5123, "count": 96, "type": "SCALAR"}], "bufferViews": [{"buffer": 0, "byteLength": 7488, "byteOffset": 0, "target": 34962}, {"buffer": 0, "byteLength": 7488, "byteOffset": 7488, "target": 34962}, {"buffer": 0, "byteLength": 4308, "byteOffset": 14976, "target": 34963}, {"buffer": 0, "byteLength": 384, "byteOffset": 19284, "target": 34962}, {"buffer": 0, "byteLength": 384, "byteOffset": 19668, "target": 34962}, {"buffer": 0, "byteLength": 192, "byteOffset": 20052, "target": 34963}], "buffers": [{"byteLength": 20244, "uri": "Pot3.bin"}]}
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 2154,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 624,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 96,
+      "normalized": false,
+      "byteOffset": 4308,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 32,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 624,
+      "max": [
+        18174,
+        32767,
+        18174
+      ],
+      "min": [
+        -18174,
+        -32767,
+        -18174
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 32,
+      "max": [
+        14201,
+        17010,
+        14185
+      ],
+      "min": [
+        -14201,
+        8737,
+        -14185
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 4500,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 848,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 2250
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 4500,
+      "byteLength": 2496,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 848,
+          "byteLength": 1109,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 624
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 6996,
+      "byteLength": 128,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1960,
+          "byteLength": 85,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 32
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 7124,
+      "byteLength": 4992,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2048,
+          "byteLength": 3379,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 624
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 12116,
+      "byteLength": 256,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 5428,
+          "byteLength": 228,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 32
+        }
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "Pot3.bin",
+      "byteLength": 5656
+    },
+    {
+      "byteLength": 12372,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "Pot_Main",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.3626789152622223,
+          0.2465943545103073,
+          0.10028184950351715,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    },
+    {
+      "name": "Pot_Detail",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0.4385388493537903,
+          0.09992167353630066,
+          0.058856524527072906,
+          1
+        ],
+        "roughnessFactor": 0.690034806728363,
+        "metallicFactor": 0
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "Cube.104",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 4
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        },
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 5
+          },
+          "mode": 4,
+          "material": 1,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Pot3",
+      "translation": [
+        0,
+        0.41728301702823956,
+        0
+      ],
+      "scale": [
+        0.4176608139387099,
+        0.4176608139387099,
+        0.4176608139387099
+      ],
+      "mesh": 0
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization"
+  ]
+}
