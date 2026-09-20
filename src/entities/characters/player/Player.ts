@@ -40,6 +40,7 @@ export class Player extends Character implements IWorldEntity {
     private readonly jumpLandSeconds: number;
     private verticalVelocity = 0;
     private facingYaw = 0;
+    private isSprinting = false;
     private secondsSinceGrounded = 0;
     private secondsSinceTakeoff = Number.POSITIVE_INFINITY;
     private secondsSinceLanded = Number.POSITIVE_INFINITY;
@@ -126,7 +127,8 @@ export class Player extends Character implements IWorldEntity {
             deltaSeconds,
             this.renderTranslation.x,
             this.renderTranslation.y,
-            this.renderTranslation.z
+            this.renderTranslation.z,
+            this.isSprinting
         );
         this.animator.update(deltaSeconds);
     }
@@ -170,7 +172,7 @@ export class Player extends Character implements IWorldEntity {
             .addScaledVector(forwardDirection, this.input.axis("backward", "forward"))
             .addScaledVector(rightDirection, this.input.axis("left", "right"));
 
-        const isSprinting = this.input.isPressed("sprint");
+        this.isSprinting = this.input.isPressed("sprint");
         const isGrounded = this.controller.computedGrounded();
 
         if (isGrounded && this.verticalVelocity <= 0) this.verticalVelocity = 0;
@@ -184,7 +186,7 @@ export class Player extends Character implements IWorldEntity {
             PLAYER.terminalVelocity
         );
 
-        const requestedSpeed = isSprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
+        const requestedSpeed = this.isSprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
         targetVelocity.copy(moveDirection);
         if (targetVelocity.lengthSq() > 0)
             targetVelocity.normalize().multiplyScalar(requestedSpeed);
@@ -198,7 +200,7 @@ export class Player extends Character implements IWorldEntity {
         if (isMoving)
             this.facingYaw = Math.atan2(this.horizontalVelocity.x, this.horizontalVelocity.z);
 
-        this.animator.setMotion(this.resolveMotion(isMoving, isSprinting), groundSpeed);
+        this.animator.setMotion(this.resolveMotion(isMoving, this.isSprinting), groundSpeed);
 
         this.controller.computeColliderMovement(this.collider, {
             x: this.horizontalVelocity.x * deltaSeconds,
