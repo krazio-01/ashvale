@@ -1,14 +1,15 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { Collider, Ray, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Vector3 } from "three";
-import type { Camera } from "three";
+import type { Camera, PerspectiveCamera } from "three";
 import { CAMERA } from "@/constants/characters";
-import { clamp } from "@/lib/helpers";
+import { clamp, lerp } from "@/lib/helpers";
+import { settings } from "@/settings/SettingsStore";
 
 const orbitDirection = new Vector3();
 
 export class PlayerCamera {
-    private readonly camera: Camera;
+    private readonly camera: PerspectiveCamera;
     private readonly physicsWorld: PhysicsWorld;
     private readonly ignoredCollider: Collider;
     private readonly sightRay: Ray;
@@ -16,6 +17,8 @@ export class PlayerCamera {
     private orbitYaw = 0;
     private orbitPitch = CAMERA.startPitch;
     private followDistance = CAMERA.targetFollowDistance;
+    private desiredFollowDistance = CAMERA.targetFollowDistance;
+    private speedBlend = 0;
     private hasPivot = false;
 
     constructor(
@@ -24,7 +27,7 @@ export class PlayerCamera {
         ignoredCollider: Collider,
         startYaw: number
     ) {
-        this.camera = camera;
+        this.camera = camera as PerspectiveCamera;
         this.physicsWorld = physicsWorld;
         this.ignoredCollider = ignoredCollider;
         this.orbitYaw = startYaw;
@@ -44,8 +47,21 @@ export class PlayerCamera {
         );
     }
 
-    follow(deltaSeconds: number, targetX: number, targetY: number, targetZ: number): void {
-        this.trackPivot(deltaSeconds, targetX, targetY + CAMERA.pivotHeight, targetZ);
+    follow(
+        deltaSeconds: number,
+        targetX: number,
+        targetY: number,
+        targetZ: number,
+        isSprinting: boolean
+    ): void {
+        const shoulderRightX = Math.cos(this.orbitYaw);
+        const shoulderRightZ = -Math.sin(this.orbitYaw);
+        this.trackPivot(
+            deltaSeconds,
+            targetX + shoulderRightX * CAMERA.shoulderOffset,
+            targetY + CAMERA.pivotHeight,
+            targetZ + shoulderRightZ * CAMERA.shoulderOffset
+        );
 
         const pitchHorizontalScale = Math.cos(this.orbitPitch);
         orbitDirection.set(
@@ -53,6 +69,16 @@ export class PlayerCamera {
             Math.sin(this.orbitPitch),
             Math.cos(this.orbitYaw) * pitchHorizontalScale
         );
+
+        const speedBlendFactor = 1 - Math.exp(-CAMERA.speedBlendSmoothing * deltaSeconds);
+        this.speedBlend += ((isSprinting ? 1 : 0) - this.speedBlend) * speedBlendFactor;
+        this.desiredFollowDistance = lerp(
+            CAMERA.targetFollowDistance,
+            CAMERA.sprintFollowDistance,
+            this.speedBlend
+        );
+        this.camera.fov = settings.fov + CAMERA.sprintFovBoost * this.speedBlend;
+        this.camera.updateProjectionMatrix();
 
         this.easeToUnobstructedDistance(deltaSeconds);
 
@@ -85,7 +111,7 @@ export class PlayerCamera {
 
         const hit = this.physicsWorld.castRay(
             this.sightRay,
-            CAMERA.targetFollowDistance,
+            this.desiredFollowDistance,
             true,
             undefined,
             undefined,
@@ -94,7 +120,7 @@ export class PlayerCamera {
 
         const unobstructedDistance = hit
             ? Math.max(hit.timeOfImpact - CAMERA.collisionPadding, CAMERA.minimumFollowDistance)
-            : CAMERA.targetFollowDistance;
+            : this.desiredFollowDistance;
 
         if (unobstructedDistance <= this.followDistance) {
             this.followDistance = unobstructedDistance;

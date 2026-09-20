@@ -4,7 +4,9 @@
     "private": true,
     "description": "A procedurally generated action-adventure realm built from any public GitHub repository.",
     "scripts": {
+        "predev": "tsx tools/TranscoderInstaller.ts",
         "dev": "next dev",
+        "predev:perf": "tsx tools/TranscoderInstaller.ts",
         "dev:perf": "NEXT_PUBLIC_ENABLE_PERF=true next dev",
         "prebuild": "tsx tools/TranscoderInstaller.ts",
         "build": "next build",
