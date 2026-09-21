@@ -1,10 +1,11 @@
+import type { Vector3Tuple } from "three";
 import { Golem } from "@/entities/characters/enemies/Golem";
 import { Gremlin } from "@/entities/characters/enemies/Gremlin";
 import { Sentinel } from "@/entities/characters/enemies/Sentinel";
 import { Wraith } from "@/entities/characters/enemies/Wraith";
 import { Enemy } from "@/entities/characters/enemies/Enemy";
 import { CharacterBody } from "@/entities/characters/CharacterBody";
-import { modelFor } from "@/entities/characters/enemies/EnemyModels";
+import { specFor } from "@/entities/characters/enemies/EnemyModels";
 import { EnemyArchetype } from "@/constants/characters";
 import { IChapterRegion } from "@/types/realm";
 import type { IWorldContext } from "@/types/world";
@@ -14,30 +15,25 @@ const BUILD_OUTPUT_DIRECTORY_PATTERN = /^(dist|build|out|\.next|target|bin)$/i;
 const TOOLING_DIRECTORY_PATTERN = /^(\.github|\.vscode|\.circleci|scripts|ci)$/i;
 
 export function spawnEnemyBody(
-    region: IChapterRegion,
+    archetype: EnemyArchetype,
     context: IWorldContext,
-    spawnPosition: [number, number, number]
+    spawnPosition: Vector3Tuple,
+    facingYaw: number
 ): CharacterBody {
-    const archetype = resolveArchetype(region);
-
-    return new CharacterBody(modelFor(archetype), context, spawnPosition);
+    return new CharacterBody(specFor(archetype), context, spawnPosition, facingYaw);
 }
 
 export function spawnEnemyPresence(
-    region: IChapterRegion,
+    archetype: EnemyArchetype,
     id: string,
     context: IWorldContext,
-    spawnPosition: [number, number, number]
+    spawnPosition: Vector3Tuple,
+    facingYaw: number
 ): { enemy: Enemy; body: CharacterBody } {
-    const archetype = resolveArchetype(region);
-    const enemy = spawnEnemy(archetype, id);
-    const body = new CharacterBody(modelFor(archetype), context, spawnPosition);
-
-    return { enemy, body };
-}
-
-export function spawnEnemyForRegion(region: IChapterRegion, id: string): Enemy {
-    return spawnEnemy(resolveArchetype(region), id);
+    return {
+        enemy: spawnEnemy(archetype, id),
+        body: spawnEnemyBody(archetype, context, spawnPosition, facingYaw),
+    };
 }
 
 export function spawnEnemy(archetype: EnemyArchetype, id: string): Enemy {
@@ -53,7 +49,7 @@ export function spawnEnemy(archetype: EnemyArchetype, id: string): Enemy {
     }
 }
 
-function resolveArchetype(region: IChapterRegion): EnemyArchetype {
+export function dominantArchetypeFor(region: IChapterRegion): EnemyArchetype {
     if (TEST_DIRECTORY_PATTERN.test(region.displayName)) return EnemyArchetype.Wraith;
     if (BUILD_OUTPUT_DIRECTORY_PATTERN.test(region.displayName)) return EnemyArchetype.Golem;
     if (TOOLING_DIRECTORY_PATTERN.test(region.displayName)) return EnemyArchetype.Gremlin;

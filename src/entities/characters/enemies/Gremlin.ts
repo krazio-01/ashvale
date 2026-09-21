@@ -1,11 +1,12 @@
 import { EnemyAction } from "@/constants/characters";
 import { Enemy } from "@/entities/characters/enemies/Enemy";
+import { metres } from "@/lib/helpers";
 
 const GREMLIN_MAX_HEALTH = 12;
 const GREMLIN_ATTACK_DAMAGE = 4;
-const GREMLIN_ATTACK_RANGE = 1.5;
-const GREMLIN_ENGAGE_RANGE = 8;
-const GREMLIN_FRENZIED_ENGAGE_RANGE = 16;
+const GREMLIN_ATTACK_RANGE = metres(1.6);
+const GREMLIN_ENGAGE_RANGE = metres(9);
+const GREMLIN_FRENZIED_ENGAGE_RANGE = metres(18);
 
 export class Gremlin extends Enemy {
     private isFrenzied = false;
