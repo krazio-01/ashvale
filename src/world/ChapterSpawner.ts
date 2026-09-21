@@ -4,8 +4,9 @@ import { TerrainSurface } from "@/world/terrain/TerrainSurface";
 import { GrassField } from "@/world/vegetation/GrassField";
 import { Player } from "@/entities/characters/player/Player";
 import { CharacterBody } from "@/entities/characters/CharacterBody";
-import { bossModel } from "@/entities/characters/bosses/BossModel";
+import { bossSpec } from "@/entities/characters/bosses/BossModel";
 import { spawnEnemyBody } from "@/entities/characters/enemies/EnemySpawner";
+import { placeRegionEnemies } from "@/world/EnemyPlacement";
 import { buildPropField, type ICorridorLane, type IRegionSite } from "@/world/props/PropField";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
 import {
@@ -26,9 +27,9 @@ import { buildSettlementLayout } from "@/world/settlement/SettlementLayout";
 import { SettlementColliders } from "@/world/settlement/SettlementColliders";
 import type { IPropGroup, IThemeManifest } from "@/types/theme";
 import type { SpawnProgressListener } from "@/types/world";
-import { PLAYER, SPAWNING } from "@/constants/characters";
+import { ENEMY_PLACEMENT, PLAYER, SPAWNING } from "@/constants/characters";
 import { TERRAIN } from "@/constants/world";
-import { FULL_TURN, createSeededRandom, hashString, yieldToBrowser } from "@/lib/helpers";
+import { createSeededRandom, hashString, yieldToBrowser } from "@/lib/helpers";
 import { TerrainEdgeBarrier, TerrainLedges } from "./terrain/TerrainFeatures";
 import {
     buildGroundDetailTexture,
@@ -63,7 +64,7 @@ export async function spawnChapterWorld(
     );
 
     await beginStage("Waking the inhabitants");
-    spawnRegionEnemies(world, chapter, terrain.groundHeightAt, terrain.settledRegionIds);
+    spawnRegionEnemies(world, chapter, terrain, positionsByRegionId);
 
     const player = spawnPlayer(world, camera, chapter, positionsByRegionId, terrain);
 
@@ -189,7 +190,7 @@ async function spawnTerrain(
     );
 
     await beginStage("Planting the woodland");
-    const propBuckets = buildPropField({
+    const { buckets: propBuckets, occupancy: propOccupancy } = buildPropField({
         manifest,
         heightMap,
         sites: regionSites,
@@ -226,6 +227,8 @@ async function spawnTerrain(
             heightMap.surfaceElevationAt(worldX - centerX, worldZ - centerZ),
         groundSteepnessAt: (worldX, worldZ) =>
             heightMap.steepnessAt(worldX - centerX, worldZ - centerZ),
+        propIsClear: (worldX, worldZ, radius) =>
+            propOccupancy.isClear(worldX - centerX, worldZ - centerZ, radius),
         settledRegionIds,
     };
 }
@@ -360,10 +363,14 @@ function spawnBoss(
     const bossPosition = positionsByRegionId.get(chapter.bossRegionId);
     if (!chapter.boss || !bossPosition) return;
 
+    const spec = bossSpec();
+
     world.addEntity(
-        new CharacterBody(bossModel(), world.context, [
+        new CharacterBody(spec, world.context, [
             bossPosition[0],
-            terrain.groundHeightAt(bossPosition[0], bossPosition[2]) + SPAWNING.bossSpawnHeight,
+            terrain.groundHeightAt(bossPosition[0], bossPosition[2]) +
+                spec.height / 2 +
+                SPAWNING.spawnClearanceBuffer,
             bossPosition[2],
         ])
     );
@@ -372,39 +379,38 @@ function spawnBoss(
 function spawnRegionEnemies(
     world: World,
     chapter: ChapterResponse,
-    groundHeightAt: GroundHeightLookup,
-    excludeRegionIds: Set<string>
+    terrain: ITerrainContext,
+    positionsByRegionId: Map<string, Vector3Tuple>
 ): void {
+    const playerSpawn = positionsByRegionId.get(chapter.spawnRegionId);
+
     for (const region of chapter.regions) {
         if (region.regionId === chapter.bossRegionId) continue;
-        if (excludeRegionIds.has(region.regionId)) continue;
-        spawnEnemyRing(world, region, groundHeightAt);
-    }
-}
+        if (terrain.settledRegionIds.has(region.regionId)) continue;
 
-function spawnEnemyRing(
-    world: World,
-    region: IChapterRegion,
-    groundHeightAt: GroundHeightLookup
-): void {
-    const enemyCount = Math.min(
-        Math.max(Math.floor(region.fileCount / SPAWNING.filesPerEnemy), 1),
-        SPAWNING.maximumEnemiesPerRegion
-    );
+        const placements = placeRegionEnemies(region, {
+            groundHeightAt: terrain.groundHeightAt,
+            groundSteepnessAt: terrain.groundSteepnessAt,
+            propIsClear: terrain.propIsClear,
+            clearance:
+                region.regionId === chapter.spawnRegionId && playerSpawn
+                    ? {
+                          x: playerSpawn[0],
+                          z: playerSpawn[2],
+                          radius: ENEMY_PLACEMENT.playerSpawnClearance,
+                      }
+                    : null,
+        });
 
-    const [width, depth] = region.floorSize;
-    const [x, , z] = region.worldPosition;
-
-    const radius = Math.min(width, depth) * SPAWNING.enemyRingRadiusFactor;
-    const angleStep = FULL_TURN / enemyCount;
-
-    for (let i = 0; i < enemyCount; i++) {
-        const angle = i * angleStep;
-        const enemyX = x + Math.cos(angle) * radius;
-        const enemyZ = z + Math.sin(angle) * radius;
-        const enemyY = groundHeightAt(enemyX, enemyZ) + SPAWNING.enemySpawnHeight;
-
-        world.addEntity(spawnEnemyBody(region, world.context, [enemyX, enemyY, enemyZ]));
+        for (const placement of placements)
+            world.addEntity(
+                spawnEnemyBody(
+                    placement.archetype,
+                    world.context,
+                    placement.position,
+                    placement.facingYaw
+                )
+            );
     }
 }
 
@@ -577,6 +583,7 @@ interface ITerrainContext {
     waterSurface: WaterSurface | null;
     groundHeightAt: GroundHeightLookup;
     groundSteepnessAt: GroundHeightLookup;
+    propIsClear: (worldX: number, worldZ: number, radius: number) => boolean;
     settledRegionIds: Set<string>;
 }
 

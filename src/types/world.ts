@@ -1,5 +1,5 @@
 import type { AnimationClip, BufferGeometry, Group, Material, Object3D, Vector3 } from "three";
-import type { World as PhysicsWorld, ColliderDesc } from "@dimforge/rapier3d-compat";
+import type { World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { AssetLibrary } from "@/world/assets/AssetLibrary";
 import type { IThemeEnvironment } from "@/types/theme";
@@ -20,10 +20,10 @@ export interface IWorldContext {
     readonly environment: IThemeEnvironment;
 }
 
-export interface ICharacterModel {
-    build(materialLibrary: MaterialLibrary): Object3D;
-    colliderDesc(): ColliderDesc;
-    dispose(): void;
+export interface ICharacterSpec {
+    modelPath: string;
+    height: number;
+    radius: number;
 }
 
 export interface IModelPart {
