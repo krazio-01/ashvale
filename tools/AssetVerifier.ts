@@ -33,9 +33,7 @@ export class AssetVerifier {
 
     private async runChecks(sourceRoot: string, outputRoot: string): Promise<boolean> {
         const files = listFilesRecursively(outputRoot);
-        const gltfPaths = files.filter(
-            (file) => file.endsWith(".gltf") && !this.isExemptPack(file, outputRoot)
-        );
+        const gltfPaths = files.filter((file) => file.endsWith(".gltf"));
 
         this.checkTextureBindings(gltfPaths, outputRoot);
         this.checkPackBudgets(files, outputRoot);
@@ -115,11 +113,6 @@ export class AssetVerifier {
         console.log(`texture bindings: checked ${gltfPaths.length} gltf`);
     }
 
-    private isExemptPack(file: string, root: string): boolean {
-        const pack = path.relative(root, file).split(path.sep)[0];
-        return ASSET_CONFIG.cookExemptPacks.includes(pack);
-    }
-
     private isValidKtx2(file: string): boolean {
         try {
             const descriptor = fs.openSync(file, "r");
@@ -147,10 +140,10 @@ export class AssetVerifier {
             const budget = PACK_BUDGETS_MB[pack];
             if (budget === undefined) continue;
 
-            const exempt = ASSET_CONFIG.cookExemptPacks.includes(pack);
-            const status = exempt ? "cook-exempt" : mb <= budget ? "ok" : "OVER BUDGET";
+            const isWithinBudget = mb <= budget;
+            const status = isWithinBudget ? "ok" : "OVER BUDGET";
             console.log(`  pack ${pack}: ${mb.toFixed(1)} / ${budget} MB (${status})`);
-            if (!exempt && mb > budget)
+            if (!isWithinBudget)
                 this.failures.push(`pack ${pack}: ${mb.toFixed(1)} MB exceeds ${budget} MB budget`);
         }
 
@@ -162,7 +155,7 @@ export class AssetVerifier {
     }
 
     private checkNormalMapEncoding(files: string[]): void {
-        const normalMaps = files.filter((file) => file.endsWith("_Normal.ktx2"));
+        const normalMaps = files.filter((file) => /_normal\.ktx2$/i.test(file));
         for (const file of normalMaps) {
             try {
                 const info = execFileSync("ktx", ["info", file], { encoding: "utf8" });

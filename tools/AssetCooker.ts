@@ -62,7 +62,6 @@ function scanImageDimensions(buffer: Buffer): IImageDimensions | undefined {
                 continue;
             }
 
-            // markers may be preceded by any number of 0xff fill bytes (ITU-T T.81 B.1.1.2)
             while (buffer[offset + 1] === 0xff) offset += 1;
 
             const marker = buffer[offset + 1];
@@ -78,12 +77,12 @@ function scanImageDimensions(buffer: Buffer): IImageDimensions | undefined {
             offset += 2 + buffer.readUInt16BE(offset + 2);
         }
     } catch {
-        // a truncated head buffer can run past its own end mid-marker; the caller
-        // retries against the full file rather than treating that as "not found"
+        return undefined;
     }
 
     return undefined;
 }
+
 
 function readImageDimensions(file: string): IImageDimensions {
     const dimensions =
@@ -184,9 +183,7 @@ export class AssetCooker {
         const files = listFilesRecursively(sourceRoot);
         if (files.length === 0) throw new Error(`source is empty: ${sourceRoot}`);
 
-        const gltfPaths = files.filter(
-            (file) => file.endsWith(".gltf") && !this.isExemptPack(file, sourceRoot)
-        );
+        const gltfPaths = files.filter((file) => file.endsWith(".gltf"));
         const rolesByTextureFile = resolveTextureRoles(gltfPaths);
 
         console.log(`source: ${sourceRoot} -> ${outputRoot}`);
@@ -202,9 +199,9 @@ export class AssetCooker {
         this.report(files, sourceRoot, outputRoot);
     }
 
-    private isExemptPack(file: string, root: string): boolean {
+    private isGeometryExemptPack(file: string, root: string): boolean {
         const pack = path.relative(root, file).split(path.sep)[0];
-        return ASSET_CONFIG.cookExemptPacks.includes(pack);
+        return pack !== undefined && ASSET_CONFIG.geometryExemptPacks.includes(pack);
     }
 
     private async encodeTextures(
@@ -267,7 +264,7 @@ export class AssetCooker {
 
     private copyPassthroughFiles(files: string[], sourceRoot: string, outputRoot: string): void {
         for (const file of files) {
-            if (!file.endsWith(".bin") && !this.isExemptPack(file, sourceRoot)) continue;
+            if (!file.endsWith(".bin") && !file.endsWith(".glb")) continue;
 
             const destinationPath = path.join(outputRoot, path.relative(sourceRoot, file));
             fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
@@ -286,7 +283,7 @@ export class AssetCooker {
             });
 
         const gltfPaths = listFilesRecursively(outputRoot).filter(
-            (file) => file.endsWith(".gltf") && !this.isExemptPack(file, outputRoot)
+            (file) => file.endsWith(".gltf") && !this.isGeometryExemptPack(file, outputRoot)
         );
 
         let nextIndex = 0;
