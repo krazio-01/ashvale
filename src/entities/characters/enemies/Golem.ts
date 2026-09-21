@@ -1,10 +1,11 @@
 import { EnemyAction } from "@/constants/characters";
 import { Enemy } from "@/entities/characters/enemies/Enemy";
+import { metres } from "@/lib/helpers";
 
 const GOLEM_MAX_HEALTH = 90;
 const GOLEM_ATTACK_DAMAGE = 18;
-const GOLEM_ATTACK_RANGE = 2;
-const GOLEM_ENGAGE_RANGE = 4;
+const GOLEM_ATTACK_RANGE = metres(2.6);
+const GOLEM_ENGAGE_RANGE = metres(7);
 const GOLEM_WIND_UP_TICKS = 2;
 
 export class Golem extends Enemy {

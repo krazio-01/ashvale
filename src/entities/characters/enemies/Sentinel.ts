@@ -1,11 +1,12 @@
 import { EnemyAction } from "@/constants/characters";
 import { Enemy } from "@/entities/characters/enemies/Enemy";
+import { metres } from "@/lib/helpers";
 
 const SENTINEL_MAX_HEALTH = 40;
 const SENTINEL_ATTACK_DAMAGE = 8;
-const SENTINEL_ATTACK_RANGE = 2;
-const SENTINEL_ENGAGE_RANGE = 8;
-const SENTINEL_DISENGAGE_RANGE = 3;
+const SENTINEL_ATTACK_RANGE = metres(2.1);
+const SENTINEL_ENGAGE_RANGE = metres(9);
+const SENTINEL_DISENGAGE_RANGE = metres(3.4);
 
 export class Sentinel extends Enemy {
     private hasJustAttacked = false;

@@ -1,4 +1,6 @@
 import {
+    AnimationClip,
+    Bone,
     Box3,
     BufferAttribute,
     Material,
@@ -10,14 +12,15 @@ import {
 } from "three";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { BufferGeometry, WebGLRenderer } from "three";
+import type { BufferGeometry, KeyframeTrack, WebGLRenderer } from "three";
 import { createGltfLoader } from "@/world/assets/GltfLoaderFactory";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { IThemeManifest } from "@/types/theme";
 import type { IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
-import { CHARACTER } from "@/constants/characters";
+import { CHARACTER, CREATURE, MOTION_CLIPS } from "@/constants/characters";
 
 const FOLIAGE_MATERIAL_PATTERN = /leaves|leaf|foliage/i;
+const USED_CLIP_NAMES = new Set(Object.values(MOTION_CLIPS).map((clip) => clip.clipName));
 
 export class AssetLibrary {
     private readonly templatesByPath = new Map<string, IModelTemplate>();
@@ -37,10 +40,13 @@ export class AssetLibrary {
             ]),
         ];
 
-        const [loadedModels, characterModel, clipLibraries] = await Promise.all([
+        const creatureModelPaths = [CREATURE.impModelPath, CREATURE.puglinModelPath];
+
+        const [loadedModels, characterModel, clipLibraries, creatureModels] = await Promise.all([
             Promise.all(uniqueModelPaths.map((modelPath) => loadPropScene(loader, modelPath))),
             loader.loadAsync(CHARACTER.modelPath),
             Promise.all(CHARACTER.clipLibraryPaths.map((path) => loader.loadAsync(path))),
+            Promise.all(creatureModelPaths.map((path) => loader.loadAsync(path))),
         ]);
 
         const unavailablePaths: string[] = [];
@@ -66,6 +72,18 @@ export class AssetLibrary {
             CHARACTER.modelPath,
             prepareSkinnedModel(characterModel, clipLibraries, materialLibrary)
         );
+
+        const creatureClipLibraries = [characterModel, ...clipLibraries];
+
+        for (const [index, modelPath] of creatureModelPaths.entries()) {
+            const creatureModel = creatureModels[index];
+            if (!creatureModel) continue;
+
+            library.skinnedModelsByPath.set(
+                modelPath,
+                prepareSkinnedModel(creatureModel, creatureClipLibraries, materialLibrary, true)
+            );
+        }
 
         return library;
     }
@@ -106,7 +124,8 @@ async function loadPropScene(
 export function prepareSkinnedModel(
     gltf: GLTF,
     clipLibraries: GLTF[],
-    materialLibrary: MaterialLibrary
+    materialLibrary: MaterialLibrary,
+    clipsAreForeign = false
 ): ISkinnedModel {
     gltf.scene.traverse((object) => {
         if (!(object instanceof SkinnedMesh)) return;
@@ -117,12 +136,62 @@ export function prepareSkinnedModel(
     });
 
     const bounds = new Box3().setFromObject(gltf.scene);
+    const mergedClips = [
+        ...gltf.animations,
+        ...clipLibraries.flatMap((library) => library.animations),
+    ].filter((clip) => USED_CLIP_NAMES.has(clip.name));
 
     return {
         scene: gltf.scene,
-        animations: [...gltf.animations, ...clipLibraries.flatMap((library) => library.animations)],
+        animations: retargetClips(mergedClips, gltf.scene, clipsAreForeign),
         height: bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y,
     };
+}
+
+const POSITION_VARIANCE_EPSILON = 1e-4;
+
+function hasVaryingValues(track: KeyframeTrack): boolean {
+    const values = track.values;
+    const stride = track.getValueSize();
+
+    if (!Number.isFinite(stride) || stride <= 0) return false;
+
+    for (let component = 0; component < stride; component += 1) {
+        const baseline = values[component] ?? 0;
+
+        for (let index = component; index < values.length; index += stride)
+            if (Math.abs((values[index] ?? 0) - baseline) > POSITION_VARIANCE_EPSILON) return true;
+    }
+
+    return false;
+}
+
+function retargetClips(
+    clips: AnimationClip[],
+    scene: Object3D,
+    clipsAreForeign: boolean
+): AnimationClip[] {
+    const boneNames = new Set<string>();
+    scene.traverse((object) => {
+        if (object instanceof Bone) boneNames.add(object.name);
+    });
+
+    if (boneNames.size === 0) return clips;
+
+    return clips.map((clip) => {
+        const tracks = clip.tracks.filter((track) => {
+            const separatorIndex = track.name.lastIndexOf(".");
+
+            if (!boneNames.has(track.name.slice(0, separatorIndex))) return false;
+            if (track.name.slice(separatorIndex + 1) !== "position") return true;
+
+            return !clipsAreForeign && hasVaryingValues(track);
+        });
+
+        return tracks.length === clip.tracks.length
+            ? clip
+            : new AnimationClip(clip.name, clip.duration, tracks);
+    });
 }
 
 export function flattenForInstancing(

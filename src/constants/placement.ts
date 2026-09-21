@@ -81,7 +81,6 @@ export const PROP_FIELD = {
 
     keepOut: {
         combatArenaRatio: 0.35,
-        enemySpawnClearance: 3,
         laneClearanceRatio: 1.05,
         chapterSpawnClearance: 7,
     },

@@ -49,19 +49,59 @@ export const CAMERA = {
 export const SPAWNING = {
     filesPerEnemy: 8,
     maximumEnemiesPerRegion: 4,
-    enemyRingRadiusFactor: 0.25,
-    enemySpawnHeight: 1.5,
+    spawnClearanceBuffer: metres(0.15),
     playerSpawnHeight: 2,
-    bossSpawnHeight: 2.5,
 };
 
 export const ENEMY = {
-    radius: 0.5,
-    height: 1.8,
+    sentinelHeight: metres(2.2),
+    sentinelRadius: metres(0.71),
+    golemHeight: metres(2.8),
+    golemRadius: metres(0.91),
+    gremlinHeight: metres(2.1),
+    gremlinRadius: metres(0.58),
+    wraithHeight: metres(2.4),
+    wraithRadius: metres(0.64),
+};
+
+export const ENEMY_PLACEMENT = {
+    campProbability: 0.7,
+    smallestCamp: 2,
+    largestCamp: 3,
+    campRadius: metres(3.2),
+    minimumMemberSpacing: metres(2.2),
+    minimumCampSpacing: metres(8),
+    regionEdgeMargin: metres(4),
+    maximumSteepness: 0.6,
+    playerSpawnClearance: metres(12),
+    spawnClearanceRegionFraction: 0.5,
+    propClearanceRadius: ENEMY.golemRadius + metres(0.3),
+    samplingAttempts: 12,
+    facingJitter: (25 * Math.PI) / 180,
+    dominantArchetypeShare: 0.6,
 };
 
 export const BOSS = {
-    radius: 1.4,
+    height: metres(3),
+    radius: metres(0.85),
+};
+
+export const WEAPON = {
+    swordModelPath: "/models/weapons/Sword.glb",
+    swordDamage: 14,
+    gripPosition: vec3(0, 0, 0),
+    gripRotation: vec3(0, 0, 0),
+    gripScale: 0.2,
+};
+
+export const NON_PLAYER = {
+    colliderOffset: 0.02,
+    maxSlopeClimbAngle: (50 * Math.PI) / 180,
+    minSlopeSlideAngle: (40 * Math.PI) / 180,
+    autostepMaxHeight: metres(0.3),
+    autostepMinWidth: metres(0.2),
+    snapToGroundDistance: metres(0.25),
+    terminalVelocity: -45,
 };
 
 export const PALETTE = {
@@ -89,6 +129,11 @@ export const CHARACTER = {
     clipLibraryPaths: ["/models/characters/UAL2_Standard.glb"],
     modelYawOffset: 0,
     playbackRateRange: pair(0.5, 2.5),
+};
+
+export const CREATURE = {
+    impModelPath: "/models/characters/Imp.gltf",
+    puglinModelPath: "/models/characters/Puglin.gltf",
 };
 
 const JUMP_RISE_SECONDS = PLAYER.jumpForce / Math.abs(WORLD.gravity);

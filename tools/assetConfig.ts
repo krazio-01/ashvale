@@ -10,10 +10,7 @@ export const ASSET_CONFIG = {
     transcoderSourceRoot: "node_modules/three/examples/jsm/libs/basis",
     transcoderFiles: ["basis_transcoder.js", "basis_transcoder.wasm"],
     maxTextureSize: 1024,
-    cookExemptPacks: ["characters"],
-    // Concurrent `ktx create` invocations were found to silently corrupt output under
-    // memory pressure (partial writes surviving a magic-byte check) even at low
-    // concurrency. Serial encoding is the only setting proven safe; see AssetCooker.ts.
+    geometryExemptPacks: ["characters"],
     encodeConcurrency: 1,
 };
 
@@ -22,7 +19,8 @@ export const PACK_BUDGETS_MB: Record<string, number> = {
     "medieval-village": 8,
     highlands: 6,
     architecture: 4,
-    characters: 16,
+    characters: 24,
+    weapons: 2,
 };
 
 export const GEOMETRY_DRIFT_TOLERANCE = 1e-3;

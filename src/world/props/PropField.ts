@@ -13,10 +13,14 @@ import { decorateWaterCourse } from "@/world/props/WaterEdgeDecor";
 import type { IFieldContext } from "@/world/props/PropPlacement";
 import type { IWaterCourse } from "@/world/water/WaterCourse";
 import { PROP_FIELD } from "@/constants/placement";
-import { SPAWNING } from "@/constants/characters";
 import { createSeededRandom } from "@/lib/helpers";
 
-export function buildPropField(input: IPropFieldInput): IPropGroup[][] {
+export interface IPropFieldResult {
+    buckets: IPropGroup[][];
+    occupancy: PropOccupancy;
+}
+
+export function buildPropField(input: IPropFieldInput): IPropFieldResult {
     const nextRandom = createSeededRandom(input.seed);
     const speciesByLayer = groupSpeciesByLayer(input.manifest.props);
 
@@ -56,7 +60,7 @@ export function buildPropField(input: IPropFieldInput): IPropGroup[][] {
             placement.scale
         );
 
-    return field.collector.toBuckets();
+    return { buckets: field.collector.toBuckets(), occupancy: field.occupancy };
 }
 
 function reserveExtraZones(field: IFieldContext, input: IPropFieldInput): void {
@@ -70,18 +74,12 @@ function reserveExtraZones(field: IFieldContext, input: IPropFieldInput): void {
 }
 
 function reserveGameplayZones(field: IFieldContext, input: IPropFieldInput): void {
-    const { combatArenaRatio, enemySpawnClearance, laneClearanceRatio, chapterSpawnClearance } =
-        PROP_FIELD.keepOut;
+    const { combatArenaRatio, laneClearanceRatio, chapterSpawnClearance } = PROP_FIELD.keepOut;
 
     for (const site of input.sites) {
         const shortestSpan = Math.min(site.halfWidth, site.halfDepth) * 2;
-        const enemyRingReach = shortestSpan * SPAWNING.enemyRingRadiusFactor + enemySpawnClearance;
 
-        field.occupancy.reserve(
-            site.centerX,
-            site.centerZ,
-            Math.max(shortestSpan * combatArenaRatio, enemyRingReach)
-        );
+        field.occupancy.reserve(site.centerX, site.centerZ, shortestSpan * combatArenaRatio);
     }
 
     for (const lane of input.lanes)
