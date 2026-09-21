@@ -1,7 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { Collider, KinematicCharacterController, RigidBody } from "@dimforge/rapier3d-compat";
-import { Group, Vector3 } from "three";
-import type { Camera, Vector3Tuple } from "three";
+import { Group, Mesh, Vector3 } from "three";
+import type { Camera, Object3D, Vector3Tuple } from "three";
 import { clone as cloneSkinnedModel } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { Character } from "@/entities/characters/Character";
 import { CharacterAnimator } from "@/entities/characters/CharacterAnimator";
@@ -9,8 +9,8 @@ import { PlayerInput } from "@/entities/characters/player/PlayerInput";
 import { PlayerCamera } from "@/entities/characters/player/PlayerCamera";
 import type { IWeapon } from "@/types/entities";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
-import { CAMERA, CHARACTER, CharacterMotion, PLAYER } from "@/constants/characters";
-import { WORLD } from "@/constants/world";
+import { CAMERA, CHARACTER, CharacterMotion, PLAYER, WEAPON } from "@/constants/characters";
+import { COLLISION_GROUPS, WORLD } from "@/constants/world";
 import { FULL_TURN } from "@/lib/helpers";
 import { settings } from "@/settings/SettingsStore";
 
@@ -23,7 +23,7 @@ const mouseDelta = { x: 0, y: 0 };
 export class Player extends Character implements IWorldEntity {
     readonly sceneObject: Group;
 
-    equippedWeapon: IWeapon | null = null;
+    equippedWeapon: IWeapon | null = { name: "Sword", damage: WEAPON.swordDamage };
 
     private readonly context: IWorldContext;
     private readonly input = new PlayerInput();
@@ -77,7 +77,9 @@ export class Player extends Character implements IWorldEntity {
         );
 
         this.collider = context.physicsWorld.createCollider(
-            RAPIER.ColliderDesc.capsule(cylinderLength / 2, PLAYER.radius),
+            RAPIER.ColliderDesc.capsule(cylinderLength / 2, PLAYER.radius).setCollisionGroups(
+                COLLISION_GROUPS.character
+            ),
             this.rigidBody
         );
 
@@ -149,8 +151,26 @@ export class Player extends Character implements IWorldEntity {
         modelInstance.position.y = -PLAYER.height / 2;
         modelInstance.rotation.y = CHARACTER.modelYawOffset;
         this.sceneObject.add(modelInstance);
+        this.attachWeapon(modelInstance);
 
         return new CharacterAnimator(modelInstance, skinnedModel.animations);
+    }
+
+    private attachWeapon(modelInstance: Object3D): void {
+        const grip = modelInstance.getObjectByName("hand_r");
+        if (!grip) throw new Error("no hand_r bone on the player model");
+
+        const template = this.context.assetLibrary.getTemplate(WEAPON.swordModelPath);
+        if (!template) throw new Error(`sword model not loaded: ${WEAPON.swordModelPath}`);
+
+        for (const part of template.parts) {
+            const swordPart = new Mesh(part.geometry, part.material);
+            swordPart.position.fromArray(WEAPON.gripPosition);
+            swordPart.rotation.fromArray(WEAPON.gripRotation);
+            swordPart.scale.setScalar(WEAPON.gripScale);
+            swordPart.castShadow = true;
+            grip.add(swordPart);
+        }
     }
 
     private applyMouseLook(): void {
