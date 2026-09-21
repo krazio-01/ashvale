@@ -14,6 +14,13 @@ export const WORLD = {
     maximumFrameDelta: 0.25,
 };
 
+const WORLD_LAYER = 0x0001;
+const CHARACTER_LAYER = 0x0002;
+
+export const COLLISION_GROUPS = {
+    character: (CHARACTER_LAYER << 16) | WORLD_LAYER,
+};
+
 export const TERRAIN = {
     targetCellSize: 4,
     minimumResolution: 64,
