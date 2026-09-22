@@ -4,8 +4,8 @@ import { metres } from "@/lib/helpers";
 
 const WRAITH_MAX_HEALTH = 24;
 const WRAITH_ATTACK_DAMAGE = 6;
-const WRAITH_ATTACK_RANGE = metres(6.5);
-const WRAITH_ENGAGE_RANGE = metres(11);
+const WRAITH_ATTACK_RANGE = metres(5);
+const WRAITH_ENGAGE_RANGE = metres(24);
 const WRAITH_RETREAT_RANGE = metres(3.4);
 
 export class Wraith extends Enemy {
@@ -23,5 +23,9 @@ export class Wraith extends Enemy {
 
     get attackDamage(): number {
         return WRAITH_ATTACK_DAMAGE;
+    }
+
+    get attackRange(): number {
+        return WRAITH_ATTACK_RANGE;
     }
 }
