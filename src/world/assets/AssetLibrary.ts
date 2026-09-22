@@ -9,6 +9,7 @@ import {
     Object3D,
     SkinnedMesh,
     Vector3,
+    VectorKeyframeTrack,
 } from "three";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -68,10 +69,12 @@ export class AssetLibrary {
                 `[AssetLibrary] ${unavailablePaths.length} prop model(s) failed to load and will not render:\n  ${unavailablePaths.join("\n  ")}`
             );
 
-        library.skinnedModelsByPath.set(
-            CHARACTER.modelPath,
-            prepareSkinnedModel(characterModel, clipLibraries, materialLibrary)
+        const preparedCharacterModel = prepareSkinnedModel(
+            characterModel,
+            clipLibraries,
+            materialLibrary
         );
+        library.skinnedModelsByPath.set(CHARACTER.modelPath, preparedCharacterModel);
 
         const creatureClipLibraries = [characterModel, ...clipLibraries];
 
@@ -81,7 +84,13 @@ export class AssetLibrary {
 
             library.skinnedModelsByPath.set(
                 modelPath,
-                prepareSkinnedModel(creatureModel, creatureClipLibraries, materialLibrary, true)
+                prepareSkinnedModel(
+                    creatureModel,
+                    creatureClipLibraries,
+                    materialLibrary,
+                    true,
+                    preparedCharacterModel.height
+                )
             );
         }
 
@@ -125,7 +134,8 @@ export function prepareSkinnedModel(
     gltf: GLTF,
     clipLibraries: GLTF[],
     materialLibrary: MaterialLibrary,
-    clipsAreForeign = false
+    clipsAreForeign = false,
+    mannequinHeight = 0
 ): ISkinnedModel {
     gltf.scene.traverse((object) => {
         if (!(object instanceof SkinnedMesh)) return;
@@ -136,6 +146,8 @@ export function prepareSkinnedModel(
     });
 
     const bounds = new Box3().setFromObject(gltf.scene);
+    const height = bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y;
+    const foreignScaleFactor = clipsAreForeign && mannequinHeight > 0 ? height / mannequinHeight : 1;
     const mergedClips = [
         ...gltf.animations,
         ...clipLibraries.flatMap((library) => library.animations),
@@ -143,8 +155,8 @@ export function prepareSkinnedModel(
 
     return {
         scene: gltf.scene,
-        animations: retargetClips(mergedClips, gltf.scene, clipsAreForeign),
-        height: bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y,
+        animations: retargetClips(mergedClips, gltf.scene, clipsAreForeign, foreignScaleFactor),
+        height,
     };
 }
 
@@ -169,29 +181,60 @@ function hasVaryingValues(track: KeyframeTrack): boolean {
 function retargetClips(
     clips: AnimationClip[],
     scene: Object3D,
-    clipsAreForeign: boolean
+    clipsAreForeign: boolean,
+    foreignScaleFactor: number
 ): AnimationClip[] {
-    const boneNames = new Set<string>();
+    const boneRestPositions = new Map<string, Vector3>();
     scene.traverse((object) => {
-        if (object instanceof Bone) boneNames.add(object.name);
+        if (object instanceof Bone) boneRestPositions.set(object.name, object.position.clone());
     });
 
-    if (boneNames.size === 0) return clips;
+    if (boneRestPositions.size === 0) return clips;
 
     return clips.map((clip) => {
-        const tracks = clip.tracks.filter((track) => {
+        const tracks: KeyframeTrack[] = [];
+
+        for (const track of clip.tracks) {
             const separatorIndex = track.name.lastIndexOf(".");
+            const boneName = track.name.slice(0, separatorIndex);
+            const restPosition = boneRestPositions.get(boneName);
 
-            if (!boneNames.has(track.name.slice(0, separatorIndex))) return false;
-            if (track.name.slice(separatorIndex + 1) !== "position") return true;
+            if (!restPosition) continue;
+            if (track.name.slice(separatorIndex + 1) !== "position") {
+                tracks.push(track);
+                continue;
+            }
+            if (!hasVaryingValues(track)) continue;
 
-            return !clipsAreForeign && hasVaryingValues(track);
-        });
+            tracks.push(
+                clipsAreForeign
+                    ? remapPositionTrack(track, restPosition, foreignScaleFactor)
+                    : track
+            );
+        }
 
         return tracks.length === clip.tracks.length
             ? clip
             : new AnimationClip(clip.name, clip.duration, tracks);
     });
+}
+
+function remapPositionTrack(
+    track: KeyframeTrack,
+    restPosition: Vector3,
+    scaleFactor: number
+): KeyframeTrack {
+    const rest = [restPosition.x, restPosition.y, restPosition.z];
+    const baseline = [track.values[0] ?? 0, track.values[1] ?? 0, track.values[2] ?? 0];
+    const values = new Float32Array(track.values.length);
+
+    for (let index = 0; index < values.length; index += 1) {
+        const component = index % 3;
+        values[index] =
+            (rest[component] ?? 0) + ((track.values[index] ?? 0) - (baseline[component] ?? 0)) * scaleFactor;
+    }
+
+    return new VectorKeyframeTrack(track.name, track.times, values);
 }
 
 export function flattenForInstancing(
