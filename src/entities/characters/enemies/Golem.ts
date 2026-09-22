@@ -4,8 +4,8 @@ import { metres } from "@/lib/helpers";
 
 const GOLEM_MAX_HEALTH = 90;
 const GOLEM_ATTACK_DAMAGE = 18;
-const GOLEM_ATTACK_RANGE = metres(2.6);
-const GOLEM_ENGAGE_RANGE = metres(7);
+const GOLEM_ATTACK_RANGE = metres(1.1);
+const GOLEM_ENGAGE_RANGE = metres(16);
 const GOLEM_WIND_UP_TICKS = 2;
 
 export class Golem extends Enemy {
@@ -28,12 +28,17 @@ export class Golem extends Enemy {
 
         this.ticksInAttackRange++;
 
-        return this.ticksInAttackRange >= GOLEM_WIND_UP_TICKS
-            ? EnemyAction.Attack
-            : EnemyAction.Idle;
+        if (this.ticksInAttackRange < GOLEM_WIND_UP_TICKS) return EnemyAction.Idle;
+
+        this.ticksInAttackRange = 0;
+        return EnemyAction.Attack;
     }
 
     get attackDamage(): number {
         return GOLEM_ATTACK_DAMAGE;
+    }
+
+    get attackRange(): number {
+        return GOLEM_ATTACK_RANGE;
     }
 }

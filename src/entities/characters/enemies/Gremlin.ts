@@ -4,9 +4,9 @@ import { metres } from "@/lib/helpers";
 
 const GREMLIN_MAX_HEALTH = 12;
 const GREMLIN_ATTACK_DAMAGE = 4;
-const GREMLIN_ATTACK_RANGE = metres(1.6);
-const GREMLIN_ENGAGE_RANGE = metres(9);
-const GREMLIN_FRENZIED_ENGAGE_RANGE = metres(18);
+const GREMLIN_ATTACK_RANGE = metres(0.7);
+const GREMLIN_ENGAGE_RANGE = metres(20);
+const GREMLIN_FRENZIED_ENGAGE_RANGE = metres(35);
 
 export class Gremlin extends Enemy {
     private isFrenzied = false;
@@ -31,5 +31,9 @@ export class Gremlin extends Enemy {
 
     get attackDamage(): number {
         return GREMLIN_ATTACK_DAMAGE;
+    }
+
+    get attackRange(): number {
+        return GREMLIN_ATTACK_RANGE;
     }
 }
