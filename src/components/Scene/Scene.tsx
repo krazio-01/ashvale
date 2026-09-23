@@ -20,8 +20,10 @@ import PerformanceOverlay from "../PerformanceOverlay";
 import { useFrameLimit } from "@/hooks/useFrameLimit";
 import { useRenderPixelRatio } from "@/hooks/useRenderPixelRatio";
 import { usePointerLock } from "@/hooks/usePointerLock";
-import { useFov } from "@/hooks/useFov";
-import { FrameRateMeter } from "@/components/Hud/FrameRateMeter";
+import { settings } from "@/settings/SettingsStore";
+import { FrameRateMeter } from "@/components/FrameRateMeter/FrameRateMeter";
+import { AnimationFrameLoop } from "@/components/AnimationFrameLoop/AnimationFrameLoop";
+import { Hud } from "@/components/Hud/Hud";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
 import "./scene.scss";
 
@@ -104,7 +106,6 @@ const WorldRuntime = ({
 
 const FrameLimitDriver = () => {
     useFrameLimit();
-    useFov();
     return null;
 };
 
@@ -197,7 +198,7 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
                 frameloop="never"
                 dpr={pixelRatio}
                 camera={{
-                    fov: CAMERA.fov,
+                    fov: settings.fov,
                     near: CAMERA.near,
                     far: CAMERA.far,
                     position: CAMERA.startPosition,
@@ -225,6 +226,9 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
             </Canvas>
 
             <FrameRateMeter />
+            <AnimationFrameLoop>
+                <Hud />
+            </AnimationFrameLoop>
 
             {!isPaused && !spawnStage && (
                 <div className="scene-menu-hint">

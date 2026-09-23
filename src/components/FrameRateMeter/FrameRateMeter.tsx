@@ -2,8 +2,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useSettings } from "@/settings/SettingsStore";
 import { getRenderedFrameCount } from "@/hooks/useFrameLimit";
+import type { CSSProperties } from "react";
+import "./frameRateMeter.scss";
 
 const SAMPLE_WINDOW_MS = 500;
+const GLASS_BLUR: CSSProperties = {
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
+};
 
 export const FrameRateMeter = () => {
     const { showFps } = useSettings();
@@ -38,31 +44,12 @@ export const FrameRateMeter = () => {
 
     if (!showFps) return null;
 
+    const tier = fps < 30 ? "struggling" : fps < 55 ? "steady" : "smooth";
+
     return (
-        <div
-            style={{
-                position: "fixed",
-                top: "1rem",
-                left: "1rem",
-                zIndex: 90,
-                pointerEvents: "none",
-                fontFamily: "var(--font-geist-mono), monospace",
-                fontSize: "0.8rem",
-                fontWeight: 600,
-                color: fps < 30 ? "#ff5555" : fps < 55 ? "#ffaa00" : "#55ff99",
-                background: "rgba(10, 8, 16, 0.75)",
-                padding: "0.3rem 0.65rem",
-                borderRadius: "4px",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                backdropFilter: "blur(8px)",
-                letterSpacing: "0.04em",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.35rem",
-            }}
-        >
+        <div className="frame-rate-meter" data-tier={tier} style={GLASS_BLUR}>
             <span>{fps}</span>
-            <span style={{ fontSize: "0.65rem", opacity: 0.6 }}>FPS</span>
+            <span className="frame-rate-unit">FPS</span>
         </div>
     );
 };
