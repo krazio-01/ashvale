@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { WEAPON } from "@/constants/characters";
+import { WEAPONS } from "@/constants/weapons";
 import { ChapterSeason, ChapterTheme } from "@/types/realm";
 import type {
     ISeasonProfile,
@@ -51,7 +51,7 @@ export function resolveThemeManifest(theme: ChapterTheme, season: ChapterSeason)
         environment: applySeasonToEnvironment(biomeManifest.environment, SEASON_PROFILES[season]),
         extraPreloadModelPaths: [
             ...(biomeManifest.extraPreloadModelPaths ?? []),
-            WEAPON.swordModelPath,
+            ...Object.values(WEAPONS).map((weapon) => weapon.modelPath),
         ],
     };
 

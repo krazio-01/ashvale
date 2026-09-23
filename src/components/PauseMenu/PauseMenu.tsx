@@ -143,11 +143,7 @@ export const PauseMenu = ({
                 </nav>
 
                 <div className="pause-menu-body">
-                    <SettingsPanel
-                        section={activeSection}
-                        values={draft}
-                        onChange={handleChange}
-                    />
+                    <SettingsPanel section={activeSection} values={draft} onChange={handleChange} />
                 </div>
 
                 <footer className="pause-menu-footer">
@@ -180,7 +176,11 @@ export const PauseMenu = ({
                         >
                             Save changes
                         </button>
-                        <button type="button" className="btn-quiet" onClick={() => attemptClose(onResume)}>
+                        <button
+                            type="button"
+                            className="btn-quiet"
+                            onClick={() => attemptClose(onResume)}
+                        >
                             {dismissLabel}
                         </button>
                     </div>
