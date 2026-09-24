@@ -1,15 +1,13 @@
-import { metres } from "@/lib/helpers";
-import type { ImpactTier } from "@/types/combat";
-
-const degrees = (value: number): number => (value * Math.PI) / 180;
+import { degrees, metres } from "@/lib/helpers";
+import type { ImpactTier, ISlowMotionProfile } from "@/types/combat";
 
 export const COMBAT_TIMING = {
     inputBufferSeconds: 0.3,
+    inputQueueCapacity: 3,
     perfectDodgeSeconds: 0.12,
-    evadeTapSeconds: 0.2,
     maxChargeSeconds: 1.2,
     chargeDamageBonus: 0.8,
-    streakWindowSeconds: 0.9,
+    streakWindowSeconds: 1.6,
     hitFlashSeconds: 0.12,
     parriedStaggerSeconds: 1.1,
     respawnDelaySeconds: 2.5,
@@ -21,23 +19,24 @@ export const COMBAT_TIMING = {
     deathFade: 0.1,
 };
 
-export const HITSTOP_SECONDS: Record<ImpactTier, number> = {
-    light: 0.06,
-    heavy: 0.11,
-    finisher: 0.14,
+export const MOVEMENT = {
+    warpMaxSpeed: metres(8),
+    ledgeSnapDistance: metres(0.4),
 };
 
-export const ATTACKER_HITSTOP_SECONDS: Record<ImpactTier, number> = {
-    light: 0.015,
-    heavy: 0.11,
-    finisher: 0.14,
+export const HITSTOP = {
+    timeScale: 0.05,
+    frameSeconds: 1 / 60,
+    frames: {
+        light: { attacker: 0, defender: 3 },
+        heavy: { attacker: 5, defender: 6 },
+        finisher: { attacker: 7, defender: 8 },
+    } satisfies Record<ImpactTier, { attacker: number; defender: number }>,
 };
 
 export const SLOW_MOTION = {
-    perfectDodge: { scale: 0.3, seconds: 0.55 },
-    finisherKill: { scale: 0.45, seconds: 0.35 },
-    lastKill: { scale: 0.25, seconds: 0.8 },
-};
+    perfectDodge: { scale: 0.4, seconds: 0.3, rampInSeconds: 0.03, rampOutSeconds: 0.12 },
+} satisfies Record<string, ISlowMotionProfile>;
 
 export const FOCUS = {
     perPerfectDodge: 1,
@@ -62,13 +61,18 @@ export const TARGETING = {
 };
 
 export const FINISHER_RULES = {
-    backstabRange: metres(2.2),
+    backstabReach: metres(1.2),
     backstabConeCos: Math.cos(degrees(35)),
-    executionRange: metres(2.5),
-    executionHealthFraction: 0.2,
-    streakHealthFraction: 0.5,
-    streakRange: metres(4),
-    alignSeconds: 0.12,
+    executionReach: metres(1.2),
+    streakReach: metres(3.5),
+    basicExecutionHealthFraction: 0.5,
+    toughExecutionHealthFraction: 0.25,
+    contactGap: metres(0.05),
+    syncSeconds: 0.2,
+    syncMaxShift: metres(0.35),
+    approachSpeed: metres(9),
+    approachMaxSeconds: 0.45,
+    recoverAt: 0.82,
 };
 
 export const KNOCKBACK_DECAY = 10;
@@ -85,7 +89,22 @@ export const LOCK_CAMERA = {
     yawSmoothing: 8,
     pitch: 0.28,
     pitchSmoothing: 5,
-    shotSmoothing: 6,
+};
+
+export const KILL_CAMERA = {
+    blendInSeconds: 0.35,
+    blendOutSeconds: 0.6,
+    baseDistance: metres(2.4),
+    focusLift: metres(0.15),
+    occlusionPullInSmoothing: 18,
+    fallbackPitch: 0.2,
+    fallbackDistance: metres(2.2),
+    candidates: [
+        { yawOffset: Math.PI * 0.75, pitch: 0.2, distanceScale: 0.9, penalty: 0 },
+        { yawOffset: -Math.PI * 0.75, pitch: 0.2, distanceScale: 0.9, penalty: 0 },
+        { yawOffset: Math.PI / 2, pitch: 0.12, distanceScale: 1.15, penalty: 0.35 },
+        { yawOffset: -Math.PI / 2, pitch: 0.12, distanceScale: 1.15, penalty: 0.35 },
+    ],
 };
 
 export const INPUT_BINDINGS = {
