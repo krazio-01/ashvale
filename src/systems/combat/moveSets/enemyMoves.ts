@@ -1,0 +1,78 @@
+import { CLIP } from "@/constants/clips";
+import { metres } from "@/lib/helpers";
+import type { IMoveSet } from "@/types/combat";
+
+export const ENEMY_MOVES: IMoveSet = {
+    moves: {
+        enemy_punch: {
+            id: "enemy_punch",
+            clip: CLIP.enemyPunch,
+            tags: ["light"],
+            playbackRate: 1,
+            fadeSeconds: 0.08,
+            staminaCost: 0,
+            focusGain: 0,
+            spendsFocus: false,
+            rootMotionScale: 1,
+            motion: "rootMotion",
+            requires: "any",
+            telegraphAt: 0.15,
+            tracking: { from: 0, to: 0.38, turnRate: 6 },
+            hits: [
+                {
+                    from: 0.42,
+                    to: 0.58,
+                    shape: { kind: "socket", bone: "hand_r", radius: metres(0.35) },
+                    damageScale: 1,
+                    poiseDamage: 18,
+                    impact: "light",
+                    knockback: 4,
+                    parryable: true,
+                },
+            ],
+            cancels: [{ from: 0.85, to: 1, into: ["movement"] }],
+        },
+        enemy_swipe: {
+            id: "enemy_swipe",
+            clip: CLIP.enemySwipe,
+            tags: ["heavy"],
+            playbackRate: 1,
+            fadeSeconds: 0.1,
+            staminaCost: 0,
+            focusGain: 0,
+            spendsFocus: false,
+            rootMotionScale: 1,
+            motion: "rootMotion",
+            requires: "any",
+            telegraphAt: 0.12,
+            armor: { from: 0.2, to: 0.62 },
+            tracking: { from: 0, to: 0.42, turnRate: 5 },
+            hits: [
+                {
+                    from: 0.45,
+                    to: 0.62,
+                    shape: { kind: "socket", bone: "hand_r", radius: metres(0.45) },
+                    damageScale: 1.6,
+                    poiseDamage: 40,
+                    impact: "heavy",
+                    knockback: 8,
+                    parryable: true,
+                },
+            ],
+            cancels: [{ from: 0.88, to: 1, into: ["movement"] }],
+        },
+    },
+    entry: { light: "enemy_punch", heavy: "enemy_swipe" },
+    sprintEntry: {},
+    stationaryEntry: {},
+    airEntry: {},
+    reactions: {
+        flinch: CLIP.reactFlinch,
+        knockback: CLIP.reactKnockback,
+        knockdown: CLIP.reactKnockdown,
+        stagger: CLIP.reactStagger,
+        parried: CLIP.reactParried,
+        finisherDeath: CLIP.deathForward,
+        deaths: [CLIP.deathForward, CLIP.deathBackward],
+    },
+};
