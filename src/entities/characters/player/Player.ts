@@ -1,291 +1,576 @@
-import RAPIER from "@dimforge/rapier3d-compat";
-import type { Collider, KinematicCharacterController, RigidBody } from "@dimforge/rapier3d-compat";
-import { Group, Mesh, Vector3 } from "three";
-import type { Camera, Object3D, Vector3Tuple } from "three";
-import { clone as cloneSkinnedModel } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { Character } from "@/entities/characters/Character";
-import { CharacterAnimator } from "@/entities/characters/CharacterAnimator";
-import { PlayerInput } from "@/entities/characters/player/PlayerInput";
-import { PlayerCamera } from "@/entities/characters/player/PlayerCamera";
-import type { IWeapon } from "@/types/entities";
-import type { IWorldContext, IWorldEntity } from "@/types/world";
-import { CAMERA, CHARACTER, CharacterMotion, PLAYER, WEAPON } from "@/constants/characters";
-import { COLLISION_GROUPS, WORLD } from "@/constants/world";
-import { FULL_TURN } from "@/lib/helpers";
+import { Vector3 } from "three";
+import type { Camera, Vector3Tuple } from "three";
+import type { IMotorSpec } from "@/systems/combat/core/CharacterMotor";
+import { CombatCharacter } from "@/systems/combat/core/CombatCharacter";
+import {
+    finisherKindFor,
+    isBehind,
+    selectFinisher,
+} from "@/systems/combat/finishers/FinisherSelector";
+import { FINISHERS } from "@/systems/combat/finishers/finishers";
+import { pairCentreDistance } from "@/systems/combat/finishers/PairAlignment";
+import { FinisherTrigger } from "@/systems/combat/finishers/FinisherTrigger";
+import { PairedAnimationDirector } from "@/systems/combat/finishers/PairedAnimationDirector";
+import {
+    PLAYER_CROUCH_LOCOMOTION,
+    PLAYER_FREE_LOCOMOTION,
+    PLAYER_STRAFE_LOCOMOTION,
+} from "@/systems/combat/actions/locomotion";
+import { PLAYER_STARTING_WEAPON } from "@/constants/weapons";
+import { PLAYER_MOVE_IDS, PLAYER_MOVES } from "@/systems/combat/moveSets/playerMoves";
+import { cycleTarget, selectTarget } from "@/systems/combat/services/TargetSelector";
+import { FootstepNoise } from "@/entities/characters/player/FootstepNoise";
+import type { FootstepGait } from "@/entities/characters/player/FootstepNoise";
+import { chooseKillCamShot, PlayerCamera } from "@/entities/characters/player/PlayerCamera";
+import { PlayerController } from "@/entities/characters/player/PlayerController";
+import type { IPlayerCommands } from "@/entities/characters/player/PlayerController";
+import { store } from "@/store/store";
+import { CAMERA, CHARACTER, PLAYER } from "@/constants/characters";
+import {
+    CAMERA_SHAKE,
+    COMBAT_TIMING,
+    FINISHER_RULES,
+    KILL_CAMERA,
+    PLAYER_VITALS,
+    STAMINA,
+    TARGETING,
+} from "@/constants/combat";
+import { SIGHT } from "@/constants/enemyAi";
 import { settings } from "@/settings/SettingsStore";
+import type {
+    FinisherKind,
+    ICombatant,
+    IFinisherDefinition,
+    IMoveDefinition,
+} from "@/types/combat";
+import type { IWorldContext } from "@/types/world";
 
-const forwardDirection = new Vector3();
-const rightDirection = new Vector3();
-const moveDirection = new Vector3();
-const targetVelocity = new Vector3();
-const mouseDelta = { x: 0, y: 0 };
-
-export class Player extends Character implements IWorldEntity {
-    readonly sceneObject: Group;
-
-    equippedWeapon: IWeapon | null = { name: "Sword", damage: WEAPON.swordDamage };
-
-    private readonly context: IWorldContext;
-    private readonly input = new PlayerInput();
-    private readonly animator: CharacterAnimator;
+export class Player extends CombatCharacter {
+    private readonly controller = new PlayerController();
     private readonly followCamera: PlayerCamera;
-    private readonly rigidBody: RigidBody;
-    private readonly collider: Collider;
-    private readonly controller: KinematicCharacterController;
-    private readonly horizontalVelocity = new Vector3();
-    private readonly previousTranslation = new Vector3();
-    private readonly simulatedTranslation = new Vector3();
-    private readonly renderTranslation = new Vector3();
-    private readonly jumpStartSeconds: number;
-    private readonly jumpLandSeconds: number;
-    private verticalVelocity = 0;
-    private facingYaw = 0;
-    private isSprinting = false;
-    private secondsSinceGrounded = 0;
-    private secondsSinceTakeoff = Number.POSITIVE_INFINITY;
-    private secondsSinceLanded = Number.POSITIVE_INFINITY;
-    private isAirborne = false;
+    private readonly finishers: PairedAnimationDirector;
+    private readonly footsteps: FootstepNoise;
+    private readonly spawnPoint = new Vector3();
+    private readonly spawnYaw: number;
+    private readonly unsubscribers: (() => void)[] = [];
+    private lockTarget: ICombatant | null = null;
+    private promptVictim: CombatCharacter | null = null;
+    private promptKind: FinisherKind | null = null;
+    private readonly finisherTrigger = new FinisherTrigger();
+    private lastFinisherId: string | null = null;
+    private dodgeYaw = 0;
+    private crouchToggled = false;
+    private isCrouching = false;
 
     constructor(
-        id: string,
         context: IWorldContext,
         camera: Camera,
         spawnPosition: Vector3Tuple,
-        spawnYaw = 0
+        spawnYaw: number
     ) {
-        super(id, PLAYER.maxHealth);
+        const model = context.assetLibrary.getSkinnedModel(CHARACTER.modelPath);
+        if (!model) throw new Error(`character model not loaded: ${CHARACTER.modelPath}`);
 
-        this.context = context;
-        this.facingYaw = spawnYaw;
+        super({
+            id: "player",
+            team: "player",
+            context,
+            model,
+            motor: PLAYER_MOTOR,
+            vitals: PLAYER_VITALS,
+            moveSet: PLAYER_MOVES,
+            freeLocomotion: PLAYER_FREE_LOCOMOTION,
+            strafeLocomotion: PLAYER_STRAFE_LOCOMOTION,
+            victimRig: "humanoid",
+            turnSmoothing: PLAYER.turnSmoothing,
+            modelYawOffset: CHARACTER.modelYawOffset,
+            spawnPosition,
+            spawnYaw,
+            flashesOnHit: false,
+        });
 
-        this.sceneObject = new Group();
-        this.sceneObject.rotation.y = spawnYaw;
-        this.animator = this.buildModel();
-        this.jumpStartSeconds = this.animator.durationOf(CharacterMotion.JumpStart);
-        this.jumpLandSeconds = this.animator.durationOf(CharacterMotion.JumpLand);
-
-        const [spawnX, spawnY, spawnZ] = spawnPosition;
-        const cylinderLength = PLAYER.height - PLAYER.radius * 2;
-
-        this.previousTranslation.set(spawnX, spawnY, spawnZ);
-        this.simulatedTranslation.set(spawnX, spawnY, spawnZ);
-        this.renderTranslation.set(spawnX, spawnY, spawnZ);
-        this.sceneObject.position.set(spawnX, spawnY, spawnZ);
-
-        this.rigidBody = context.physicsWorld.createRigidBody(
-            RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(spawnX, spawnY, spawnZ)
-        );
-
-        this.collider = context.physicsWorld.createCollider(
-            RAPIER.ColliderDesc.capsule(cylinderLength / 2, PLAYER.radius).setCollisionGroups(
-                COLLISION_GROUPS.character
-            ),
-            this.rigidBody
-        );
-
-        this.controller = context.physicsWorld.createCharacterController(PLAYER.colliderOffset);
-        this.controller.setUp({ x: 0, y: 1, z: 0 });
-        this.controller.setMaxSlopeClimbAngle(PLAYER.maxSlopeClimbAngle);
-        this.controller.setMinSlopeSlideAngle(PLAYER.minSlopeSlideAngle);
-        this.controller.enableAutostep(PLAYER.autostepMaxHeight, PLAYER.autostepMinWidth, true);
-        this.controller.enableSnapToGround(PLAYER.snapToGroundDistance);
-        this.controller.setApplyImpulsesToDynamicBodies(true);
-
+        this.spawnPoint.fromArray(spawnPosition);
+        this.spawnYaw = spawnYaw;
+        this.equipWeapon(PLAYER_STARTING_WEAPON);
         this.followCamera = new PlayerCamera(
             camera,
             context.physicsWorld,
-            this.collider,
+            this.motor.collider,
             spawnYaw + Math.PI
         );
+        this.finishers = new PairedAnimationDirector(context);
+        this.footsteps = new FootstepNoise(context.combatEvents);
+        this.listenForImpacts();
+        this.publishVitals();
+        store.getState().hud.setPlayerAlive(true);
     }
 
-    get attackDamage(): number {
-        return this.equippedWeapon?.damage ?? PLAYER.unarmedDamage;
+    get attackPower(): number {
+        return this.weapon?.damage ?? PLAYER.unarmedDamage;
     }
 
-    fixedUpdate(fixedTimestep: number): void {
-        this.previousTranslation.copy(this.simulatedTranslation);
-        this.applyMovement(fixedTimestep, this.rigidBody.translation());
-    }
-
-    postStep(): void {
-        const translation = this.rigidBody.translation();
-        this.simulatedTranslation.set(translation.x, translation.y, translation.z);
+    get stealthVisibility(): number {
+        return this.isCrouching ? SIGHT.crouchedVisibility : 1;
     }
 
     update(deltaSeconds: number, interpolationAlpha: number): void {
         this.applyMouseLook();
+        super.update(deltaSeconds, interpolationAlpha);
+        this.trackKillCam();
 
-        this.renderTranslation.lerpVectors(
-            this.previousTranslation,
-            this.simulatedTranslation,
-            interpolationAlpha
-        );
-
-        this.sceneObject.position.copy(this.renderTranslation);
-        this.applyFacingRotation(deltaSeconds);
-
+        const position = this.sceneObject.position;
         this.followCamera.follow(
             deltaSeconds,
-            this.renderTranslation.x,
-            this.renderTranslation.y,
-            this.renderTranslation.z,
+            position.x,
+            position.y,
+            position.z,
             this.isSprinting
         );
-        this.animator.update(deltaSeconds);
     }
 
     dispose(): void {
-        this.input.dispose();
-        this.animator.dispose();
-        this.context.physicsWorld.removeCharacterController(this.controller);
-        this.context.physicsWorld.removeRigidBody(this.rigidBody);
+        this.finishers.abort();
+        for (const unsubscribe of this.unsubscribers) unsubscribe();
+        this.controller.dispose();
+        store.getState().hud.setPrompt(null);
+        store.getState().hud.setTarget(false, "", 0, 0);
+        super.dispose();
     }
 
-    private buildModel(): CharacterAnimator {
-        const skinnedModel = this.context.assetLibrary.getSkinnedModel(CHARACTER.modelPath);
-        if (!skinnedModel) throw new Error(`character model not loaded: ${CHARACTER.modelPath}`);
+    protected think(deltaSeconds: number): void {
+        const commands = this.controller.read();
+        this.finisherTrigger.tick(deltaSeconds);
+        if (commands.finisher) this.finisherTrigger.press();
 
-        const modelInstance = cloneSkinnedModel(skinnedModel.scene);
-        modelInstance.scale.setScalar(PLAYER.height / skinnedModel.height);
-        modelInstance.position.y = -PLAYER.height / 2;
-        modelInstance.rotation.y = CHARACTER.modelYawOffset;
-        this.sceneObject.add(modelInstance);
-        this.attachWeapon(modelInstance);
-
-        return new CharacterAnimator(modelInstance, skinnedModel.animations);
+        this.computeCameraBasis();
+        this.updateLock(commands);
+        this.computeMovement(commands, deltaSeconds);
+        this.routeCrouch(commands.crouchPressed);
+        if (commands.jump) this.machine.queue("jump");
+        this.footsteps.tick(deltaSeconds, this.footstepGait(), this.position);
+        this.refreshPrompt();
+        this.issueCombatIntents(commands);
+        this.publishVitals();
     }
 
-    private attachWeapon(modelInstance: Object3D): void {
-        const grip = modelInstance.getObjectByName("hand_r");
-        if (!grip) throw new Error("no hand_r bone on the player model");
+    private routeCrouch(pressed: boolean): void {
+        if (!pressed) return;
 
-        const template = this.context.assetLibrary.getTemplate(WEAPON.swordModelPath);
-        if (!template) throw new Error(`sword model not loaded: ${WEAPON.swordModelPath}`);
+        if (this.isSprinting) {
+            this.dodgeYaw = this.facingYaw;
+            this.machine.queue("slide");
+        } else if (this.machine.state === "locomotion") this.crouchToggled = !this.crouchToggled;
+    }
 
-        for (const part of template.parts) {
-            const swordPart = new Mesh(part.geometry, part.material);
-            swordPart.position.fromArray(WEAPON.gripPosition);
-            swordPart.rotation.fromArray(WEAPON.gripRotation);
-            swordPart.scale.setScalar(WEAPON.gripScale);
-            swordPart.castShadow = true;
-            grip.add(swordPart);
-        }
+    protected onMoveStarted(move: IMoveDefinition): void {
+        if (move.tags.includes("dodge")) this.faceImmediately(this.dodgeYaw);
+    }
+
+    protected onParrySucceeded(attacker: ICombatant): void {
+        this.target = attacker;
+        if (
+            attacker instanceof CombatCharacter &&
+            attacker.canBeCounterKilled &&
+            this.startFinisher(attacker, "counter")
+        )
+            return;
+        this.machine.forceMove(PLAYER_MOVE_IDS.counter);
+    }
+
+    placeAt(position: Vector3, yaw: number): void {
+        super.placeAt(position, yaw);
+        this.followCamera.resetPivot();
+    }
+
+    protected tickPaired(deltaSeconds: number): void {
+        this.controller.discardPending();
+        this.publishVitals();
+        if (!this.finishers.tick(deltaSeconds)) return;
+
+        this.followCamera.endKillCam();
+        if (this.finishers.hasKilled) this.finisherTrigger.openStreak();
+    }
+
+    protected onKilled(): void {
+        this.finisherTrigger.reset();
+        this.lockTarget = null;
+        this.followCamera.setLockPoint(null);
+        this.followCamera.endKillCam();
+        store.getState().hud.setPrompt(null);
+        store.getState().hud.setPlayerAlive(false);
+    }
+
+    protected onDeadTick(elapsed: number, holdSeconds: number): void {
+        this.controller.discardPending();
+        if (elapsed < holdSeconds + COMBAT_TIMING.respawnDelaySeconds) return;
+
+        this.vitals.restore();
+        this.machine.revive();
+        this.motor.enableCollision();
+        this.placeAt(this.spawnPoint, this.spawnYaw);
+        this.animator.returnToLocomotion(COMBAT_TIMING.locomotionReturnFade);
+        this.publishVitals();
+        store.getState().hud.setPlayerAlive(true);
+    }
+
+    private listenForImpacts(): void {
+        const events = this.context.combatEvents;
+
+        this.unsubscribers.push(
+            events.on("hitLanded", (event) => {
+                if (event.attacker === this) {
+                    this.followCamera.addTrauma(CAMERA_SHAKE.trauma[event.impact]);
+                    if (event.impact !== "light") this.followCamera.punch();
+                }
+                if (event.defender === this)
+                    this.followCamera.addTrauma(CAMERA_SHAKE.trauma[event.impact] * 1.3);
+            }),
+            events.on("finisherKill", (event) => {
+                if (event.attacker === this)
+                    this.followCamera.addTrauma(CAMERA_SHAKE.trauma.finisher);
+            }),
+            events.on("killed", (event) => {
+                if (event.killer !== this) return;
+                this.finisherTrigger.openStreak();
+            })
+        );
     }
 
     private applyMouseLook(): void {
-        this.input.consumeMouseDelta(mouseDelta);
+        this.controller.consumeLook(mouseDelta);
 
         const sensitivity = CAMERA.mouseSensitivity * settings.mouseSensitivity;
         const pitchDelta = settings.invertY ? -mouseDelta.y : mouseDelta.y;
-
         this.followCamera.turnBy(mouseDelta.x * sensitivity, pitchDelta * sensitivity);
     }
 
-    private applyMovement(deltaSeconds: number, translation: IBodyTranslation): void {
-        const cameraYaw = this.followCamera.yaw;
-        forwardDirection.set(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw));
-        rightDirection.set(-forwardDirection.z, 0, forwardDirection.x);
+    private computeCameraBasis(): void {
+        const yaw = this.followCamera.yaw;
+        cameraForward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+        cameraRight.set(-cameraForward.z, 0, cameraForward.x);
+    }
 
+    private computeMovement(commands: IPlayerCommands, deltaSeconds: number): void {
         moveDirection
             .set(0, 0, 0)
-            .addScaledVector(forwardDirection, this.input.axis("backward", "forward"))
-            .addScaledVector(rightDirection, this.input.axis("left", "right"));
+            .addScaledVector(cameraForward, commands.moveForward)
+            .addScaledVector(cameraRight, commands.moveRight);
 
-        this.isSprinting = this.input.isPressed("sprint");
-        const isGrounded = this.controller.computedGrounded();
+        this.hasDirectionalInput = moveDirection.lengthSq() > 0;
+        if (this.hasDirectionalInput) moveDirection.normalize();
 
-        if (isGrounded && this.verticalVelocity <= 0) this.verticalVelocity = 0;
+        this.isCrouching = this.crouchToggled && !commands.wantsSprint;
+        this.isSprinting =
+            commands.wantsSprint &&
+            this.hasDirectionalInput &&
+            this.machine.state === "locomotion" &&
+            this.vitals.drainStamina(STAMINA.sprintPerSecond * deltaSeconds);
+        this.facesTarget = this.lockTarget !== null && !this.lockTarget.isDead && !this.isSprinting;
+        if (this.facesTarget) this.target = this.lockTarget;
 
-        this.secondsSinceTakeoff += deltaSeconds;
-        this.secondsSinceLanded += deltaSeconds;
-        this.updateAirborneState(deltaSeconds, isGrounded);
+        const speed = this.isSprinting
+            ? PLAYER.sprintSpeed
+            : this.isCrouching
+              ? PLAYER.crouchSpeed
+              : this.facesTarget
+                ? PLAYER.strafeSpeed
+                : PLAYER.walkSpeed;
 
-        this.verticalVelocity = Math.max(
-            this.verticalVelocity + WORLD.gravity * deltaSeconds,
-            PLAYER.terminalVelocity
+        this.desiredVelocity.copy(moveDirection).multiplyScalar(speed);
+        this.locomotionOverride =
+            this.isCrouching && !this.facesTarget ? PLAYER_CROUCH_LOCOMOTION : null;
+        this.heavyHeld = commands.heavyHeld;
+    }
+
+    private footstepGait(): FootstepGait {
+        if (!this.motor.isGrounded || !this.hasDirectionalInput) return "still";
+        if (this.isSprinting) return "sprint";
+        return this.isCrouching ? "crouch" : "walk";
+    }
+
+    private updateLock(commands: IPlayerCommands): void {
+        const position = this.sceneObject.position;
+        const current = this.lockTarget;
+
+        if (
+            current &&
+            (current.isDead || this.horizontalDistance(current) > TARGETING.lockBreakRange)
+        ) {
+            this.context.combatRegistry.collectOpponents(
+                this.team,
+                position,
+                TARGETING.lockRange,
+                opponents
+            );
+            this.lockTarget = current.isDead
+                ? selectTarget(
+                      position,
+                      cameraForward,
+                      opponents,
+                      TARGETING.lockRange,
+                      TARGETING.lockMinDot
+                  )
+                : null;
+        }
+
+        if (commands.toggleLock) {
+            this.context.combatRegistry.collectOpponents(
+                this.team,
+                position,
+                TARGETING.lockRange,
+                opponents
+            );
+            this.lockTarget = this.lockTarget
+                ? null
+                : selectTarget(
+                      position,
+                      cameraForward,
+                      opponents,
+                      TARGETING.lockRange,
+                      TARGETING.lockMinDot
+                  );
+        }
+
+        if (commands.cycleLock !== 0 && this.lockTarget) {
+            this.context.combatRegistry.collectOpponents(
+                this.team,
+                position,
+                TARGETING.lockRange,
+                opponents
+            );
+            this.lockTarget = cycleTarget(
+                position,
+                cameraForward,
+                this.lockTarget,
+                opponents,
+                commands.cycleLock > 0 ? 1 : -1,
+                TARGETING.lockRange
+            );
+        }
+
+        this.followCamera.setLockPoint(
+            this.lockTarget ? this.lockTarget.sceneObject.position : null
         );
-
-        const requestedSpeed = this.isSprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
-        targetVelocity.copy(moveDirection);
-        if (targetVelocity.lengthSq() > 0)
-            targetVelocity.normalize().multiplyScalar(requestedSpeed);
-
-        const acceleration = isGrounded ? PLAYER.groundAcceleration : PLAYER.airAcceleration;
-        this.horizontalVelocity.lerp(targetVelocity, 1 - Math.exp(-acceleration * deltaSeconds));
-
-        const groundSpeed = this.horizontalVelocity.length();
-        const isMoving = groundSpeed > PLAYER.movingSpeedThreshold;
-
-        if (isMoving)
-            this.facingYaw = Math.atan2(this.horizontalVelocity.x, this.horizontalVelocity.z);
-
-        this.animator.setMotion(this.resolveMotion(isMoving, this.isSprinting), groundSpeed);
-
-        this.controller.computeColliderMovement(this.collider, {
-            x: this.horizontalVelocity.x * deltaSeconds,
-            y: this.verticalVelocity * deltaSeconds,
-            z: this.horizontalVelocity.z * deltaSeconds,
-        });
-
-        const resolvedMovement = this.controller.computedMovement();
-
-        this.rigidBody.setNextKinematicTranslation({
-            x: translation.x + resolvedMovement.x,
-            y: translation.y + resolvedMovement.y,
-            z: translation.z + resolvedMovement.z,
-        });
     }
 
-    private updateAirborneState(deltaSeconds: number, isGrounded: boolean): void {
-        if (isGrounded && this.input.consumeJump()) {
-            this.verticalVelocity = PLAYER.jumpForce;
-            this.secondsSinceTakeoff = 0;
-            this.secondsSinceGrounded = 0;
-            this.isAirborne = true;
+    private issueCombatIntents(commands: IPlayerCommands): void {
+        if (this.motor.isGrounded && this.finisherTrigger.isRequested && this.tryFinisher()) return;
+
+        if (commands.light) {
+            if (this.motor.isGrounded && this.finisherTrigger.inStreak && this.tryFinisher())
+                return;
+            this.aimAtTarget();
+            this.machine.queue("light");
+        }
+
+        if (commands.heavy) {
+            this.aimAtTarget();
+            this.machine.queue("heavy");
+        }
+
+        if (commands.dodge) {
+            this.dodgeYaw = this.hasDirectionalInput
+                ? Math.atan2(moveDirection.x, moveDirection.z)
+                : this.sceneObject.rotation.y;
+            this.machine.queue("dodge");
+        }
+
+        if (commands.parry) this.machine.queue("parry");
+    }
+
+    private aimAtTarget(): void {
+        if (this.lockTarget && !this.lockTarget.isDead) {
+            this.target = this.lockTarget;
             return;
         }
 
-        if (!isGrounded) {
-            this.secondsSinceGrounded += deltaSeconds;
-            if (this.secondsSinceGrounded > PLAYER.airborneGraceSeconds) this.isAirborne = true;
+        const facing = this.hasDirectionalInput ? moveDirection : cameraForward;
+        this.context.combatRegistry.collectOpponents(
+            this.team,
+            this.sceneObject.position,
+            TARGETING.softRange,
+            opponents
+        );
+        this.target = selectTarget(
+            this.sceneObject.position,
+            facing,
+            opponents,
+            TARGETING.softRange,
+            TARGETING.softMinDot
+        );
+    }
+
+    private refreshPrompt(): void {
+        this.promptVictim = null;
+        this.promptKind = null;
+
+        const state = this.machine.state;
+        if (state === "locomotion" || state === "move") this.findFinisherCandidate();
+
+        store.getState().hud.setPrompt(this.promptKind ? PROMPT_LABELS[this.promptKind] : null);
+    }
+
+    private findFinisherCandidate(): void {
+        const inStreak = this.finisherTrigger.inStreak;
+        const reach = inStreak
+            ? FINISHER_RULES.streakReach
+            : Math.max(FINISHER_RULES.executionReach, FINISHER_RULES.backstabReach);
+        const position = this.sceneObject.position;
+        const facing = this.hasDirectionalInput ? moveDirection : cameraForward;
+
+        this.context.combatRegistry.collectOpponents(
+            this.team,
+            position,
+            reach + this.bodyRadius,
+            opponents
+        );
+        let widestRadius = 0;
+        for (const opponent of opponents)
+            widestRadius = Math.max(widestRadius, opponent.hurtboxes[0]?.radius ?? 0);
+
+        const candidate =
+            this.lockTarget && opponents.includes(this.lockTarget)
+                ? this.lockTarget
+                : selectTarget(
+                      position,
+                      facing,
+                      opponents,
+                      reach + this.bodyRadius + widestRadius,
+                      0
+                  );
+
+        if (!(candidate instanceof CombatCharacter)) return;
+
+        const victimPosition = candidate.sceneObject.position;
+        const behind = isBehind(
+            candidate.yaw,
+            victimPosition.x,
+            victimPosition.z,
+            position.x,
+            position.z
+        );
+        const edgeGap = this.horizontalDistance(candidate) - this.bodyRadius - candidate.bodyRadius;
+        const kind = finisherKindFor(candidate, edgeGap, behind, inStreak);
+        if (!kind) return;
+
+        this.promptVictim = candidate;
+        this.promptKind = kind;
+    }
+
+    private tryFinisher(): boolean {
+        const victim = this.promptVictim;
+        const kind = this.promptKind;
+        return victim !== null && kind !== null && this.startFinisher(victim, kind);
+    }
+
+    private startFinisher(victim: CombatCharacter, kind: FinisherKind): boolean {
+        const finisher = selectFinisher(FINISHERS, kind, this.lastFinisherId, Math.random);
+        if (!finisher || !this.hasClearApproach(victim, finisher)) return false;
+        if (!this.finishers.start(this, victim, finisher)) return false;
+
+        this.lastFinisherId = finisher.id;
+        this.finisherTrigger.reset();
+        this.beginKillCam(victim, finisher);
+        return true;
+    }
+
+    private beginKillCam(victim: CombatCharacter, finisher: IFinisherDefinition): void {
+        const own = this.sceneObject.position;
+        const theirs = victim.sceneObject.position;
+        killCamFocus.addVectors(own, theirs).multiplyScalar(0.5);
+        killCamFocus.y += KILL_CAMERA.focusLift;
+
+        const pairAxisYaw = Math.atan2(theirs.x - own.x, theirs.z - own.z);
+        const pairSpan = pairCentreDistance(finisher.distance, this.bodyRadius, victim.bodyRadius);
+        const shot = chooseKillCamShot(
+            pairAxisYaw,
+            this.followCamera.yaw,
+            pairSpan,
+            (yaw, pitch, distance) =>
+                this.followCamera.isShotClear(killCamFocus, yaw, pitch, distance)
+        );
+        this.followCamera.beginKillCam(shot, killCamFocus);
+    }
+
+    private trackKillCam(): void {
+        if (!this.finishers.isActive) {
+            this.followCamera.endKillCam();
             return;
         }
 
-        this.secondsSinceGrounded = 0;
-        if (!this.isAirborne) return;
-
-        this.isAirborne = false;
-        this.secondsSinceLanded = 0;
+        this.finishers.pairMidpoint(killCamFocus);
+        killCamFocus.y += KILL_CAMERA.focusLift;
+        this.followCamera.setKillCamFocus(killCamFocus);
+        if (this.finishers.isRecovering) this.followCamera.endKillCam();
     }
 
-    private resolveMotion(isMoving: boolean, isSprinting: boolean): CharacterMotion {
-        if (this.isAirborne)
-            return this.secondsSinceTakeoff < this.jumpStartSeconds
-                ? CharacterMotion.JumpStart
-                : CharacterMotion.JumpLoop;
+    private hasClearApproach(victim: CombatCharacter, finisher: IFinisherDefinition): boolean {
+        const own = this.position;
+        const theirs = victim.position;
+        const offsetX = theirs.x - own.x;
+        const offsetZ = theirs.z - own.z;
+        const distance = Math.hypot(offsetX, offsetZ);
+        const travel =
+            distance - pairCentreDistance(finisher.distance, this.bodyRadius, victim.bodyRadius);
+        if (travel <= 0 || distance < 1e-4) return true;
 
-        if (!isMoving && this.secondsSinceLanded < this.jumpLandSeconds)
-            return CharacterMotion.JumpLand;
-
-        if (!isMoving) return CharacterMotion.Idle;
-
-        return isSprinting ? CharacterMotion.Run : CharacterMotion.Walk;
+        return !this.motor.isPathBlocked(offsetX / distance, offsetZ / distance, travel);
     }
 
-    private applyFacingRotation(deltaSeconds: number): void {
-        const turnFactor = 1 - Math.exp(-PLAYER.turnSmoothing * deltaSeconds);
-        this.sceneObject.rotation.y += this.shortestAngleTo(this.facingYaw) * turnFactor;
+    private publishVitals(): void {
+        store.getState().hud.setVital("health", this.vitals.health, this.vitals.maxHealth);
+        store.getState().hud.setVital("stamina", this.vitals.stamina, this.vitals.maxStamina);
+        store.getState().hud.setFocus(this.vitals.focus, this.vitals.maxFocus);
+
+        const shown = this.lockTarget ?? this.target;
+        if (
+            shown instanceof CombatCharacter &&
+            !shown.isDead &&
+            this.horizontalDistance(shown) < TARGETING.lockBreakRange
+        )
+            store
+                .getState()
+                .hud.setTarget(
+                    true,
+                    shown.displayName,
+                    shown.healthFraction,
+                    shown.vitals.poiseFraction
+                );
+        else store.getState().hud.setTarget(false, "", 0, 0);
     }
 
-    private shortestAngleTo(targetYaw: number): number {
-        const difference = (targetYaw - this.sceneObject.rotation.y) % FULL_TURN;
-        return ((difference + Math.PI * 3) % FULL_TURN) - Math.PI;
+    private horizontalDistance(other: ICombatant): number {
+        const own = this.sceneObject.position;
+        const theirs = other.sceneObject.position;
+        return Math.hypot(theirs.x - own.x, theirs.z - own.z);
     }
 }
 
-interface IBodyTranslation {
-    x: number;
-    y: number;
-    z: number;
-}
+const PLAYER_MOTOR: IMotorSpec = {
+    height: PLAYER.height,
+    radius: PLAYER.radius,
+    colliderOffset: PLAYER.colliderOffset,
+    maxSlopeClimbAngle: PLAYER.maxSlopeClimbAngle,
+    minSlopeSlideAngle: PLAYER.minSlopeSlideAngle,
+    autostepMaxHeight: PLAYER.autostepMaxHeight,
+    autostepMinWidth: PLAYER.autostepMinWidth,
+    snapToGroundDistance: PLAYER.snapToGroundDistance,
+    terminalVelocity: PLAYER.terminalVelocity,
+    groundAcceleration: PLAYER.groundAcceleration,
+    airAcceleration: PLAYER.airAcceleration,
+    pushesDynamicBodies: true,
+};
+
+const PROMPT_LABELS: Record<FinisherKind, string> = {
+    backstab: "Assassinate",
+    execution: "Execute",
+    counter: "Counter",
+    critical: "Critical",
+};
+
+const cameraForward = new Vector3();
+const cameraRight = new Vector3();
+const moveDirection = new Vector3();
+const killCamFocus = new Vector3();
+const mouseDelta = { x: 0, y: 0 };
+const opponents: ICombatant[] = [];

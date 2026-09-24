@@ -50,7 +50,7 @@ export const CONTROL_REFERENCE: readonly IControlGroup[] = [
             {
                 keys: [keyLabel(INPUT_BINDINGS.evade[0])],
                 action: "Sprint / Dodge",
-                description: "Hold to sprint, tap and release quickly to dodge-roll",
+                description: "Press to dodge-roll, keep holding to sprint",
             },
             {
                 keys: [keyLabel(INPUT_BINDINGS.crouch[0])],
