@@ -12,6 +12,15 @@ const nextConfig: NextConfig = {
                 },
             ],
         },
+        {
+            source: "/models/characters/CombatClips.glb",
+            headers: [
+                {
+                    key: "Cache-Control",
+                    value: "public, max-age=0, must-revalidate",
+                },
+            ],
+        },
     ],
 };
 
