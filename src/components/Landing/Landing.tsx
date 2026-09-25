@@ -22,7 +22,7 @@ import LandingHero from "@/components/Landing/LandingHero";
 import LandingHud from "@/components/Landing/LandingHud";
 import { useFrameLimit } from "@/hooks/useFrameLimit";
 import { useRenderPixelRatio } from "@/hooks/useRenderPixelRatio";
-import { FrameRateMeter } from "@/components/Hud/FrameRateMeter";
+import { FrameRateMeter } from "@/components/FrameRateMeter/FrameRateMeter";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
 import { parseRepoInput } from "@/lib/githubRepoInput";
