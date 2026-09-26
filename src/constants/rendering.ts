@@ -41,16 +41,6 @@ export const POST_PROCESSING = {
     contrastBoost: 0.16,
 };
 
-export const AMBIENT_OCCLUSION = {
-    radius: 1.4,
-    distanceFalloff: 1,
-    intensity: 2.4,
-    samples: 8,
-    denoiseSamples: 4,
-    denoiseRadius: 12,
-    halfResolution: true,
-};
-
 export const OUTLINE = {
     thickness: 1,
     edgeThreshold: 0.012,

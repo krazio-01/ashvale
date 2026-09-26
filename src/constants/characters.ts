@@ -1,107 +1,8 @@
-import { metres, pair, vec3 } from "@/lib/helpers";
-import { WORLD } from "@/constants/world";
+import { pair } from "@/lib/helpers";
 
-const PLAYER_HEIGHT = metres(2.1);
-
-export const PLAYER = {
-    height: PLAYER_HEIGHT,
-    radius: PLAYER_HEIGHT * 0.24,
-    walkSpeed: PLAYER_HEIGHT * 1.25,
-    sprintSpeed: PLAYER_HEIGHT * 5,
-    jumpForce: 11,
-    maxHealth: 100,
-    unarmedDamage: 5,
-    turnSmoothing: 15,
-    groundAcceleration: 34,
-    airAcceleration: 14,
-    movingSpeedThreshold: PLAYER_HEIGHT * 0.12,
-    airborneGraceSeconds: 0.12,
-    spawnPosition: vec3(0, 2, 6),
-    colliderOffset: 0.02,
-    maxSlopeClimbAngle: (45 * Math.PI) / 180,
-    minSlopeSlideAngle: (38 * Math.PI) / 180,
-    autostepMaxHeight: PLAYER_HEIGHT * 0.26,
-    autostepMinWidth: PLAYER_HEIGHT * 0.12,
-    snapToGroundDistance: PLAYER_HEIGHT * 0.3,
-    terminalVelocity: -45,
-};
-
-export const CAMERA = {
-    fov: 55,
-    near: 0.1,
-    far: 700,
-    startPosition: vec3(0, 5, 10),
-    targetFollowDistance: PLAYER_HEIGHT * 2.3,
-    sprintFollowDistance: PLAYER_HEIGHT * 2.4,
-    minimumFollowDistance: PLAYER_HEIGHT * 0.6,
-    collisionPadding: metres(0.125),
-    pullOutSmoothing: 4,
-    pivotHeight: PLAYER_HEIGHT * 0.7,
-    shoulderOffset: metres(0.35),
-    pivotSmoothing: 12,
-    sprintFovBoost: 2,
-    speedBlendSmoothing: 6,
-    mouseSensitivity: 0.0023,
-    pitchRange: pair(-0.45, 1.25),
-    startPitch: 0.21,
-};
-
-export const SPAWNING = {
-    filesPerEnemy: 8,
-    maximumEnemiesPerRegion: 4,
-    spawnClearanceBuffer: metres(0.15),
-    playerSpawnHeight: 2,
-};
-
-export const ENEMY = {
-    sentinelHeight: metres(2.2),
-    sentinelRadius: metres(0.71),
-    golemHeight: metres(2.8),
-    golemRadius: metres(0.91),
-    gremlinHeight: metres(2.1),
-    gremlinRadius: metres(0.58),
-    wraithHeight: metres(2.4),
-    wraithRadius: metres(0.64),
-};
-
-export const ENEMY_PLACEMENT = {
-    campProbability: 0.7,
-    smallestCamp: 2,
-    largestCamp: 3,
-    campRadius: metres(3.2),
-    minimumMemberSpacing: metres(2.2),
-    minimumCampSpacing: metres(8),
-    regionEdgeMargin: metres(4),
-    maximumSteepness: 0.6,
-    playerSpawnClearance: metres(12),
-    spawnClearanceRegionFraction: 0.5,
-    propClearanceRadius: ENEMY.golemRadius + metres(0.3),
-    samplingAttempts: 12,
-    facingJitter: (25 * Math.PI) / 180,
-    dominantArchetypeShare: 0.6,
-};
-
-export const BOSS = {
-    height: metres(3),
-    radius: metres(0.85),
-};
-
-export const WEAPON = {
-    swordModelPath: "/models/weapons/Sword.glb",
-    swordDamage: 14,
-    gripPosition: vec3(0, 0, 0),
-    gripRotation: vec3(0, 0, 0),
-    gripScale: 0.2,
-};
-
-export const NON_PLAYER = {
-    colliderOffset: 0.02,
-    maxSlopeClimbAngle: (50 * Math.PI) / 180,
-    minSlopeSlideAngle: (40 * Math.PI) / 180,
-    autostepMaxHeight: metres(0.3),
-    autostepMinWidth: metres(0.2),
-    snapToGroundDistance: metres(0.25),
-    terminalVelocity: -45,
+export const STRIDE = {
+    walk: 1.25,
+    strafe: 1.45,
 };
 
 export const PALETTE = {
@@ -115,90 +16,122 @@ export const PALETTE = {
     gold: "#d4af37",
 };
 
-export enum CharacterMotion {
-    Idle = "idle",
-    Walk = "walk",
-    Run = "run",
-    JumpStart = "jumpStart",
-    JumpLoop = "jumpLoop",
-    JumpLand = "jumpLand",
-}
-
 export const CHARACTER = {
     modelPath: "/models/characters/UAL1_Standard.glb",
-    clipLibraryPaths: ["/models/characters/UAL2_Standard.glb"],
+    clipLibraryPaths: ["/models/characters/CombatClips.glb"],
     modelYawOffset: 0,
     playbackRateRange: pair(0.5, 2.5),
 };
+
+export const IDLE_VARIATION = {
+    relaxedDelaySeconds: 7,
+    delayJitter: 0.4,
+};
+
+export function jitteredIdleDelay(baseSeconds: number, random: () => number): number {
+    return (
+        baseSeconds * (1 - IDLE_VARIATION.delayJitter + random() * 2 * IDLE_VARIATION.delayJitter)
+    );
+}
 
 export const CREATURE = {
     impModelPath: "/models/characters/Imp.gltf",
     puglinModelPath: "/models/characters/Puglin.gltf",
 };
 
-const JUMP_RISE_SECONDS = PLAYER.jumpForce / Math.abs(WORLD.gravity);
-
-export const MOTION_CLIPS: Record<CharacterMotion, IMotionClip> = {
-    [CharacterMotion.Idle]: {
-        clipName: "Idle_Loop",
-        loops: true,
-        fadeSeconds: 0.18,
-        playback: { mode: "fixed" },
+export const HAND_BONES = {
+    right: {
+        hand: "hand_r",
+        indexBase: "index_01_r",
+        middleBase: "middle_01_r",
+        ringBase: "ring_01_r",
+        pinkyBase: "pinky_01_r",
+        thumbBase: "thumb_01_r",
     },
-    [CharacterMotion.Walk]: {
-        clipName: "Walk_Loop",
-        loops: true,
-        fadeSeconds: 0.14,
-        playback: { mode: "matchStride", strideSpeed: PLAYER_HEIGHT * 0.85 },
-    },
-    [CharacterMotion.Run]: {
-        clipName: "Sprint_Loop",
-        loops: true,
-        fadeSeconds: 0.14,
-        playback: { mode: "matchStride", strideSpeed: PLAYER_HEIGHT * 4 },
-    },
-    [CharacterMotion.JumpStart]: {
-        clipName: "Jump_Start",
-        loops: false,
-        fadeSeconds: 0.03,
-        playback: { mode: "fitDuration", seconds: JUMP_RISE_SECONDS },
-    },
-    [CharacterMotion.JumpLoop]: {
-        clipName: "Jump_Loop",
-        loops: true,
-        fadeSeconds: 0.1,
-        playback: { mode: "fixed" },
-    },
-    [CharacterMotion.JumpLand]: {
-        clipName: "Jump_Land",
-        loops: false,
-        fadeSeconds: 0.06,
-        playback: { mode: "fixed" },
+    left: {
+        hand: "hand_l",
+        indexBase: "index_01_l",
+        middleBase: "middle_01_l",
+        ringBase: "ring_01_l",
+        pinkyBase: "pinky_01_l",
+        thumbBase: "thumb_01_l",
     },
 };
 
-export enum EnemyAction {
-    Idle = "idle",
-    Chase = "chase",
-    Attack = "attack",
-    Retreat = "retreat",
-}
+export const CLIP = {
+    idle: "Idle_Loop",
+    walk: "Walk_Loop",
+    sprint: "Sprint_Loop",
+    jumpStart: "Jump_Start",
+    jumpLoop: "Jump_Loop",
+    jumpLand: "Jump_Land",
+    jumpAbsorb: "Jump_Absorb",
+    crouchIdle: "Crouch_Idle_Loop",
+    crouchWalk: "Crouch_Fwd_Loop",
+    combatIdle: "Combat_Idle",
+    strafeForward: "Strafe_F",
+    strafeForwardRight: "Strafe_FR",
+    strafeRight: "Strafe_R",
+    strafeBackRight: "Strafe_BR",
+    strafeBack: "Strafe_B",
+    strafeBackLeft: "Strafe_BL",
+    strafeLeft: "Strafe_L",
+    strafeForwardLeft: "Strafe_FL",
+    swordLight1: "Sword_Light_1",
+    swordLight2: "Sword_Light_2",
+    swordLight3: "Sword_Light_3",
+    swordLight4: "Sword_Light_4",
+    swordHeavy: "Sword_Heavy",
+    swordHeavyFinisher: "Sword_Heavy_Finisher",
+    swordCounter: "Sword_Counter",
+    dodgeRoll: "Dodge_Roll",
+    dodgeBackstep: "Dodge_Backstep",
+    dodgeLeft: "Dodge_Left",
+    dodgeRight: "Dodge_Right",
+    slideStart: "Slide_Start",
+    slideHold: "Slide_Hold",
+    slideExit: "Slide_Exit",
+    parry: "Parry",
+    reactFlinch: "React_Flinch",
+    reactHitHead: "React_Hit_Head",
+    reactCombatDamage: "React_Combat_Damage",
+    reactKnockback: "React_Knockback",
+    reactKnockdown: "React_Knockdown",
+    reactStagger: "React_Stagger",
+    reactParried: "React_Parried",
+    deathForward: "Death_Forward",
+    deathBackward: "Death_Backward",
+    deathCollapse: "Death_Collapse",
+    deathKnockback: "Death_Knockback",
+    finisherExecution: "Fin_Execution_A",
+    finisherKickdownAttacker: "Fin_Kickdown_A",
+    finisherKickdownVictim: "Fin_Kickdown_B",
+    finisherKnockdownAttacker: "Fin_Knockdown_A",
+    finisherKnockdownVictim: "Fin_Knockdown_B",
+    finisherBackstab: "Fin_Backstab_A",
+    enemyPunch: "Enemy_Punch",
+    enemySwipe: "Enemy_Swipe",
+    enemySlashA: "Enemy_Slash_A",
+    enemySlashARecover: "Enemy_Slash_A_Recover",
+    enemySlashB: "Enemy_Slash_B",
+    enemySlashBRecover: "Enemy_Slash_B_Recover",
+    enemySlashC: "Enemy_Slash_C",
+    enemyCleave: "Enemy_Cleave",
+    enemyRisingCut: "Enemy_Rising_Cut",
+    enemyBackhand: "Enemy_Backhand",
+    swordDash: "Enemy_Lunge",
+    enemyThrust: "Enemy_Thrust",
+    enemyGreatCleave: "Enemy_Great_Cleave",
+    enemyLowSweep: "Enemy_Low_Sweep",
+    enemyJab: "Enemy_Jab",
+    enemyHook: "Enemy_Hook",
+    enemyHookRecover: "Enemy_Hook_Recover",
+    enemyScratch: "Enemy_Scratch",
+    enemyHurl: "Enemy_Hurl",
+    idleFidgetSwordInspect: "Idle_Fidget_SwordInspect",
+    idleFidgetSwordRoll: "Idle_Fidget_SwordRoll",
+    idleFidgetScratchArm: "Idle_Fidget_ScratchArm",
+    idleFidgetLookAround: "Idle_Fidget_LookAround",
+} as const;
 
-export enum EnemyArchetype {
-    Sentinel = "sentinel",
-    Wraith = "wraith",
-    Golem = "golem",
-    Gremlin = "gremlin",
-}
-
-export type MotionPlayback =
-    | { mode: "fixed" }
-    | { mode: "matchStride"; strideSpeed: number }
-    | { mode: "fitDuration"; seconds: number };
-
-export interface IMotionClip {
-    clipName: string;
-    loops: boolean;
-    fadeSeconds: number;
-    playback: MotionPlayback;
-}
+export type ClipName = (typeof CLIP)[keyof typeof CLIP];

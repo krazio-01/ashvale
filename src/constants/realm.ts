@@ -93,7 +93,7 @@ export interface IChapterArcEntry {
     artifactName: string;
 }
 
-export interface IRepoIdentity {
+interface IRepoIdentity {
     owner: string;
     name: string;
 }

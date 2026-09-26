@@ -1,5 +1,6 @@
 import { degrees, metres } from "@/lib/helpers";
-import type { ImpactTier, ISlowMotionProfile } from "@/types/combat";
+import type { ImpactTier, ISlowMotionProfile, ProjectileKind } from "@/types/combat";
+import type { WeaponDefinition } from "@/types/weapons";
 
 export const COMBAT_TIMING = {
     inputBufferSeconds: 0.3,
@@ -11,9 +12,6 @@ export const COMBAT_TIMING = {
     hitFlashSeconds: 0.12,
     parriedStaggerSeconds: 1.1,
     respawnDelaySeconds: 2.5,
-    corpseLingerSeconds: 1.5,
-    corpseSinkSeconds: 1.4,
-    corpseSinkDepthFraction: 0.6,
     locomotionReturnFade: 0.18,
     reactionFade: 0.05,
     deathFade: 0.1,
@@ -45,10 +43,6 @@ export const FOCUS = {
     poisePerPip: 0.6,
 };
 
-export const STAMINA = {
-    sprintPerSecond: 14,
-};
-
 export const TARGETING = {
     softRange: metres(7),
     softMinDot: Math.cos(degrees(75)),
@@ -58,6 +52,8 @@ export const TARGETING = {
     angleWeight: 1,
     distanceWeight: 0.6,
     threatBonus: 0.25,
+    gapCloseMinDistance: metres(5.5),
+    gapCloseMaxDistance: metres(9),
 };
 
 export const FINISHER_RULES = {
@@ -77,63 +73,120 @@ export const FINISHER_RULES = {
 
 export const KNOCKBACK_DECAY = 10;
 
-export const CAMERA_SHAKE = {
-    maxOffset: metres(0.18),
-    maxRoll: 0.04,
-    decay: 1.8,
-    frequency: 24,
-    trauma: { light: 0.2, heavy: 0.38, finisher: 0.6 } satisfies Record<ImpactTier, number>,
+export const TELEGRAPH = { leadSeconds: 0.38 };
+
+export interface IProjectileSpec {
+    speed: number;
+    radius: number;
+    damageScale: number;
+    poiseDamage: number;
+    impact: ImpactTier;
+    knockback: number;
+    parryable: boolean;
+    perilous: boolean;
+    color: string;
+}
+
+export const PROJECTILES: Record<ProjectileKind, IProjectileSpec> = {
+    bolt: {
+        speed: metres(14),
+        radius: metres(0.18),
+        damageScale: 1,
+        poiseDamage: 12,
+        impact: "light",
+        knockback: 3,
+        parryable: true,
+        perilous: false,
+        color: "#b9a8ff",
+    },
+    blast: {
+        speed: metres(10),
+        radius: metres(0.4),
+        damageScale: 2,
+        poiseDamage: 40,
+        impact: "heavy",
+        knockback: 8,
+        parryable: false,
+        perilous: true,
+        color: "#ff5a3c",
+    },
 };
 
-export const LOCK_CAMERA = {
-    yawSmoothing: 8,
-    pitch: 0.28,
-    pitchSmoothing: 5,
+export const PROJECTILE_POOL = { size: 12, lifetimeSeconds: 3 };
+
+export const WEAPONS = {
+    longsword: {
+        kind: "melee",
+        id: "longsword",
+        modelPath: "/models/weapons/Longsword.gltf",
+        gripHand: "right",
+        handleCentreFraction: 0.14,
+        gripRoll: 0,
+        worldLength: metres(1.05),
+        guardFraction: 0.28,
+        bladeRadius: metres(0.09),
+        damage: 14,
+        trailColor: "#ffe2b0",
+    },
+    dagger: {
+        kind: "melee",
+        id: "dagger",
+        modelPath: "/models/weapons/Dagger.gltf",
+        gripHand: "right",
+        handleCentreFraction: 0.17,
+        gripRoll: 0,
+        worldLength: metres(0.45),
+        guardFraction: 0.35,
+        bladeRadius: metres(0.06),
+        damage: 6,
+        trailColor: "#ffd0c0",
+    },
+    greatsword: {
+        kind: "melee",
+        id: "greatsword",
+        modelPath: "/models/weapons/Greatsword.gltf",
+        gripHand: "right",
+        handleCentreFraction: 0.12,
+        gripRoll: 0,
+        worldLength: metres(1.6),
+        guardFraction: 0.25,
+        bladeRadius: metres(0.12),
+        damage: 22,
+        trailColor: "#ffc080",
+    },
+    axe: {
+        kind: "melee",
+        id: "axe",
+        modelPath: "/models/weapons/Axe.gltf",
+        gripHand: "right",
+        handleCentreFraction: 0.2,
+        gripRoll: 0,
+        worldLength: metres(0.95),
+        guardFraction: 0.7,
+        bladeRadius: metres(0.14),
+        damage: 20,
+        trailColor: "#ffb070",
+    },
+} satisfies Record<string, WeaponDefinition>;
+
+export const GRIP = {
+    knuckleReach: 0.9,
+    palmDepth: 1.1,
 };
 
-export const KILL_CAMERA = {
-    blendInSeconds: 0.35,
-    blendOutSeconds: 0.6,
-    baseDistance: metres(2.4),
-    focusLift: metres(0.15),
-    occlusionPullInSmoothing: 18,
-    fallbackPitch: 0.2,
-    fallbackDistance: metres(2.2),
-    candidates: [
-        { yawOffset: Math.PI * 0.75, pitch: 0.2, distanceScale: 0.9, penalty: 0 },
-        { yawOffset: -Math.PI * 0.75, pitch: 0.2, distanceScale: 0.9, penalty: 0 },
-        { yawOffset: Math.PI / 2, pitch: 0.12, distanceScale: 1.15, penalty: 0.35 },
-        { yawOffset: -Math.PI / 2, pitch: 0.12, distanceScale: 1.15, penalty: 0.35 },
-    ],
+export const TELEGRAPH_FLARES = {
+    poolSize: 8,
+    seconds: 0.45,
+    parryableColor: "#f2f0ff",
+    perilousColor: "#ff3b24",
+    parryableSize: metres(0.6),
+    perilousSize: metres(1.1),
 };
 
-export const INPUT_BINDINGS = {
-    forward: ["KeyW", "ArrowUp"],
-    backward: ["KeyS", "ArrowDown"],
-    left: ["KeyA", "ArrowLeft"],
-    right: ["KeyD", "ArrowRight"],
-    jump: ["Space"],
-    evade: ["ShiftLeft"],
-    crouch: ["KeyC", "ControlLeft"],
-    parry: ["KeyQ"],
-    shoot: ["KeyF"],
-    finisher: ["KeyE"],
-};
-
-export const MOUSE_BINDINGS = {
-    light: 0,
-    lock: 1,
-    heavy: 2,
-};
-
-export const PLAYER_VITALS = {
-    maxHealth: 100,
-    maxPoise: 60,
-    maxStamina: 100,
-    maxFocus: 3,
-    poiseRegenDelay: 2,
-    poiseRegenRate: 25,
-    staminaRegenDelay: 0.6,
-    staminaRegenRate: 38,
-    staggerSeconds: 1.2,
+export const HIT_SPARKS = {
+    capacity: 256,
+    lifetimeSeconds: 0.42,
+    burstSize: { light: 10, heavy: 18, finisher: 28 } satisfies Record<ImpactTier, number>,
+    sparkColor: "#ffd9a0",
+    emberColor: "#ff6a3a",
 };

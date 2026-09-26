@@ -1,6 +1,37 @@
 import { metres } from "@/lib/helpers";
+import type { IHudVitalDescriptor } from "@/types/hud";
 import { ATMOSPHERE } from "@/constants/rendering";
 import { PALETTE } from "@/constants/characters";
+
+export const HUD = {
+    chaseCatchUpPerSecond: 5,
+    chaseSnapThreshold: 0.002,
+    vignetteHitGain: 2.4,
+    vignetteDecayPerSecond: 5,
+    vignetteLowFraction: 0.35,
+    vignetteLowStrength: 0.45,
+    damageNumberSeconds: 0.9,
+    damageNumberRise: 0.06,
+    damageNumberPool: 20,
+    alertMarkerPool: 12,
+    alertMarkerRange: metres(40),
+    alertMarkerLift: 0.62,
+    alertFlashSeconds: 1.6,
+    styleRoundingSteps: 1000,
+};
+
+export const HUD_VITALS: IHudVitalDescriptor[] = [
+    {
+        id: "health",
+        label: "Vitality",
+        lowFraction: 0.3,
+    },
+    {
+        id: "stamina",
+        label: "Stamina",
+        lowFraction: 0.25,
+    },
+];
 
 export const ISLAND = {
     topRadius: metres(6),
@@ -91,11 +122,6 @@ export const LANDING_SKY = {
     hemisphereIntensity: 0.6,
     fogDensity: 0.0022,
     outlineColor: "#0a0c16",
-};
-
-export const LANDING_HUD = {
-    ringDiameter: 3.5,
-    dotOffset: 1.55,
 };
 
 export const LANDING_MOUNTAINS = {
