@@ -83,7 +83,6 @@ function scanImageDimensions(buffer: Buffer): IImageDimensions | undefined {
     return undefined;
 }
 
-
 function readImageDimensions(file: string): IImageDimensions {
     const dimensions =
         scanImageDimensions(readHead(file, IMAGE_HEAD_BYTES)) ??
@@ -165,7 +164,7 @@ function isValidKtx2(file: string): boolean {
     }
 }
 
-export class AssetCooker {
+class AssetCooker {
     private constructor() {}
 
     static async cook(sourceRoot: string, outputRoot: string): Promise<void> {

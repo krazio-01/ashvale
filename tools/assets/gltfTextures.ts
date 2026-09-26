@@ -5,7 +5,7 @@ export const TEXTURE_ROLE = { base: "base", normal: "normal", strip: "strip" } a
 
 export type TextureRole = (typeof TEXTURE_ROLE)[keyof typeof TEXTURE_ROLE];
 
-export const ROLE_PRIORITY: Record<TextureRole, number> = { strip: 0, normal: 1, base: 2 };
+const ROLE_PRIORITY: Record<TextureRole, number> = { strip: 0, normal: 1, base: 2 };
 
 interface ITextureReference {
     index: number;
@@ -21,7 +21,7 @@ interface IGltfMaterial {
     occlusionTexture?: ITextureReference;
 }
 
-export interface IGltfDocument {
+interface IGltfDocument {
     images?: { uri?: string; mimeType?: string; extensions?: unknown }[];
     textures?: { source?: number; sampler?: number; extensions?: unknown }[];
     materials?: IGltfMaterial[];

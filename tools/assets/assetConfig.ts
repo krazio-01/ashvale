@@ -20,8 +20,10 @@ export const PACK_BUDGETS_MB: Record<string, number> = {
     highlands: 6,
     architecture: 4,
     characters: 24,
-    weapons: 2,
+    weapons: 4,
 };
+
+export const COMBAT_CLIPS_BUDGET_MB = 6;
 
 export const GEOMETRY_DRIFT_TOLERANCE = 1e-3;
 

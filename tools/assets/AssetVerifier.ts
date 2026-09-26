@@ -22,7 +22,7 @@ const KTX2_IDENTIFIER = Buffer.from([
     0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
-export class AssetVerifier {
+class AssetVerifier {
     private readonly failures: string[] = [];
 
     private constructor() {}
@@ -184,10 +184,9 @@ export class AssetVerifier {
         }
 
         await MeshoptDecoder.ready;
-        const cookedIo = new NodeIO()
+        const modelIo = new NodeIO()
             .registerExtensions([KHRTextureBasisu, KHRMeshQuantization, EXTMeshoptCompression])
             .registerDependencies({ "meshopt.decoder": MeshoptDecoder });
-        const sourceIo = new NodeIO();
 
         const cookedModels = outputFiles.filter(
             (file) => file.endsWith(".gltf") || file.endsWith(".glb")
@@ -200,8 +199,8 @@ export class AssetVerifier {
 
             try {
                 const [sourceDoc, cookedDoc] = await Promise.all([
-                    sourceIo.read(sourcePath),
-                    cookedIo.read(cookedPath),
+                    modelIo.read(sourcePath),
+                    modelIo.read(cookedPath),
                 ]);
                 const sourceScene = sourceDoc.getRoot().listScenes()[0];
                 const cookedScene = cookedDoc.getRoot().listScenes()[0];

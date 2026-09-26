@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ASSET_CONFIG } from "./assetConfig";
 
-export function installTranscoder(): void {
+function installTranscoder(): void {
     const { transcoderSourceRoot, transcoderOutputRoot, transcoderFiles } = ASSET_CONFIG;
 
     fs.mkdirSync(transcoderOutputRoot, { recursive: true });

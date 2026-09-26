@@ -17,10 +17,7 @@ function stripUnshadedTextures(document: Awaited<ReturnType<NodeIO["read"]>>): v
     }
 }
 
-function assignTextureUris(
-    document: Awaited<ReturnType<NodeIO["read"]>>,
-    name: string
-): void {
+function assignTextureUris(document: Awaited<ReturnType<NodeIO["read"]>>, name: string): void {
     for (const material of document.getRoot().listMaterials()) {
         material.getBaseColorTexture()?.setURI(`${name}_baseColor.png`);
         material.getNormalTexture()?.setURI(`${name}_normal.png`);
@@ -64,7 +61,7 @@ function reportOutputSizes(): void {
 async function main(): Promise<void> {
     const stagingDirectory = process.argv[2];
     if (!stagingDirectory)
-        throw new Error("usage: tsx tools/CharacterSourcePrep.ts <staging-directory>");
+        throw new Error("usage: tsx tools/assets/CharacterSourcePrep.ts <staging-directory>");
 
     fs.mkdirSync(OUTPUT_DIRECTORY, { recursive: true });
     const io = new NodeIO().registerExtensions([KHRMaterialsEmissiveStrength]);
