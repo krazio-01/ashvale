@@ -4,19 +4,21 @@
     "private": true,
     "description": "A procedurally generated action-adventure realm built from any public GitHub repository.",
     "scripts": {
-        "predev": "tsx tools/TranscoderInstaller.ts",
+        "predev": "tsx tools/assets/TranscoderInstaller.ts",
         "dev": "next dev",
-        "predev:perf": "tsx tools/TranscoderInstaller.ts",
+        "predev:perf": "tsx tools/assets/TranscoderInstaller.ts",
         "dev:perf": "NEXT_PUBLIC_ENABLE_PERF=true next dev",
-        "prebuild": "tsx tools/TranscoderInstaller.ts",
+        "prebuild": "tsx tools/assets/TranscoderInstaller.ts",
         "build": "next build",
         "start": "next start",
         "lint": "eslint",
         "typecheck": "tsc --noEmit",
         "format": "prettier --write src",
-        "cook": "tsx tools/AssetCooker.ts",
-        "verify:assets": "tsx tools/AssetVerifier.ts",
-        "postinstall": "tsx tools/TranscoderInstaller.ts"
+        "cook": "tsx tools/assets/AssetCooker.ts",
+        "verify:assets": "tsx tools/assets/AssetVerifier.ts",
+        "cook:clips": "tsx tools/clips/CombatClipCook.ts",
+        "audition": "tsx tools/clips/ClipAudition.ts",
+        "postinstall": "tsx tools/assets/TranscoderInstaller.ts"
     },
     "dependencies": {
         "@dimforge/rapier3d-compat": "^0.20.0",
