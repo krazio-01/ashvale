@@ -1,18 +1,19 @@
 import type { Object3D, Vector3 } from "three";
-
+import type { IEnemyArchetype } from "@/constants/enemies";
 export type Team = "player" | "enemy";
 export type ImpactTier = "light" | "heavy" | "finisher";
 export type ReactionTier = "none" | "flinch" | "stagger" | "knockback" | "knockdown";
 export type MoveTag = "light" | "heavy" | "dodge" | "parry" | "shoot" | "movement" | "jump";
+export type DodgeSide = "left" | "right";
 export type IntentKind = "light" | "heavy" | "dodge" | "parry" | "shoot" | "slide" | "jump";
-export type MoveGround = "grounded" | "airborne" | "any";
-export type MoveMotion = "rootMotion" | "momentum" | "physics";
-export type HitOutcomeKind =
+type MoveGround = "grounded" | "airborne" | "any";
+type MoveMotion = "rootMotion" | "momentum" | "physics";
+type HitOutcomeKind =
     "ignored" | "evaded" | "perfectEvaded" | "parried" | "damaged" | "staggered" | "killed";
 export type AwarenessState = "unaware" | "suspicious" | "alert";
 export type AlertPhase = "unaware" | "suspicious" | "alert" | "searching" | "returning";
 export type VictimRig = "humanoid" | "creature";
-export type FinisherKind = "counter" | "execution" | "backstab" | "critical";
+export type FinisherKind = "counter" | "execution" | "backstab";
 export type EnemyArchetype = "sentinel" | "wraith" | "golem" | "gremlin";
 
 export interface IMoveWindow {
@@ -35,13 +36,14 @@ export interface IHitWindow extends IMoveWindow {
     impact: ImpactTier;
     knockback: number;
     parryable: boolean;
+    perilous: boolean;
 }
 
 export interface ICancelWindow extends IMoveWindow {
     into: readonly MoveTag[];
 }
 
-export interface ITrackingWindow extends IMoveWindow {
+interface ITrackingWindow extends IMoveWindow {
     turnRate: number;
 }
 
@@ -59,6 +61,15 @@ export interface ISlowMotionProfile {
     seconds: number;
     rampInSeconds: number;
     rampOutSeconds: number;
+}
+
+export type TelegraphDanger = "parryable" | "perilous";
+export type ProjectileKind = "bolt" | "blast";
+
+export interface IProjectileLaunch {
+    at: number;
+    kind: ProjectileKind;
+    socket: string;
 }
 
 export interface IMoveDefinition {
@@ -79,7 +90,6 @@ export interface IMoveDefinition {
     tracking?: ITrackingWindow;
     warp?: IWarpWindow;
     holdAt?: number;
-    telegraphAt?: number;
     next?: Partial<Record<"light" | "heavy", string>>;
     followedBy?: string;
     momentum?: IMomentum;
@@ -88,13 +98,15 @@ export interface IMoveDefinition {
     onLand?: string;
     loop?: boolean;
     durationSeconds?: number;
+    minimumWarningSeconds?: number;
     launch?: number;
+    projectile?: IProjectileLaunch;
 }
 
 export interface IReactionClips {
-    flinch: string;
-    knockback: string;
-    knockdown: string;
+    flinch: readonly string[];
+    knockback: readonly string[];
+    knockdown: readonly string[];
     stagger: string;
     parried: string;
     finisherDeath: string;
@@ -105,7 +117,8 @@ export interface IMoveSet {
     moves: Readonly<Record<string, IMoveDefinition>>;
     entry: Partial<Record<IntentKind, string>>;
     sprintEntry: Partial<Record<IntentKind, string>>;
-    stationaryEntry: Partial<Record<IntentKind, string>>;
+    lockedFarEntry?: Partial<Record<IntentKind, string>>;
+    sideDodgeEntry?: Record<DodgeSide, string>;
     airEntry: Partial<Record<IntentKind, string>>;
     air?: { airborne: string; land: string };
     reactions: IReactionClips;
@@ -125,6 +138,8 @@ export interface IHitPayload {
     impact: ImpactTier;
     knockback: number;
     parryable: boolean;
+    perilous: boolean;
+    ranged: boolean;
     origin: Vector3;
 }
 
@@ -134,11 +149,25 @@ export interface IHitOutcome {
     damageDealt: number;
 }
 
+export interface IAttackThreat {
+    moveSerial: number;
+    secondsUntilHit: number;
+    parryable: boolean;
+    perilous: boolean;
+    impact: ImpactTier;
+}
+
+export interface IAttackThreatSource {
+    readonly attackThreat: IAttackThreat | null;
+    readonly currentTarget: ICombatant | null;
+}
+
 export interface ICombatant {
     readonly id: string;
     readonly team: Team;
     readonly sceneObject: Object3D;
-    readonly position?: Vector3;
+    readonly position: Vector3;
+    readonly bodyRadius: number;
     readonly isDead: boolean;
     readonly isPaired: boolean;
     readonly isStaggered: boolean;
@@ -160,4 +189,9 @@ export interface IFinisherDefinition {
     bearing: number;
     relativeYaw: number;
     killAt: number;
+}
+
+export interface IBoss {
+    readonly id: string;
+    readonly archetype: IEnemyArchetype;
 }

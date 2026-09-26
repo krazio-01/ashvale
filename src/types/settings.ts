@@ -1,8 +1,8 @@
 export type GraphicsQuality = "low" | "medium" | "high" | "ultra" | "custom";
-export type FrameRateLimit = 30 | 60 | 120;
-export type ResolutionScale = 0.75 | 1.0 | 1.25 | 1.5;
+type FrameRateLimit = 30 | 60 | 120;
+type ResolutionScale = 0.75 | 1.0 | 1.25 | 1.5;
 export type ShadowQuality = "off" | "low" | "medium" | "high";
-export type AntiAliasingQuality = "off" | "smaa";
+type AntiAliasingQuality = "off" | "smaa";
 export type OutlineQuality = "off" | "low" | "high";
 
 export interface IGameSettings {
@@ -24,12 +24,12 @@ export interface IGameSettings {
 
 export type SettingSection = "Display" | "Graphics" | "Controls";
 
-export interface IChoiceOption<T> {
+interface IChoiceOption<T> {
     label: string;
     value: T;
 }
 
-export interface IBaseControlDescriptor<K extends keyof IGameSettings> {
+interface IBaseControlDescriptor<K extends keyof IGameSettings> {
     key: K;
     section: SettingSection;
     label: string;
