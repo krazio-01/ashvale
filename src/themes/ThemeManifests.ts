@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { WEAPONS } from "@/constants/weapons";
+import { WEAPONS } from "@/constants/combat";
 import { ChapterSeason, ChapterTheme } from "@/types/realm";
 import type {
     ISeasonProfile,

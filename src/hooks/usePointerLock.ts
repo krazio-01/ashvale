@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState, useRef } from "react";
 
-export interface UsePointerLockOptions {
+interface UsePointerLockOptions {
     onLock?: () => void;
     onUnlock?: () => void;
 }

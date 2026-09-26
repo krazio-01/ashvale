@@ -20,9 +20,9 @@ import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 import { FractalNoise } from "@/lib/noise";
 import { blendColors, createSeededRandom, FULL_TURN } from "@/lib/helpers";
-import { ISLAND, LANDING_CHARACTER, LANDING_PROPS } from "@/constants/landing";
-import { CHARACTER, PLAYER } from "@/constants/characters";
-import { CLIP } from "@/constants/clips";
+import { ISLAND, LANDING_CHARACTER, LANDING_PROPS } from "@/constants/presentation";
+import { CHARACTER, CLIP } from "@/constants/characters";
+import { PLAYER } from "@/constants/player";
 import type { IThemeEnvironment } from "@/types/theme";
 import type { IModelTemplate, ISkinnedModel } from "@/types/world";
 

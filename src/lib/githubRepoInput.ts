@@ -2,7 +2,7 @@ const REPO_URL_PATTERN = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s]+)\/([^
 const SHORTHAND_PATTERN = /^([^/\s]+)\/([^/\s]+)$/;
 const GIT_SUFFIX_PATTERN = /\.git$/i;
 
-export interface IParsedRepo {
+interface IParsedRepo {
     owner: string;
     name: string;
 }

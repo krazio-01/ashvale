@@ -16,15 +16,6 @@ export class MaterialLibrary {
         this.gradientMap = this.buildGradientMap();
     }
 
-    getToonMaterial(color: string): MeshToonMaterial {
-        const cachedMaterial = this.materialsByKey.get(color);
-        if (cachedMaterial) return cachedMaterial;
-
-        const material = new MeshToonMaterial({ color, gradientMap: this.gradientMap });
-        this.materialsByKey.set(color, material);
-        return material;
-    }
-
     getVertexColorToonMaterial(): MeshToonMaterial {
         if (!this.vertexColorMaterial)
             this.vertexColorMaterial = new MeshToonMaterial({

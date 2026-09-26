@@ -238,7 +238,7 @@ export class TerrainGenerator {
     }
 }
 
-export function createTerrainSample(): ITerrainSample {
+function createTerrainSample(): ITerrainSample {
     return {
         elevation: 0,
         carveStrength: 0,
@@ -457,7 +457,7 @@ export interface ICorridorPath {
     lateralSeed: number;
 }
 
-export interface ITerrainSample {
+interface ITerrainSample {
     elevation: number;
     carveStrength: number;
     trailDistance: number;

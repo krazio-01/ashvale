@@ -5,7 +5,6 @@ import { fetchCommitAtPosition } from "@/services/github/GithubService";
 import { generateRealm } from "@/services/realm/RealmGenerator";
 import { IFeaturedRealm, IResolvedRealm } from "@/types/realm";
 import { FEATURED_REALM_LIMIT } from "@/constants/realm";
-
 const NEWEST_COMMIT_POSITION = 0;
 
 export async function resolveRealm(

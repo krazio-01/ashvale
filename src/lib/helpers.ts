@@ -1,12 +1,48 @@
 import { SCALE } from "@/constants/world";
 import { Color } from "three";
-import type { Vector3Tuple } from "three";
+import type { Vector3, Vector3Tuple } from "three";
 
 export const FULL_TURN = Math.PI * 2;
 export const QUARTER_TURN = Math.PI / 2;
 
+export function angleDelta(from: number, to: number): number {
+    const difference = (to - from) % FULL_TURN;
+    return ((difference + Math.PI * 3) % FULL_TURN) - Math.PI;
+}
+
 export function metres(value: number): number {
     return value * SCALE.unitsPerMetre;
+}
+
+export function degrees(value: number): number {
+    return (value * Math.PI) / 180;
+}
+
+export function horizontalDistance(from: Vector3, to: Vector3): number {
+    return Math.hypot(to.x - from.x, to.z - from.z);
+}
+
+export function yawTowards(from: Vector3, to: Vector3): number {
+    return Math.atan2(to.x - from.x, to.z - from.z);
+}
+
+export function horizontalDirection(from: Vector3, to: Vector3, out: Vector3): number {
+    const offsetX = to.x - from.x;
+    const offsetZ = to.z - from.z;
+    const distance = Math.hypot(offsetX, offsetZ);
+
+    if (distance > 1e-6) out.set(offsetX / distance, 0, offsetZ / distance);
+    else out.set(0, 0, 0);
+
+    return distance;
+}
+
+export function pickRandom<T>(items: readonly T[], nextRandom: () => number = Math.random): T {
+    const picked = items[Math.floor(nextRandom() * items.length)];
+
+    if (picked === undefined) throw new Error("pickRandom called with an empty list");
+
+    return picked;
 }
 
 export function vec3(x: number, y: number, z: number): Vector3Tuple {
@@ -15,10 +51,6 @@ export function vec3(x: number, y: number, z: number): Vector3Tuple {
 
 export function pair(a: number, b: number): [number, number] {
     return [a, b];
-}
-
-export function quad(a: number, b: number, c: number, d: number): IQuad {
-    return [a, b, c, d];
 }
 
 export function yieldToBrowser(): Promise<void> {
@@ -141,8 +173,6 @@ export function distanceOutsideBox(
 
     return Math.hypot(outsideX, outsideZ);
 }
-
-export type IQuad = [number, number, number, number];
 
 export function tintKeepingLightness(
     hex: string,

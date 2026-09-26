@@ -3,8 +3,7 @@ import { useRef } from "react";
 import type { RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { lerp } from "@/lib/helpers";
-import { LANDING_CAMERA } from "@/constants/landing";
-
+import { LANDING_CAMERA } from "@/constants/presentation";
 const BEARING_DEGREES_IN_CIRCLE = 360;
 
 export interface IOrbitInput {

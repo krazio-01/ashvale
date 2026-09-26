@@ -441,7 +441,7 @@ function deriveSeed(repositoryOwner: string, repositoryName: string): number {
 
 type ChapterPosition = "founding" | "middle" | "present";
 
-export interface IGeneratedRealm {
+interface IGeneratedRealm {
     realm: IResolvedRealm;
     headCommitSha: string;
 }

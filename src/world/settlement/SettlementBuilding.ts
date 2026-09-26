@@ -37,7 +37,7 @@ const EDGE_YAW: Record<Edge, number> = {
     [Edge.East]: THREE_QUARTER_TURN,
 };
 
-export interface IGenerateBuildingInput {
+interface IGenerateBuildingInput {
     template: ISettlementBuildingTemplate;
     originLocalX: number;
     originLocalZ: number;
@@ -47,7 +47,7 @@ export interface IGenerateBuildingInput {
     floorElevation: number;
 }
 
-export interface IGeneratedBuilding {
+interface IGeneratedBuilding {
     placements: ISettlementPlacement[];
     colliders: ISettlementColliderDesc[];
     footprintRadius: number;

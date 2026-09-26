@@ -1,5 +1,4 @@
 import { HttpStatus } from "@/constants/strings";
-
 export class ResponseWrapper {
     static success<T>(
         data: T,

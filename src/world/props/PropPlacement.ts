@@ -6,8 +6,8 @@ import {
     type TerrainSampleGrid,
 } from "@/world/terrain/TerrainGeneration";
 import type { PropOccupancy, PropCollector } from "@/world/props/PropFieldState";
-import { PROP_FIELD } from "@/constants/placement";
 import { WATER_CHANNEL, WORLD_EDGE } from "@/constants/world";
+import { PROP_FIELD } from "@/constants/placement";
 import { clamp, lerp, scaleBetween, smoothstep, FULL_TURN } from "@/lib/helpers";
 
 const SOFT_EDGED_LAYERS = new Set([PropLayer.Understory, PropLayer.Groundcover]);

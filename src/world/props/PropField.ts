@@ -15,7 +15,7 @@ import type { IWaterCourse } from "@/world/water/WaterCourse";
 import { PROP_FIELD } from "@/constants/placement";
 import { createSeededRandom } from "@/lib/helpers";
 
-export interface IPropFieldResult {
+interface IPropFieldResult {
     buckets: IPropGroup[][];
     occupancy: PropOccupancy;
 }
@@ -129,13 +129,13 @@ export interface IPropFieldInput {
     extraPlacements?: IExtraPlacement[];
 }
 
-export interface IExtraReservationDisc {
+interface IExtraReservationDisc {
     localX: number;
     localZ: number;
     radius: number;
 }
 
-export interface IExtraPlacement {
+interface IExtraPlacement {
     prop: IThemeProp;
     hasCollider: boolean;
     localX: number;

@@ -1,6 +1,5 @@
 import { DEFAULT_FAMILY, PropLayer, type IThemeProp } from "@/types/theme";
 import { SCALE } from "@/constants/world";
-
 const MODEL_DIRECTORY = "/models/woodland";
 const HIGHLANDS_DIRECTORY = "/models/highlands";
 const MEDIEVAL_DIRECTORY = "/models/medieval-village";
@@ -340,26 +339,4 @@ export const RUINS_MONUMENTS = propFamily(
     1.2,
     [0.9 * BUILT_SCALE, 1.15 * BUILT_SCALE],
     { pack: "architecture", directory: ARCHITECTURE_DIRECTORY }
-);
-
-export const RUINS_CLUTTER = propFamily(
-    ["Pot1_Broken", "Pot2_Broken", "Pot3_Broken", "Skull", "BearTrap_Open", "BearTrap_Closed"],
-    PropLayer.Debris,
-    0.35,
-    [0.85 * BUILT_SCALE, 1.15 * BUILT_SCALE],
-    { pack: "architecture", directory: ARCHITECTURE_DIRECTORY }
-);
-
-export const RUINS_CHESTS = propFamily(
-    ["Chest", "Chest_Gold"],
-    PropLayer.Debris,
-    0.35,
-    [0.85 * BUILT_SCALE, 1.15 * BUILT_SCALE],
-    {
-        pack: "architecture",
-        directory: ARCHITECTURE_DIRECTORY,
-        collides: true,
-        colliderShape: "cuboid",
-        slopeLimit: 0.35,
-    }
 );

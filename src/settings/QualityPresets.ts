@@ -6,7 +6,7 @@ import type {
     OutlineQuality,
 } from "@/types/settings";
 
-export type GraphicsPresetValues = Pick<
+type GraphicsPresetValues = Pick<
     IGameSettings,
     "shadows" | "bloom" | "antiAliasing" | "outlines" | "atmosphere"
 >;

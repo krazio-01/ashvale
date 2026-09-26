@@ -22,7 +22,7 @@ const ANGLE_JITTER = 0.3;
 const DOOR_LANE_HALF_WIDTH = metres(1.2);
 const TRAIL_AVOIDANCE_CLEARANCE = metres(3);
 
-export interface ISettlementLayoutInput {
+interface ISettlementLayoutInput {
     site: IRegionSite;
     lanes: ICorridorLane[];
     heightMap: TerrainSampleGrid;

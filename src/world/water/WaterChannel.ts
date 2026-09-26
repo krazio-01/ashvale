@@ -233,7 +233,7 @@ export function createChannelReading(): IChannelReading {
     return { bankBlend: 0, bedProfile: 0, waterlineElevation: 0 };
 }
 
-export interface IChannelReading {
+interface IChannelReading {
     bankBlend: number;
     bedProfile: number;
     waterlineElevation: number;
