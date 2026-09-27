@@ -2,7 +2,7 @@ import { AnimationMixer, LinearInterpolant, Matrix3, Matrix4, Vector3 } from "th
 import type { AnimationAction, AnimationClip, Interpolant, KeyframeTrack, Object3D } from "three";
 import { angleDelta, clamp, lerp, smoothstep } from "@/lib/helpers";
 
-export interface IGaitClip {
+interface IGaitClip {
     clip: string;
     speed: number;
 }
@@ -12,15 +12,22 @@ export interface IDirectionalClip {
     angle: number;
 }
 
+interface IIdleVariation {
+    clips: readonly string[];
+    afterSeconds: number;
+}
+
 export interface IFreeLocomotion {
     kind: "free";
     idle: string;
+    idleVariation?: IIdleVariation;
     gaits: readonly IGaitClip[];
 }
 
 export interface IStrafeLocomotion {
     kind: "strafe";
     idle: string;
+    idleVariation?: IIdleVariation;
     directions: readonly IDirectionalClip[];
     speed: number;
 }
@@ -55,6 +62,7 @@ const IDLE_BLEND_FRACTION = 0.35;
 const MOVING_EPSILON = 0.05;
 const WEIGHT_EPSILON = 1e-4;
 const LOCOMOTION_SWAP_SECONDS = 0.2;
+const IDLE_VARIANT_FADE_SECONDS = 0.5;
 const UP = new Vector3(0, 1, 0);
 
 const scratchRootStart = new Vector3();
@@ -100,6 +108,10 @@ export class CharacterAnimator {
     private inputRight = 0;
     private inputForward = 0;
     private inputSpeed = 0;
+    private idleVariant: AnimationAction | null = null;
+    private idleVariantBlend = 0;
+    private idleVariantCount = 0;
+    private standingSeconds = 0;
 
     constructor(
         root: Object3D,
@@ -123,16 +135,6 @@ export class CharacterAnimator {
         }
 
         for (const clip of clips) this.clipsByName.set(clip.name, clip);
-    }
-
-    get oneShotTime(): number {
-        return this.oneShot?.time ?? 0;
-    }
-
-    get weightSum(): number {
-        let sum = 0;
-        for (const action of this.allActions) sum += action.getEffectiveWeight();
-        return sum;
     }
 
     durationOf(clip: string): number {
@@ -286,8 +288,15 @@ export class CharacterAnimator {
 
         if (locomotionShare > 0) {
             const swap = this.swapProgress;
-            for (const channel of this.channels)
-                accumulate(totals, channel.action, channel.weight * locomotionShare * swap);
+            for (let index = 0; index < this.channels.length; index += 1) {
+                const channel = this.channels[index];
+                if (!channel) continue;
+                const variantShare = index === 0 && this.idleVariant ? this.idleVariantBlend : 0;
+                const weight = channel.weight * locomotionShare * swap;
+                accumulate(totals, channel.action, weight * (1 - variantShare));
+                if (this.idleVariant && variantShare > 0)
+                    accumulate(totals, this.idleVariant, weight * variantShare);
+            }
             for (const retired of this.retiredChannels)
                 accumulate(totals, retired.action, retired.weight * locomotionShare * (1 - swap));
         }
@@ -302,9 +311,27 @@ export class CharacterAnimator {
     private retireChannels(): void {
         const swap = this.swapProgress;
         for (const retired of this.retiredChannels) retired.weight *= 1 - swap;
-        for (const channel of this.channels)
-            this.retiredChannels.push({ action: channel.action, weight: channel.weight * swap });
 
+        const variantShare = this.idleVariant ? this.idleVariantBlend : 0;
+        for (let index = 0; index < this.channels.length; index += 1) {
+            const channel = this.channels[index];
+            if (!channel) continue;
+            const share = index === 0 ? 1 - variantShare : 1;
+            this.retiredChannels.push({
+                action: channel.action,
+                weight: channel.weight * share * swap,
+            });
+        }
+        const idleWeight = this.channels[0]?.weight ?? 0;
+        if (this.idleVariant && variantShare > 0)
+            this.retiredChannels.push({
+                action: this.idleVariant,
+                weight: idleWeight * variantShare * swap,
+            });
+
+        this.idleVariant = null;
+        this.idleVariantBlend = 0;
+        this.standingSeconds = 0;
         this.channels.length = 0;
         this.swapProgress = this.retiredChannels.length > 0 ? 0 : 1;
     }
@@ -320,6 +347,7 @@ export class CharacterAnimator {
         if (!definition) return;
 
         this.computeChannelWeights(definition);
+        this.advanceIdleVariation(definition, step);
 
         let phaseRate = 0;
         let syncedWeight = 0;
@@ -343,6 +371,39 @@ export class CharacterAnimator {
                 ? this.syncedPhase * duration
                 : (action.time + step) % duration;
         }
+    }
+
+    private advanceIdleVariation(definition: LocomotionDefinition, step: number): void {
+        const variation = definition.idleVariation;
+        if (!variation || variation.clips.length === 0) return;
+
+        const standing = this.inputSpeed < MOVING_EPSILON && this.incoming === LOCOMOTION;
+        const variant = this.idleVariant;
+
+        if (!variant) {
+            this.standingSeconds = standing ? this.standingSeconds + step : 0;
+            if (this.standingSeconds < variation.afterSeconds) return;
+
+            this.standingSeconds = 0;
+            const clip = variation.clips[this.idleVariantCount % variation.clips.length];
+            this.idleVariantCount += 1;
+            const action = clip ? this.actionFor(clip) : null;
+            if (!action) return;
+
+            action.time = 0;
+            this.idleVariant = action;
+            this.idleVariantBlend = 0;
+            return;
+        }
+
+        const duration = variant.getClip().duration;
+        variant.time = Math.min(variant.time + step, duration);
+        const fadeStep = step / IDLE_VARIANT_FADE_SECONDS;
+        const fadingOut = !standing || duration - variant.time <= IDLE_VARIANT_FADE_SECONDS;
+        this.idleVariantBlend = fadingOut
+            ? Math.max(0, this.idleVariantBlend - fadeStep)
+            : Math.min(1, this.idleVariantBlend + fadeStep);
+        if (fadingOut && this.idleVariantBlend === 0) this.idleVariant = null;
     }
 
     private computeChannelWeights(definition: LocomotionDefinition): void {
