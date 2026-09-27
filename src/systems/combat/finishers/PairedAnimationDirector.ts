@@ -5,9 +5,9 @@ import {
     pairCentreDistance,
     PairSlot,
 } from "@/systems/combat/finishers/PairAlignment";
-import { CLIP } from "@/constants/clips";
+import { CLIP } from "@/constants/characters";
 import { FINISHER_RULES } from "@/constants/combat";
-import { angleDelta, smoothstep } from "@/lib/helpers";
+import { angleDelta, horizontalDistance, smoothstep, yawTowards } from "@/lib/helpers";
 import type { ICombatant, IFinisherDefinition } from "@/types/combat";
 import type { IWorldContext } from "@/types/world";
 
@@ -15,8 +15,6 @@ export type PairedRole = "attacker" | "victim";
 
 export interface IPairedParticipant extends ICombatant {
     readonly yaw: number;
-    readonly position: Vector3;
-    readonly bodyRadius: number;
     readonly disposed: boolean;
     beginPaired(role: PairedRole): void;
     playPairedLoop(clip: string, yaw: number): void;
@@ -29,7 +27,7 @@ export interface IPairedParticipant extends ICombatant {
     clipDuration(clip: string): number;
 }
 
-export type PairedServices = Pick<IWorldContext, "combatEvents" | "timeDilation">;
+type PairedServices = Pick<IWorldContext, "combatEvents">;
 
 type FinisherPhase = "approach" | "perform";
 
@@ -40,14 +38,6 @@ const scratchSyncTarget = new Vector3();
 const scratchSyncDelta = new Vector3();
 const scratchPush = new Vector3();
 const scratchAttackerShift = new Vector3();
-
-function yawBetween(from: Vector3, to: Vector3): number {
-    return Math.atan2(to.x - from.x, to.z - from.z);
-}
-
-function horizontalDistance(from: Vector3, to: Vector3): number {
-    return Math.hypot(to.x - from.x, to.z - from.z);
-}
 
 export class PairedAnimationDirector {
     private readonly services: PairedServices;
@@ -115,7 +105,10 @@ export class PairedAnimationDirector {
 
         attacker.beginPaired("attacker");
         victim.beginPaired("victim");
-        victim.playPairedLoop(CLIP.reactStagger, yawBetween(victim.position, attacker.position));
+        victim.playPairedLoop(
+            CLIP.reactStagger,
+            yawTowards(attacker.position, victim.position) + finisher.relativeYaw
+        );
 
         this.attacker = attacker;
         this.victim = victim;
@@ -140,7 +133,7 @@ export class PairedAnimationDirector {
                 FINISHER_RULES.approachSpeed,
                 travel / FINISHER_RULES.approachMaxSeconds
             );
-            attacker.playPairedLoop(CLIP.sprint, yawBetween(attacker.position, victim.position));
+            attacker.playPairedLoop(CLIP.sprint, yawTowards(attacker.position, victim.position));
         } else this.beginPerform(attacker, victim, finisher);
 
         this.services.combatEvents.emit("finisherStarted", { attacker, victim, finisher });
@@ -166,7 +159,10 @@ export class PairedAnimationDirector {
     abort(): void {
         this.attacker?.endPaired();
         if (this.victim && !this.victim.disposed) this.victim.endPaired();
-        this.clear();
+        this.attacker = null;
+        this.victim = null;
+        this.finisher = null;
+        this.victimClip = null;
     }
 
     private tickApproach(
@@ -188,11 +184,11 @@ export class PairedAnimationDirector {
             return true;
         }
 
-        const heading = yawBetween(attacker.position, victim.position);
+        const heading = yawTowards(attacker.position, victim.position);
         const step = Math.min(remaining, this.approachSpeed * deltaSeconds);
         attacker.movePaired(scratchStep.set(Math.sin(heading) * step, 0, Math.cos(heading) * step));
         attacker.setPairedYaw(heading);
-        victim.setPairedYaw(heading + Math.PI);
+        victim.setPairedYaw(heading + finisher.relativeYaw);
         return false;
     }
 
@@ -215,8 +211,7 @@ export class PairedAnimationDirector {
         this.victimSyncFromYaw = victim.yaw;
 
         attacker.playPaired(finisher.attackerClip, attacker.yaw);
-        const pairedVictimClip =
-            victim.victimRig === "humanoid" ? finisher.pairedVictimClip : null;
+        const pairedVictimClip = finisher.pairedVictimClip;
         if (pairedVictimClip) victim.playPaired(pairedVictimClip, victim.yaw);
 
         this.victimClip = pairedVictimClip;
@@ -238,7 +233,8 @@ export class PairedAnimationDirector {
             attacker.position,
             this.attackerLastPosition
         );
-        if (attackerShift.lengthSq() > 0) this.slot.victimPosition.add(attackerShift);
+        if (!this.victimClip && attackerShift.lengthSq() > 0)
+            this.slot.victimPosition.add(attackerShift);
         this.attackerLastPosition.copy(attacker.position);
 
         this.syncPair(attacker, victim);
@@ -256,7 +252,7 @@ export class PairedAnimationDirector {
             this.kill(attacker, victim);
         if (this.elapsed < this.duration) return false;
 
-        this.release();
+        this.abort();
         return true;
     }
 
@@ -280,18 +276,5 @@ export class PairedAnimationDirector {
         this.killed = true;
         victim.finishOff(attacker);
         this.services.combatEvents.emit("finisherKill", { attacker, victim });
-    }
-
-    private release(): void {
-        this.attacker?.endPaired();
-        this.victim?.endPaired();
-        this.clear();
-    }
-
-    private clear(): void {
-        this.attacker = null;
-        this.victim = null;
-        this.finisher = null;
-        this.victimClip = null;
     }
 }

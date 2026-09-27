@@ -1,16 +1,30 @@
 import { IntentQueue } from "@/systems/combat/actions/IntentQueue";
-import { allowsCancel, isWithin, secondsSinceStart } from "@/systems/combat/actions/MoveTimeline";
+import {
+    allowsCancel,
+    firstStrikeAt,
+    isWithin,
+    secondsSinceStart,
+} from "@/systems/combat/actions/MoveTimeline";
 import { COMBAT_TIMING } from "@/constants/combat";
-import type { IMoveDefinition, IMoveSet, IntentKind, MoveTag, ReactionTier } from "@/types/combat";
+import type {
+    DodgeSide,
+    IMoveDefinition,
+    IMoveSet,
+    IntentKind,
+    MoveTag,
+    ReactionTier,
+} from "@/types/combat";
 
-export type MachineState = "locomotion" | "move" | "reaction" | "staggered" | "paired" | "dead";
+type MachineState = "locomotion" | "move" | "reaction" | "staggered" | "paired" | "dead";
 
 export interface IMachineInput {
     deltaSeconds: number;
     realDeltaSeconds: number;
     heavyHeld: boolean;
     isSprinting: boolean;
+    isLockedTargetFar: boolean;
     hasDirectionalInput: boolean;
+    dodgeSide: DodgeSide | null;
     isGrounded: boolean;
     spendStamina: (cost: number) => boolean;
 }
@@ -24,7 +38,9 @@ export interface IMachineOutput {
     returnedToLocomotion: boolean;
     previousTime: number;
     time: number;
+    moveSerial: number;
     moveSeconds: number;
+    windupUnitSeconds: number;
     allowsLocomotion: boolean;
     isInvulnerable: boolean;
     invulnerableSeconds: number;
@@ -52,7 +68,8 @@ function validateMoveSet(moveSet: IMoveSet): void {
     const references: (string | undefined)[] = [
         ...Object.values(moveSet.entry),
         ...Object.values(moveSet.sprintEntry),
-        ...Object.values(moveSet.stationaryEntry),
+        ...Object.values(moveSet.lockedFarEntry ?? {}),
+        ...Object.values(moveSet.sideDodgeEntry ?? {}),
         ...Object.values(moveSet.airEntry),
         moveSet.air?.airborne,
         moveSet.air?.land,
@@ -74,7 +91,9 @@ export class ActionMachine {
         returnedToLocomotion: false,
         previousTime: 0,
         time: 0,
+        moveSerial: 0,
         moveSeconds: 0,
+        windupUnitSeconds: 0,
         allowsLocomotion: true,
         isInvulnerable: false,
         invulnerableSeconds: 0,
@@ -90,11 +109,13 @@ export class ActionMachine {
     private readonly moveSet: IMoveSet;
     private readonly clipSeconds: (clip: string) => number;
     private readonly secondsByMove = new Map<string, number>();
+    private readonly windupUnitSecondsByMove = new Map<string, number>();
     private currentState: MachineState = "locomotion";
     private currentMove: IMoveDefinition | null = null;
     private time = 0;
     private previousTime = 0;
     private charge = 0;
+    private moveSerial = 0;
     private stateRemaining = 0;
     private pendingMoveStarted = false;
     private pendingReaction: ReactionTier | null = null;
@@ -115,7 +136,11 @@ export class ActionMachine {
         return this.currentState === "move" ? this.currentMove : null;
     }
 
-    secondsFor(move: IMoveDefinition): number {
+    private get isLocked(): boolean {
+        return this.currentState === "dead" || this.currentState === "paired";
+    }
+
+    private secondsFor(move: IMoveDefinition): number {
         const cached = this.secondsByMove.get(move.id);
         if (cached !== undefined) return cached;
 
@@ -125,29 +150,65 @@ export class ActionMachine {
         return seconds;
     }
 
+    private windupUnitSecondsFor(move: IMoveDefinition): number {
+        const cached = this.windupUnitSecondsByMove.get(move.id);
+        if (cached !== undefined) return cached;
+
+        const playbackSeconds = this.secondsFor(move);
+        const strikeAt = firstStrikeAt(move);
+        const windupUnitSeconds =
+            move.minimumWarningSeconds !== undefined && strikeAt !== null && strikeAt > 0
+                ? Math.max(playbackSeconds, move.minimumWarningSeconds / strikeAt)
+                : playbackSeconds;
+        this.windupUnitSecondsByMove.set(move.id, windupUnitSeconds);
+        return windupUnitSeconds;
+    }
+
+    private advancedTime(move: IMoveDefinition, deltaSeconds: number): number {
+        const playbackSeconds = this.secondsFor(move);
+        const windupUnitSeconds = this.windupUnitSecondsFor(move);
+        const strikeAt = firstStrikeAt(move);
+
+        if (strikeAt === null || windupUnitSeconds === playbackSeconds || this.time >= strikeAt)
+            return this.time + deltaSeconds / playbackSeconds;
+
+        const windupSecondsLeft = (strikeAt - this.time) * windupUnitSeconds;
+        if (deltaSeconds <= windupSecondsLeft) return this.time + deltaSeconds / windupUnitSeconds;
+        return strikeAt + (deltaSeconds - windupSecondsLeft) / playbackSeconds;
+    }
+
     queue(intent: IntentKind): void {
-        if (this.currentState === "dead" || this.currentState === "paired") return;
+        if (this.isLocked) return;
         this.intents.push(intent);
     }
 
     forceMove(moveId: string): boolean {
+        if (this.isLocked) return false;
         const move = this.moveSet.moves[moveId];
-        if (!move || this.currentState === "dead" || this.currentState === "paired") return false;
+        if (!move) return false;
+
+        this.beginMove(move);
+        return true;
+    }
+
+    startMove(moveId: string): boolean {
+        if (this.isLocked) return false;
+        const move = this.moveSet.moves[moveId];
+        if (!move || !this.canStartMove(move)) return false;
 
         this.beginMove(move);
         return true;
     }
 
     react(tier: ReactionTier, seconds: number): void {
-        if (tier === "none" || this.currentState === "dead" || this.currentState === "paired")
-            return;
+        if (tier === "none" || this.isLocked) return;
 
         this.enterTimedState("reaction", seconds);
         this.pendingReaction = tier;
     }
 
     stagger(seconds: number): void {
-        if (this.currentState === "dead" || this.currentState === "paired") return;
+        if (this.isLocked) return;
 
         this.enterTimedState("staggered", seconds);
         this.pendingStagger = true;
@@ -195,7 +256,7 @@ export class ActionMachine {
         if (this.currentState === "reaction" || this.currentState === "staggered")
             this.tickTimedState(input.deltaSeconds);
 
-        if (this.currentState === "move" && input.isGrounded) this.land();
+        if (this.currentState === "move" && input.isGrounded) this.land(input.hasDirectionalInput);
         if (this.currentState === "move" && this.time >= 1) this.finishMove();
         if (this.currentState === "move") this.advanceMove(input);
         if (this.currentState === "locomotion" || this.currentState === "move")
@@ -209,32 +270,32 @@ export class ActionMachine {
         if (!move) return;
 
         this.previousTime = this.time;
-        let next = this.time + input.deltaSeconds / this.secondsFor(move);
+        let next = this.advancedTime(move, input.deltaSeconds);
         const holdAt = move.holdAt;
 
-        if (
-            holdAt !== undefined &&
-            input.heavyHeld &&
-            this.charge < 1 &&
-            next >= holdAt &&
-            this.time <= holdAt
-        ) {
-            if (this.time >= holdAt)
-                this.charge = Math.min(
-                    1,
-                    this.charge + input.deltaSeconds / COMBAT_TIMING.maxChargeSeconds
-                );
-            next = holdAt;
+        if (holdAt !== undefined) {
+            const isChargingHeld = input.heavyHeld && this.charge < 1;
+            const reachesHoldPoint = this.time <= holdAt && next >= holdAt;
+            const isParkedAtHoldPoint = this.time >= holdAt;
+
+            if (isChargingHeld && reachesHoldPoint) {
+                if (isParkedAtHoldPoint)
+                    this.charge = Math.min(
+                        1,
+                        this.charge + input.deltaSeconds / COMBAT_TIMING.maxChargeSeconds
+                    );
+                next = holdAt;
+            }
         }
 
         this.time = move.loop ? next % 1 : Math.min(1, next);
     }
 
-    private land(): void {
+    private land(isSteering: boolean): void {
         const move = this.currentMove;
         if (!move || (move.onLand === undefined && move.requires !== "airborne")) return;
 
-        const landingId = move.onLand ?? this.moveSet.air?.land;
+        const landingId = move.onLand ?? (isSteering ? undefined : this.moveSet.air?.land);
         const landing = landingId ? this.moveSet.moves[landingId] : undefined;
         if (landing) this.beginMove(landing);
         else this.toLocomotion();
@@ -269,6 +330,15 @@ export class ActionMachine {
         }
     }
 
+    private canStartMove(move: IMoveDefinition): boolean {
+        if (this.currentState === "locomotion") return true;
+        const current = this.currentMove;
+        if (this.currentState !== "move" || !current) return false;
+        if (this.time >= 1) return true;
+
+        return move.tags.some((tag) => allowsCancel(current, this.time, tag));
+    }
+
     private permits(tag: MoveTag): boolean {
         if (this.currentState === "locomotion") return true;
 
@@ -287,7 +357,10 @@ export class ActionMachine {
         const entryId =
             (input.isGrounded ? undefined : this.moveSet.airEntry[intent]) ??
             (input.isSprinting ? this.moveSet.sprintEntry[intent] : undefined) ??
-            (input.hasDirectionalInput ? undefined : this.moveSet.stationaryEntry[intent]) ??
+            (input.isLockedTargetFar ? this.moveSet.lockedFarEntry?.[intent] : undefined) ??
+            (intent === "dodge" && input.dodgeSide
+                ? this.moveSet.sideDodgeEntry?.[input.dodgeSide]
+                : undefined) ??
             this.moveSet.entry[intent];
 
         return entryId ? (this.moveSet.moves[entryId] ?? null) : null;
@@ -301,6 +374,7 @@ export class ActionMachine {
     }
 
     private beginMove(move: IMoveDefinition): void {
+        this.moveSerial += 1;
         this.currentMove = move;
         this.currentState = "move";
         this.time = 0;
@@ -346,7 +420,9 @@ export class ActionMachine {
 
         output.previousTime = move ? this.previousTime : 0;
         output.time = move ? this.time : 0;
+        output.moveSerial = this.moveSerial;
         output.moveSeconds = move ? this.secondsFor(move) : 0;
+        output.windupUnitSeconds = move ? this.windupUnitSecondsFor(move) : 0;
         output.allowsLocomotion =
             this.currentState === "locomotion" ||
             (move !== null && allowsCancel(move, this.time, "movement"));

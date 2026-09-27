@@ -9,7 +9,6 @@ import { Vector3 } from "three";
 import type { Vector3Tuple } from "three";
 import { KNOCKBACK_DECAY } from "@/constants/combat";
 import { COLLISION_GROUPS, WORLD } from "@/constants/world";
-
 export interface IMotorSpec {
     height: number;
     radius: number;
@@ -33,7 +32,7 @@ export class CharacterMotor {
     readonly collider: Collider;
     readonly velocity = new Vector3();
     readonly renderPosition = new Vector3();
-    readonly groundNormal = new Vector3(0, 1, 0);
+    private readonly groundNormal = new Vector3(0, 1, 0);
 
     private readonly physicsWorld: PhysicsWorld;
     private readonly rigidBody: RigidBody;
@@ -109,8 +108,8 @@ export class CharacterMotor {
         this.previousPosition.copy(this.simulatedPosition);
         if (deltaSeconds <= 0 || !this.isCollidable) return;
 
-        this.grounded = this.controller.computedGrounded();
-        if (this.grounded && this.verticalVelocity <= 0) this.verticalVelocity = 0;
+        const isSettled = this.grounded && this.verticalVelocity <= 0;
+        if (isSettled) this.verticalVelocity = 0;
 
         this.verticalVelocity = Math.max(
             this.verticalVelocity + WORLD.gravity * deltaSeconds,
@@ -120,10 +119,9 @@ export class CharacterMotor {
         const acceleration = this.grounded
             ? this.spec.groundAcceleration
             : this.spec.airAcceleration;
-        this.velocity.x +=
-            (desiredVelocity.x - this.velocity.x) * (1 - Math.exp(-acceleration * deltaSeconds));
-        this.velocity.z +=
-            (desiredVelocity.z - this.velocity.z) * (1 - Math.exp(-acceleration * deltaSeconds));
+        const approach = 1 - Math.exp(-acceleration * deltaSeconds);
+        this.velocity.x += (desiredVelocity.x - this.velocity.x) * approach;
+        this.velocity.z += (desiredVelocity.z - this.velocity.z) * approach;
         if (Math.abs(this.velocity.x) < REST_EPSILON && Math.abs(this.velocity.z) < REST_EPSILON)
             this.velocity.set(0, 0, 0);
 
@@ -132,13 +130,7 @@ export class CharacterMotor {
 
         const moveX = (this.velocity.x + this.knockback.x) * deltaSeconds + (displacement?.x ?? 0);
         const moveZ = (this.velocity.z + this.knockback.z) * deltaSeconds + (displacement?.z ?? 0);
-        const isResting =
-            this.grounded &&
-            moveX === 0 &&
-            moveZ === 0 &&
-            this.verticalVelocity === WORLD.gravity * deltaSeconds;
-
-        if (isResting) return;
+        if (isSettled && moveX === 0 && moveZ === 0) return;
 
         const isPressedToGround = this.grounded && this.verticalVelocity <= 0;
         const moveY = isPressedToGround
@@ -149,14 +141,15 @@ export class CharacterMotor {
         request.y = moveY;
         request.z = moveZ;
         this.controller.computeColliderMovement(this.collider, request);
+        this.grounded = this.controller.computedGrounded();
 
         const resolved = this.controller.computedMovement();
         const current = this.simulatedPosition;
-        const next = this.nextTranslation;
-        next.x = current.x + resolved.x;
-        next.y = current.y + resolved.y;
-        next.z = current.z + resolved.z;
-        this.rigidBody.setNextKinematicTranslation(next);
+        this.commitTranslation(
+            current.x + resolved.x,
+            current.y + resolved.y,
+            current.z + resolved.z
+        );
     }
 
     isPathBlocked(directionX: number, directionZ: number, distance: number): boolean {
@@ -231,12 +224,33 @@ export class CharacterMotor {
     }
 
     translate(delta: Vector3): void {
-        this.previousPosition.copy(this.simulatedPosition);
-        const next = this.nextTranslation;
-        next.x = this.simulatedPosition.x + delta.x;
-        next.y = this.simulatedPosition.y + delta.y;
-        next.z = this.simulatedPosition.z + delta.z;
-        this.rigidBody.setNextKinematicTranslation(next);
+        const current = this.simulatedPosition;
+        this.previousPosition.copy(current);
+        this.commitTranslation(current.x + delta.x, current.y + delta.y, current.z + delta.z);
+    }
+
+    translateOnGround(delta: Vector3): void {
+        const current = this.simulatedPosition;
+        this.previousPosition.copy(current);
+        const nextX = current.x + delta.x;
+        const nextZ = current.z + delta.z;
+        let nextY = current.y;
+
+        const probeHeight = this.spec.height;
+        const origin = this.groundProbe.origin;
+        origin.x = nextX;
+        origin.y = current.y + probeHeight;
+        origin.z = nextZ;
+        const hit = this.physicsWorld.castRay(
+            this.groundProbe,
+            probeHeight * 3,
+            true,
+            undefined,
+            COLLISION_GROUPS.character,
+            this.collider
+        );
+        if (hit) nextY = origin.y - hit.timeOfImpact + this.spec.height / 2;
+        this.commitTranslation(nextX, nextY, nextZ);
     }
 
     jump(force: number): void {
@@ -254,12 +268,8 @@ export class CharacterMotor {
     }
 
     teleport(position: Vector3): void {
-        const next = this.nextTranslation;
-        next.x = position.x;
-        next.y = position.y;
-        next.z = position.z;
-        this.rigidBody.setTranslation(next, true);
-        this.rigidBody.setNextKinematicTranslation(next);
+        this.rigidBody.setTranslation(position, true);
+        this.commitTranslation(position.x, position.y, position.z);
         this.previousPosition.copy(position);
         this.simulatedPosition.copy(position);
         this.renderPosition.copy(position);
@@ -278,6 +288,14 @@ export class CharacterMotor {
             this.simulatedPosition,
             alpha
         );
+    }
+
+    private commitTranslation(x: number, y: number, z: number): void {
+        const next = this.nextTranslation;
+        next.x = x;
+        next.y = y;
+        next.z = z;
+        this.rigidBody.setNextKinematicTranslation(next);
     }
 
     dispose(): void {

@@ -1,6 +1,8 @@
 import { Vector3 } from "three";
 import type { IMachineOutput } from "@/systems/combat/actions/ActionMachine";
+import { emitHitLanded } from "@/systems/combat/services/CombatEvents";
 import type { ICombatEventMap } from "@/systems/combat/services/CombatEvents";
+import { isConnected } from "@/systems/combat/hit/HitResolver";
 import { WeaponSweep } from "@/systems/combat/hit/WeaponSweep";
 import { overlapsInterval } from "@/systems/combat/actions/MoveTimeline";
 import { COMBAT_TIMING, FOCUS, HITSTOP, MOVEMENT } from "@/constants/combat";
@@ -39,6 +41,8 @@ export class AttackExecutor {
             impact: "light",
             knockback: 0,
             parryable: false,
+            perilous: false,
+            ranged: false,
             origin: new Vector3(),
         };
         this.hitEvent = {
@@ -74,11 +78,10 @@ export class AttackExecutor {
         const to = Math.min(time, warp.to);
         if (to <= from) return;
 
-        const targetPosition = target.position ?? target.sceneObject.position;
-        const toTarget = scratchToTarget.subVectors(targetPosition, this.owner.position);
+        const toTarget = scratchToTarget.subVectors(target.position, this.owner.position);
         toTarget.y = 0;
         const centreDistance = toTarget.length();
-        const gap = centreDistance - (target.hurtboxes[0]?.radius ?? 0) - this.owner.bodyRadius;
+        const gap = centreDistance - target.bodyRadius - this.owner.bodyRadius;
         if (centreDistance < 1e-6 || gap > warp.maxDistance) return;
 
         toTarget.divideScalar(centreDistance);
@@ -116,17 +119,20 @@ export class AttackExecutor {
 
             for (let hit = 0; hit < count; hit += 1) {
                 const defender = this.struck[hit];
-                if (defender) this.strike(defender, window, move, output.chargeLevel);
+                if (defender && this.strikeWasParried(defender, window, move, output.chargeLevel)) {
+                    this.isWeaponStriking = false;
+                    return;
+                }
             }
         }
     }
 
-    private strike(
+    private strikeWasParried(
         defender: ICombatant,
         window: IHitWindow,
         move: IMoveDefinition,
         chargeLevel: number
-    ): void {
+    ): boolean {
         const chargeMultiplier = 1 + chargeLevel * COMBAT_TIMING.chargeDamageBonus;
         const payload = this.payload;
 
@@ -141,42 +147,41 @@ export class AttackExecutor {
         payload.impact = window.impact;
         payload.knockback = window.knockback;
         payload.parryable = window.parryable;
+        payload.perilous = window.perilous;
         payload.origin.copy(this.owner.position);
 
         const outcome = defender.receiveHit(payload);
 
         if (outcome.kind === "parried") {
             this.owner.onAttackParried(defender);
-            return;
+            return true;
         }
 
-        if (outcome.kind !== "damaged" && outcome.kind !== "staggered" && outcome.kind !== "killed")
-            return;
+        if (!isConnected(outcome)) return false;
 
         const hitstopFrames = HITSTOP.frames[window.impact];
         this.context.timeDilation.hitstop(this.owner, hitstopFrames.attacker);
         this.context.timeDilation.hitstop(defender, hitstopFrames.defender);
 
-        const event = this.hitEvent;
-        event.defender = defender;
-        event.outcome = outcome;
-        event.impact = window.impact;
-        event.point.copy(scratchSegment.end).lerp(defender.sceneObject.position, 0.35);
-        this.context.combatEvents.emit("hitLanded", event);
+        scratchHitPoint.copy(scratchSegment.end).lerp(defender.sceneObject.position, 0.35);
+        emitHitLanded(
+            this.context.combatEvents,
+            this.hitEvent,
+            defender,
+            outcome,
+            window.impact,
+            scratchHitPoint
+        );
 
         this.owner.onHitConfirmed(defender, outcome, move);
+        return false;
     }
 }
 
-export type CombatServices = Pick<
-    IWorldContext,
-    "combatRegistry" | "combatEvents" | "timeDilation"
->;
+type CombatServices = Pick<IWorldContext, "combatRegistry" | "combatEvents" | "timeDilation">;
 
 export interface IAttackOwner extends ICombatant {
     readonly attackPower: number;
-    readonly bodyRadius: number;
-    readonly position: Vector3;
     sampleHitShape(shape: HitShape, segment: IStrikeSegment): boolean;
     onHitConfirmed(defender: ICombatant, outcome: IHitOutcome, move: IMoveDefinition): void;
     onAttackParried(defender: ICombatant): void;
@@ -184,3 +189,4 @@ export interface IAttackOwner extends ICombatant {
 
 const scratchSegment: IStrikeSegment = { start: new Vector3(), end: new Vector3(), radius: 0 };
 const scratchToTarget = new Vector3();
+const scratchHitPoint = new Vector3();

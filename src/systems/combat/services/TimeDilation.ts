@@ -44,10 +44,6 @@ export class TimeDilation {
         this.hitstopRemaining.set(owner, Math.max(this.hitstopRemaining.get(owner) ?? 0, seconds));
     }
 
-    isInHitstop(owner: object): boolean {
-        return this.hitstopRemaining.has(owner);
-    }
-
     localScale(owner: object): number {
         return this.hitstopRemaining.has(owner) ? HITSTOP.timeScale : 1;
     }
