@@ -1,0 +1,26 @@
+@use "../../../styles/mixins" as *;
+
+.focus-pips {
+    display: flex;
+    gap: 0.35rem;
+    padding: 0 0.15rem;
+
+    .focus-pip {
+        position: relative;
+        width: 0.5rem;
+        height: 0.9rem;
+        border-radius: 2px;
+        overflow: hidden;
+        @include hud-glass-surface;
+        transform: skewX(-14deg);
+    }
+
+    .focus-charge {
+        position: absolute;
+        inset: 0;
+        background: var(--hud-focus);
+        transform: scaleY(0);
+        transform-origin: bottom center;
+        will-change: transform;
+    }
+}

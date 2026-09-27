@@ -13,7 +13,7 @@ import {
 import { SettingsPanel } from "./SettingsPanel";
 import "./pauseMenu.scss";
 
-export interface PauseMenuProps {
+interface PauseMenuProps {
     onResume: () => void;
     onQuit?: () => void;
     realmTitle?: string;

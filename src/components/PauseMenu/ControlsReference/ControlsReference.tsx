@@ -1,4 +1,4 @@
-import { CONTROL_REFERENCE } from "@/constants/controls";
+import { CONTROL_REFERENCE } from "@/constants/player";
 import "./controlsReference.scss";
 
 export const ControlsReference = () => (

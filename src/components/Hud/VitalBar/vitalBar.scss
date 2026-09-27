@@ -1,0 +1,56 @@
+@use "../../../styles/variable" as *;
+@use "../../../styles/mixins" as *;
+
+.vital-bar {
+    .vital-frame {
+        @include hud-pill-frame;
+    }
+
+    .vital-track {
+        @include hud-bar-track;
+        height: 4px;
+    }
+
+    .vital-chase,
+    .vital-fill {
+        @include hud-bar-fill;
+        border-radius: 999px;
+    }
+
+    .vital-chase {
+        background: var(--hud-chase);
+    }
+
+    .vital-fill {
+        background: var(--hud-fill);
+        transition: background 420ms $ease;
+    }
+
+    .vital-details {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0 0.15rem;
+    }
+
+    .vital-label {
+        font-size: 0.56rem;
+        font-weight: 400;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: var(--hud-label);
+    }
+
+    .vital-readout {
+        font-family: $font-mono;
+        font-size: 0.7rem;
+        font-weight: 400;
+        font-variant-numeric: tabular-nums;
+        color: var(--hud-readout);
+    }
+
+    &[data-low="true"] .vital-fill {
+        background: var(--hud-fill-low);
+    }
+}

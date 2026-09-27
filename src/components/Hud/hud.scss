@@ -1,0 +1,24 @@
+@use "../../styles/variable" as *;
+
+.hud {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    pointer-events: none;
+    font-family: $font-sans;
+    transition: opacity 400ms $ease;
+
+    &[data-dead="true"] {
+        opacity: 0.45;
+    }
+
+    .hud-vitals {
+        position: absolute;
+        left: 2.75rem;
+        bottom: 2.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        width: 16rem;
+    }
+}

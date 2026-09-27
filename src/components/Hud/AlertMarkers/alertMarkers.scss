@@ -1,0 +1,66 @@
+@use "../../../styles/variable" as *;
+
+.alert-markers {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+
+    .alert-marker {
+        position: absolute;
+        top: 0;
+        left: 0;
+        display: grid;
+        place-items: center;
+        width: 1.4rem;
+        height: 1.8rem;
+        overflow: hidden;
+        border-radius: var(--radius-md);
+        opacity: 0;
+        transition: opacity 120ms $ease;
+        will-change: transform, opacity;
+
+        &[data-kind="suspicious"],
+        &[data-kind="alert"] {
+            opacity: 1;
+        }
+
+        .alert-fill {
+            position: absolute;
+            inset: 0;
+            opacity: 0.28;
+            background: var(--hud-alert-suspicious);
+            transform: scaleY(0);
+            transform-origin: bottom;
+        }
+
+        .alert-glyph {
+            position: relative;
+            font-family: $font-mono;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--hud-alert-suspicious);
+            text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+        }
+
+        &[data-kind="alert"] {
+            .alert-fill {
+                background: var(--hud-alert-spotted);
+            }
+
+            .alert-glyph {
+                color: var(--hud-alert-spotted);
+                animation: alert-pop 280ms $ease;
+            }
+        }
+    }
+}
+
+@keyframes alert-pop {
+    from {
+        transform: scale(1.8);
+    }
+
+    to {
+        transform: scale(1);
+    }
+}
