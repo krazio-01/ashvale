@@ -17,7 +17,7 @@ export interface IPlayerCommands {
 }
 
 export class PlayerController {
-    readonly commands: IPlayerCommands = {
+    private readonly commands: IPlayerCommands = {
         moveForward: 0,
         moveRight: 0,
         wantsSprint: false,
@@ -41,8 +41,8 @@ export class PlayerController {
 
         commands.moveForward = input.axis("backward", "forward");
         commands.moveRight = input.axis("left", "right");
-        commands.dodge = input.consumePress("evade");
-        commands.wantsSprint = input.isHeld("evade");
+        commands.dodge = input.consumePress("dodge");
+        commands.wantsSprint = input.isHeld("sprint");
         commands.crouchPressed = input.consumePress("crouch");
         commands.jump = input.consumePress("jump");
         commands.light = input.consumePress("light");

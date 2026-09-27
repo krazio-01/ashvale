@@ -1,8 +1,7 @@
-import { INPUT_BINDINGS, MOUSE_BINDINGS } from "@/constants/combat";
-
-export type KeyAction = keyof typeof INPUT_BINDINGS;
-export type PointerAction = keyof typeof MOUSE_BINDINGS;
-export type InputAction = KeyAction | PointerAction;
+import { INPUT_BINDINGS, MOUSE_BINDINGS } from "@/constants/player";
+type KeyAction = keyof typeof INPUT_BINDINGS;
+type PointerAction = keyof typeof MOUSE_BINDINGS;
+type InputAction = KeyAction | PointerAction;
 
 function isKeyAction(value: string): value is KeyAction {
     return value in INPUT_BINDINGS;
@@ -22,7 +21,6 @@ for (const [action, button] of Object.entries(MOUSE_BINDINGS))
 
 export class PlayerInput {
     private readonly heldCounts = new Map<InputAction, number>();
-    private readonly pressedAt = new Map<InputAction, number>();
     private readonly pressed = new Set<InputAction>();
     private mouseDeltaX = 0;
     private mouseDeltaY = 0;
@@ -67,7 +65,6 @@ export class PlayerInput {
 
     private readonly handleBlur = (): void => {
         this.heldCounts.clear();
-        this.pressedAt.clear();
         this.pressed.clear();
         this.mouseDeltaX = 0;
         this.mouseDeltaY = 0;
@@ -87,11 +84,6 @@ export class PlayerInput {
 
     isHeld(action: InputAction): boolean {
         return (this.heldCounts.get(action) ?? 0) > 0;
-    }
-
-    heldSeconds(action: InputAction): number {
-        const since = this.pressedAt.get(action);
-        return this.isHeld(action) && since !== undefined ? (performance.now() - since) / 1000 : 0;
     }
 
     axis(negative: KeyAction, positive: KeyAction): number {
@@ -136,7 +128,6 @@ export class PlayerInput {
         this.heldCounts.set(action, count);
         if (count > 1) return;
 
-        this.pressedAt.set(action, performance.now());
         this.pressed.add(action);
     }
 

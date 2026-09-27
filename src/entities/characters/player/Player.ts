@@ -1,7 +1,7 @@
 import { Vector3 } from "three";
 import type { Camera, Vector3Tuple } from "three";
 import type { IMotorSpec } from "@/systems/combat/core/CharacterMotor";
-import { CombatCharacter } from "@/systems/combat/core/CombatCharacter";
+import { CombatCharacter } from "@/entities/characters/CombatCharacter";
 import {
     finisherKindFor,
     isBehind,
@@ -15,8 +15,22 @@ import {
     PLAYER_CROUCH_LOCOMOTION,
     PLAYER_FREE_LOCOMOTION,
     PLAYER_STRAFE_LOCOMOTION,
-} from "@/systems/combat/actions/locomotion";
-import { PLAYER_STARTING_WEAPON } from "@/constants/weapons";
+} from "@/entities/characters/locomotion";
+import {
+    PLAYER_STARTING_WEAPON,
+    CAMERA,
+    PLAYER,
+    PLAYER_REACTION_LOCKOUT,
+    PLAYER_VITALS,
+    STAMINA,
+    CAMERA_SHAKE,
+    CHARGE_CUE,
+    KILL_CAMERA,
+    DODGE,
+} from "@/constants/player";
+import { CHARACTER } from "@/constants/characters";
+import { COMBAT_TIMING, FINISHER_RULES, TARGETING } from "@/constants/combat";
+import { SIGHT } from "@/constants/enemies";
 import { PLAYER_MOVE_IDS, PLAYER_MOVES } from "@/systems/combat/moveSets/playerMoves";
 import { cycleTarget, selectTarget } from "@/systems/combat/services/TargetSelector";
 import { FootstepNoise } from "@/entities/characters/player/FootstepNoise";
@@ -25,17 +39,7 @@ import { chooseKillCamShot, PlayerCamera } from "@/entities/characters/player/Pl
 import { PlayerController } from "@/entities/characters/player/PlayerController";
 import type { IPlayerCommands } from "@/entities/characters/player/PlayerController";
 import { store } from "@/store/store";
-import { CAMERA, CHARACTER, PLAYER } from "@/constants/characters";
-import {
-    CAMERA_SHAKE,
-    COMBAT_TIMING,
-    FINISHER_RULES,
-    KILL_CAMERA,
-    PLAYER_VITALS,
-    STAMINA,
-    TARGETING,
-} from "@/constants/combat";
-import { SIGHT } from "@/constants/enemyAi";
+import { angleDelta, horizontalDirection, horizontalDistance, yawTowards } from "@/lib/helpers";
 import { settings } from "@/settings/SettingsStore";
 import type {
     FinisherKind,
@@ -61,6 +65,9 @@ export class Player extends CombatCharacter {
     private dodgeYaw = 0;
     private crouchToggled = false;
     private isCrouching = false;
+    private isCrouchSprinting = false;
+    private previousChargeLevel = 0;
+    private lockCandidatesGathered = false;
 
     constructor(
         context: IWorldContext,
@@ -87,6 +94,7 @@ export class Player extends CombatCharacter {
             spawnPosition,
             spawnYaw,
             flashesOnHit: false,
+            reactionLockout: PLAYER_REACTION_LOCKOUT,
         });
 
         this.spawnPoint.fromArray(spawnPosition);
@@ -117,6 +125,7 @@ export class Player extends CombatCharacter {
         this.applyMouseLook();
         super.update(deltaSeconds, interpolationAlpha);
         this.trackKillCam();
+        this.pulseChargeCue();
 
         const position = this.sceneObject.position;
         this.followCamera.follow(
@@ -138,6 +147,7 @@ export class Player extends CombatCharacter {
     }
 
     protected think(deltaSeconds: number): void {
+        this.lockCandidatesGathered = false;
         const commands = this.controller.read();
         this.finisherTrigger.tick(deltaSeconds);
         if (commands.finisher) this.finisherTrigger.press();
@@ -187,7 +197,6 @@ export class Player extends CombatCharacter {
         this.publishVitals();
         if (!this.finishers.tick(deltaSeconds)) return;
 
-        this.followCamera.endKillCam();
         if (this.finishers.hasKilled) this.finisherTrigger.openStreak();
     }
 
@@ -205,6 +214,7 @@ export class Player extends CombatCharacter {
         if (elapsed < holdSeconds + COMBAT_TIMING.respawnDelaySeconds) return;
 
         this.vitals.restore();
+        this.crouchToggled = false;
         this.machine.revive();
         this.motor.enableCollision();
         this.placeAt(this.spawnPoint, this.spawnYaw);
@@ -259,98 +269,92 @@ export class Player extends CombatCharacter {
         this.hasDirectionalInput = moveDirection.lengthSq() > 0;
         if (this.hasDirectionalInput) moveDirection.normalize();
 
-        this.isCrouching = this.crouchToggled && !commands.wantsSprint;
-        this.isSprinting =
+        this.isCrouching = this.crouchToggled;
+        const isHurrying =
             commands.wantsSprint &&
             this.hasDirectionalInput &&
-            this.machine.state === "locomotion" &&
+            (this.machine.state === "locomotion" ||
+                this.machine.output.move?.tags.includes("jump") === true) &&
             this.vitals.drainStamina(STAMINA.sprintPerSecond * deltaSeconds);
+        this.isSprinting = isHurrying && !this.isCrouching;
+        this.isCrouchSprinting = isHurrying && this.isCrouching;
         this.facesTarget = this.lockTarget !== null && !this.lockTarget.isDead && !this.isSprinting;
         if (this.facesTarget) this.target = this.lockTarget;
+        this.isLockedTargetFar =
+            this.facesTarget &&
+            this.lockTarget !== null &&
+            horizontalDistance(this.sceneObject.position, this.lockTarget.sceneObject.position) >
+                TARGETING.gapCloseMinDistance;
 
-        const speed = this.isSprinting
-            ? PLAYER.sprintSpeed
-            : this.isCrouching
-              ? PLAYER.crouchSpeed
-              : this.facesTarget
-                ? PLAYER.strafeSpeed
-                : PLAYER.walkSpeed;
-
-        this.desiredVelocity.copy(moveDirection).multiplyScalar(speed);
+        this.desiredVelocity.copy(moveDirection).multiplyScalar(this.locomotionSpeed());
         this.locomotionOverride =
             this.isCrouching && !this.facesTarget ? PLAYER_CROUCH_LOCOMOTION : null;
         this.heavyHeld = commands.heavyHeld;
     }
 
+    private locomotionSpeed(): number {
+        if (this.isSprinting) return PLAYER.sprintSpeed;
+        if (this.isCrouchSprinting) return PLAYER.crouchSprintSpeed;
+        if (this.isCrouching) return PLAYER.crouchSpeed;
+        return this.facesTarget ? PLAYER.strafeSpeed : PLAYER.walkSpeed;
+    }
+
     private footstepGait(): FootstepGait {
         if (!this.motor.isGrounded || !this.hasDirectionalInput) return "still";
         if (this.isSprinting) return "sprint";
-        return this.isCrouching ? "crouch" : "walk";
+        return this.isCrouching && !this.isCrouchSprinting ? "crouch" : "walk";
     }
 
     private updateLock(commands: IPlayerCommands): void {
-        const position = this.sceneObject.position;
         const current = this.lockTarget;
 
-        if (
+        if (current?.isDead) this.lockTarget = this.acquireLockTarget();
+        else if (
             current &&
-            (current.isDead || this.horizontalDistance(current) > TARGETING.lockBreakRange)
-        ) {
-            this.context.combatRegistry.collectOpponents(
-                this.team,
-                position,
-                TARGETING.lockRange,
-                opponents
-            );
-            this.lockTarget = current.isDead
-                ? selectTarget(
-                      position,
-                      cameraForward,
-                      opponents,
-                      TARGETING.lockRange,
-                      TARGETING.lockMinDot
-                  )
-                : null;
-        }
+            horizontalDistance(this.sceneObject.position, current.sceneObject.position) >
+                TARGETING.lockBreakRange
+        )
+            this.lockTarget = null;
 
-        if (commands.toggleLock) {
-            this.context.combatRegistry.collectOpponents(
-                this.team,
-                position,
-                TARGETING.lockRange,
-                opponents
-            );
-            this.lockTarget = this.lockTarget
-                ? null
-                : selectTarget(
-                      position,
-                      cameraForward,
-                      opponents,
-                      TARGETING.lockRange,
-                      TARGETING.lockMinDot
-                  );
-        }
+        if (commands.toggleLock)
+            this.lockTarget = this.lockTarget ? null : this.acquireLockTarget();
 
-        if (commands.cycleLock !== 0 && this.lockTarget) {
-            this.context.combatRegistry.collectOpponents(
-                this.team,
-                position,
-                TARGETING.lockRange,
-                opponents
-            );
+        if (commands.cycleLock !== 0 && this.lockTarget)
             this.lockTarget = cycleTarget(
-                position,
+                this.sceneObject.position,
                 cameraForward,
                 this.lockTarget,
-                opponents,
+                this.gatherLockCandidates(),
                 commands.cycleLock > 0 ? 1 : -1,
                 TARGETING.lockRange
             );
-        }
 
         this.followCamera.setLockPoint(
             this.lockTarget ? this.lockTarget.sceneObject.position : null
         );
+    }
+
+    private acquireLockTarget(): ICombatant | null {
+        return selectTarget(
+            this.sceneObject.position,
+            cameraForward,
+            this.gatherLockCandidates(),
+            TARGETING.lockRange,
+            TARGETING.lockMinDot
+        );
+    }
+
+    private gatherLockCandidates(): ICombatant[] {
+        if (!this.lockCandidatesGathered) {
+            this.context.combatRegistry.collectOpponents(
+                this.team,
+                this.sceneObject.position,
+                TARGETING.lockRange,
+                lockCandidates
+            );
+            this.lockCandidatesGathered = true;
+        }
+        return lockCandidates;
     }
 
     private issueCombatIntents(commands: IPlayerCommands): void {
@@ -369,9 +373,24 @@ export class Player extends CombatCharacter {
         }
 
         if (commands.dodge) {
-            this.dodgeYaw = this.hasDirectionalInput
-                ? Math.atan2(moveDirection.x, moveDirection.z)
-                : this.sceneObject.rotation.y;
+            this.dodgeYaw = this.facingYaw;
+            this.dodgeSide = null;
+            if (this.hasDirectionalInput) {
+                const referenceYaw = this.facesTarget
+                    ? this.facingYaw
+                    : Math.atan2(cameraForward.x, cameraForward.z);
+                const inputOffset = angleDelta(
+                    referenceYaw,
+                    Math.atan2(moveDirection.x, moveDirection.z)
+                );
+                const isSideways =
+                    Math.abs(inputOffset) >= DODGE.minSideAngle &&
+                    Math.abs(inputOffset) <= DODGE.maxSideAngle;
+                if (isSideways) {
+                    this.dodgeSide = inputOffset > 0 ? "left" : "right";
+                    this.dodgeYaw = referenceYaw;
+                }
+            }
             this.machine.queue("dodge");
         }
 
@@ -426,7 +445,7 @@ export class Player extends CombatCharacter {
         );
         let widestRadius = 0;
         for (const opponent of opponents)
-            widestRadius = Math.max(widestRadius, opponent.hurtboxes[0]?.radius ?? 0);
+            widestRadius = Math.max(widestRadius, opponent.bodyRadius);
 
         const candidate =
             this.lockTarget && opponents.includes(this.lockTarget)
@@ -449,7 +468,10 @@ export class Player extends CombatCharacter {
             position.x,
             position.z
         );
-        const edgeGap = this.horizontalDistance(candidate) - this.bodyRadius - candidate.bodyRadius;
+        const edgeGap =
+            horizontalDistance(position, candidate.sceneObject.position) -
+            this.bodyRadius -
+            candidate.bodyRadius;
         const kind = finisherKindFor(candidate, edgeGap, behind, inStreak);
         if (!kind) return;
 
@@ -480,7 +502,7 @@ export class Player extends CombatCharacter {
         killCamFocus.addVectors(own, theirs).multiplyScalar(0.5);
         killCamFocus.y += KILL_CAMERA.focusLift;
 
-        const pairAxisYaw = Math.atan2(theirs.x - own.x, theirs.z - own.z);
+        const pairAxisYaw = yawTowards(own, theirs);
         const pairSpan = pairCentreDistance(finisher.distance, this.bodyRadius, victim.bodyRadius);
         const shot = chooseKillCamShot(
             pairAxisYaw,
@@ -504,17 +526,24 @@ export class Player extends CombatCharacter {
         if (this.finishers.isRecovering) this.followCamera.endKillCam();
     }
 
+    private pulseChargeCue(): void {
+        const chargeLevel = this.machine.output.chargeLevel;
+        if (chargeLevel > this.previousChargeLevel)
+            this.followCamera.addTrauma(
+                (chargeLevel - this.previousChargeLevel) * CHARGE_CUE.traumaScale
+            );
+        this.previousChargeLevel = chargeLevel;
+    }
+
     private hasClearApproach(victim: CombatCharacter, finisher: IFinisherDefinition): boolean {
         const own = this.position;
         const theirs = victim.position;
-        const offsetX = theirs.x - own.x;
-        const offsetZ = theirs.z - own.z;
-        const distance = Math.hypot(offsetX, offsetZ);
+        const distance = horizontalDirection(own, theirs, approachDirection);
         const travel =
             distance - pairCentreDistance(finisher.distance, this.bodyRadius, victim.bodyRadius);
         if (travel <= 0 || distance < 1e-4) return true;
 
-        return !this.motor.isPathBlocked(offsetX / distance, offsetZ / distance, travel);
+        return !this.motor.isPathBlocked(approachDirection.x, approachDirection.z, travel);
     }
 
     private publishVitals(): void {
@@ -526,7 +555,8 @@ export class Player extends CombatCharacter {
         if (
             shown instanceof CombatCharacter &&
             !shown.isDead &&
-            this.horizontalDistance(shown) < TARGETING.lockBreakRange
+            horizontalDistance(this.sceneObject.position, shown.sceneObject.position) <
+                TARGETING.lockBreakRange
         )
             store
                 .getState()
@@ -537,12 +567,6 @@ export class Player extends CombatCharacter {
                     shown.vitals.poiseFraction
                 );
         else store.getState().hud.setTarget(false, "", 0, 0);
-    }
-
-    private horizontalDistance(other: ICombatant): number {
-        const own = this.sceneObject.position;
-        const theirs = other.sceneObject.position;
-        return Math.hypot(theirs.x - own.x, theirs.z - own.z);
     }
 }
 
@@ -565,12 +589,13 @@ const PROMPT_LABELS: Record<FinisherKind, string> = {
     backstab: "Assassinate",
     execution: "Execute",
     counter: "Counter",
-    critical: "Critical",
 };
 
 const cameraForward = new Vector3();
 const cameraRight = new Vector3();
 const moveDirection = new Vector3();
 const killCamFocus = new Vector3();
+const approachDirection = new Vector3();
 const mouseDelta = { x: 0, y: 0 };
 const opponents: ICombatant[] = [];
+const lockCandidates: ICombatant[] = [];
