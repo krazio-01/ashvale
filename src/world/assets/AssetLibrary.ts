@@ -18,10 +18,9 @@ import { createGltfLoader } from "@/world/assets/GltfLoaderFactory";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { IThemeManifest } from "@/types/theme";
 import type { IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
-import { CHARACTER, CREATURE, MOTION_CLIPS } from "@/constants/characters";
-
+import { CHARACTER, CREATURE, CLIP } from "@/constants/characters";
 const FOLIAGE_MATERIAL_PATTERN = /leaves|leaf|foliage/i;
-const USED_CLIP_NAMES = new Set(Object.values(MOTION_CLIPS).map((clip) => clip.clipName));
+const USED_CLIP_NAMES = new Set<string>(Object.values(CLIP));
 
 export class AssetLibrary {
     private readonly templatesByPath = new Map<string, IModelTemplate>();
@@ -147,17 +146,46 @@ export function prepareSkinnedModel(
 
     const bounds = new Box3().setFromObject(gltf.scene);
     const height = bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y;
-    const foreignScaleFactor = clipsAreForeign && mannequinHeight > 0 ? height / mannequinHeight : 1;
+    const foreignScaleFactor =
+        clipsAreForeign && mannequinHeight > 0 ? height / mannequinHeight : 1;
     const mergedClips = [
         ...gltf.animations,
         ...clipLibraries.flatMap((library) => library.animations),
     ].filter((clip) => USED_CLIP_NAMES.has(clip.name));
 
+    const rootMotion = new Map<string, KeyframeTrack>();
+    const clipsWithoutRoot = mergedClips.map((clip) => {
+        const rootTrack = clip.tracks.find((track) => track.name === ROOT_POSITION_TRACK);
+        if (!rootTrack) return clip;
+
+        if (hasVaryingValues(rootTrack))
+            rootMotion.set(clip.name, scaleTrack(rootTrack, foreignScaleFactor));
+
+        return new AnimationClip(
+            clip.name,
+            clip.duration,
+            clip.tracks.filter((track) => track !== rootTrack)
+        );
+    });
+
     return {
         scene: gltf.scene,
-        animations: retargetClips(mergedClips, gltf.scene, clipsAreForeign, foreignScaleFactor),
+        animations: retargetClips(
+            clipsWithoutRoot,
+            gltf.scene,
+            clipsAreForeign,
+            foreignScaleFactor
+        ),
         height,
+        rootMotion,
     };
+}
+
+const ROOT_POSITION_TRACK = "root.position";
+
+function scaleTrack(track: KeyframeTrack, scaleFactor: number): KeyframeTrack {
+    const values = Float32Array.from(track.values, (value) => value * scaleFactor);
+    return new VectorKeyframeTrack(track.name, track.times, values);
 }
 
 const POSITION_VARIANCE_EPSILON = 1e-4;
@@ -231,7 +259,8 @@ function remapPositionTrack(
     for (let index = 0; index < values.length; index += 1) {
         const component = index % 3;
         values[index] =
-            (rest[component] ?? 0) + ((track.values[index] ?? 0) - (baseline[component] ?? 0)) * scaleFactor;
+            (rest[component] ?? 0) +
+            ((track.values[index] ?? 0) - (baseline[component] ?? 0)) * scaleFactor;
     }
 
     return new VectorKeyframeTrack(track.name, track.times, values);
