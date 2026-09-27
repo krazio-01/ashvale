@@ -1,10 +1,11 @@
 "use client";
 import { useContext, useEffect, useRef } from "react";
 import { AnimationFrameContext } from "@/context/AnimationFrameContext";
-import type { AnimationFrameCallback } from "@/types/store";
+import type { AnimationFrameCallback } from "@/types/animationFrame";
 
 export function useAnimationFrame(callback: AnimationFrameCallback): void {
     const callbacks = useContext(AnimationFrameContext);
+    if (!callbacks) throw new Error("useAnimationFrame must be used inside AnimationFrameLoop");
     const callbackRef = useRef(callback);
 
     useEffect(() => {
@@ -12,9 +13,8 @@ export function useAnimationFrame(callback: AnimationFrameCallback): void {
     });
 
     useEffect(() => {
-        if (!callbacks) return;
-
-        const stable: AnimationFrameCallback = (state) => callbackRef.current(state);
+        const stable: AnimationFrameCallback = (state, deltaSeconds) =>
+            callbackRef.current(state, deltaSeconds);
         callbacks.push(stable);
 
         return () => {
