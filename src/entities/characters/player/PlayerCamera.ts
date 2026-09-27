@@ -1,12 +1,15 @@
 import RAPIER from "@dimforge/rapier3d-compat";
-import type { Collider, Ray, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
+import type {
+    Collider,
+    Ray,
+    RayColliderHit,
+    World as PhysicsWorld,
+} from "@dimforge/rapier3d-compat";
 import { Vector3 } from "three";
 import type { Camera, PerspectiveCamera } from "three";
-import { CAMERA } from "@/constants/characters";
-import { clamp, lerp } from "@/lib/helpers";
+import { CAMERA, CAMERA_SHAKE, KILL_CAMERA, LOCK_CAMERA } from "@/constants/player";
+import { angleDelta, clamp, lerp, smoothstep } from "@/lib/helpers";
 import { settings } from "@/settings/SettingsStore";
-
-const orbitDirection = new Vector3();
 
 export class PlayerCamera {
     private readonly camera: PerspectiveCamera;
@@ -14,12 +17,22 @@ export class PlayerCamera {
     private readonly ignoredCollider: Collider;
     private readonly sightRay: Ray;
     private readonly smoothedPivot = new Vector3();
+    private readonly blendedPivot = new Vector3();
+    private readonly killCamFocus = new Vector3();
+    private readonly lockPoint = new Vector3();
     private orbitYaw = 0;
     private orbitPitch = CAMERA.startPitch;
     private followDistance = CAMERA.targetFollowDistance;
     private desiredFollowDistance = CAMERA.targetFollowDistance;
     private speedBlend = 0;
     private hasPivot = false;
+    private punchRemaining = 0;
+    private isLocked = false;
+    private killCamShot: IKillCamShot | null = null;
+    private isKillCamActive = false;
+    private killCamLevel = 0;
+    private trauma = 0;
+    private shakeClock = 0;
 
     constructor(
         camera: Camera,
@@ -38,7 +51,44 @@ export class PlayerCamera {
         return this.orbitYaw;
     }
 
+    punch(): void {
+        this.punchRemaining = 1;
+    }
+
+    addTrauma(amount: number): void {
+        this.trauma = Math.min(1, this.trauma + amount);
+    }
+
+    resetPivot(): void {
+        this.hasPivot = false;
+    }
+
+    setLockPoint(point: Vector3 | null): void {
+        this.isLocked = point !== null;
+        if (point) this.lockPoint.copy(point);
+    }
+
+    beginKillCam(shot: IKillCamShot, focus: Vector3): void {
+        this.killCamShot = shot;
+        this.killCamFocus.copy(focus);
+        this.isKillCamActive = true;
+    }
+
+    setKillCamFocus(focus: Vector3): void {
+        this.killCamFocus.copy(focus);
+    }
+
+    endKillCam(): void {
+        this.isKillCamActive = false;
+    }
+
+    isShotClear(focus: Vector3, yaw: number, pitch: number, distance: number): boolean {
+        setOrbitDirection(candidateShotDirection, yaw, pitch);
+        return this.castSight(focus, candidateShotDirection, distance) === null;
+    }
+
     turnBy(yawDelta: number, pitchDelta: number): void {
+        if (this.isLocked || this.killCamLevel > 0) return;
         this.orbitYaw -= yawDelta;
         this.orbitPitch = clamp(
             this.orbitPitch + pitchDelta,
@@ -54,6 +104,8 @@ export class PlayerCamera {
         targetZ: number,
         isSprinting: boolean
     ): void {
+        this.steerOrbit(deltaSeconds, targetX, targetZ);
+
         const shoulderRightX = Math.cos(this.orbitYaw);
         const shoulderRightZ = -Math.sin(this.orbitYaw);
         this.trackPivot(
@@ -63,12 +115,20 @@ export class PlayerCamera {
             targetZ + shoulderRightZ * CAMERA.shoulderOffset
         );
 
-        const pitchHorizontalScale = Math.cos(this.orbitPitch);
-        orbitDirection.set(
-            Math.sin(this.orbitYaw) * pitchHorizontalScale,
-            Math.sin(this.orbitPitch),
-            Math.cos(this.orbitYaw) * pitchHorizontalScale
-        );
+        const blendStepSeconds = Math.min(deltaSeconds, MAXIMUM_KILL_CAM_BLEND_STEP_SECONDS);
+        const blendRate = this.isKillCamActive
+            ? blendStepSeconds / KILL_CAMERA.blendInSeconds
+            : -blendStepSeconds / KILL_CAMERA.blendOutSeconds;
+        this.killCamLevel = clamp(this.killCamLevel + blendRate, 0, 1);
+
+        const shot = this.killCamShot;
+        const weight = shot ? smoothstep(0, 1, this.killCamLevel) : 0;
+        const yaw = shot
+            ? this.orbitYaw + angleDelta(this.orbitYaw, shot.yaw) * weight
+            : this.orbitYaw;
+        const pitch = shot ? lerp(this.orbitPitch, shot.pitch, weight) : this.orbitPitch;
+        this.blendedPivot.lerpVectors(this.smoothedPivot, this.killCamFocus, weight);
+        setOrbitDirection(orbitDirection, yaw, pitch);
 
         const speedBlendFactor = 1 - Math.exp(-CAMERA.speedBlendSmoothing * deltaSeconds);
         this.speedBlend += ((isSprinting ? 1 : 0) - this.speedBlend) * speedBlendFactor;
@@ -77,15 +137,59 @@ export class PlayerCamera {
             CAMERA.sprintFollowDistance,
             this.speedBlend
         );
-        this.camera.fov = settings.fov + CAMERA.sprintFovBoost * this.speedBlend;
-        this.camera.updateProjectionMatrix();
+        this.punchRemaining *= Math.exp(-CAMERA.hitPunchDecay * deltaSeconds);
+        const fov =
+            settings.fov +
+            CAMERA.sprintFovBoost * this.speedBlend +
+            CAMERA.hitPunchFov * this.punchRemaining;
+        if (fov !== this.camera.fov) {
+            this.camera.fov = fov;
+            this.camera.updateProjectionMatrix();
+        }
 
-        this.easeToUnobstructedDistance(deltaSeconds);
+        const desiredDistance = shot
+            ? lerp(this.desiredFollowDistance, shot.distance, weight)
+            : this.desiredFollowDistance;
+        this.easeToUnobstructedDistance(
+            weight > 0 ? blendStepSeconds : deltaSeconds,
+            desiredDistance,
+            weight > 0
+        );
 
         this.camera.position
-            .copy(this.smoothedPivot)
+            .copy(this.blendedPivot)
             .addScaledVector(orbitDirection, this.followDistance);
-        this.camera.lookAt(this.smoothedPivot);
+        this.camera.lookAt(this.blendedPivot);
+        this.applyShake(deltaSeconds);
+
+        if (!this.isKillCamActive && this.killCamLevel === 0) this.killCamShot = null;
+    }
+
+    private steerOrbit(deltaSeconds: number, targetX: number, targetZ: number): void {
+        if (!this.isLocked) return;
+
+        const desiredYaw = Math.atan2(targetX - this.lockPoint.x, targetZ - this.lockPoint.z);
+        const yawFactor = 1 - Math.exp(-LOCK_CAMERA.yawSmoothing * deltaSeconds);
+        const pitchFactor = 1 - Math.exp(-LOCK_CAMERA.pitchSmoothing * deltaSeconds);
+        this.orbitYaw += angleDelta(this.orbitYaw, desiredYaw) * yawFactor;
+        this.orbitPitch += (LOCK_CAMERA.pitch - this.orbitPitch) * pitchFactor;
+    }
+
+    private applyShake(deltaSeconds: number): void {
+        if (this.trauma <= 0) return;
+
+        this.shakeClock += deltaSeconds;
+        this.trauma = Math.max(0, this.trauma - CAMERA_SHAKE.decay * deltaSeconds);
+
+        const intensity = this.trauma * this.trauma;
+        const phase = this.shakeClock * CAMERA_SHAKE.frequency;
+        const offsetX = Math.sin(phase) * Math.sin(phase * 0.37 + 1.3);
+        const offsetY = Math.sin(phase * 1.21 + 2.1) * Math.sin(phase * 0.53);
+        const roll = Math.sin(phase * 0.83 + 0.7);
+
+        this.camera.translateX(offsetX * CAMERA_SHAKE.maxOffset * intensity);
+        this.camera.translateY(offsetY * CAMERA_SHAKE.maxOffset * intensity);
+        this.camera.rotateZ(roll * CAMERA_SHAKE.maxRoll * intensity);
     }
 
     private trackPivot(deltaSeconds: number, pivotX: number, pivotY: number, pivotZ: number): void {
@@ -101,33 +205,102 @@ export class PlayerCamera {
         this.smoothedPivot.z += (pivotZ - this.smoothedPivot.z) * pivotFactor;
     }
 
-    private easeToUnobstructedDistance(deltaSeconds: number): void {
-        this.sightRay.origin.x = this.smoothedPivot.x;
-        this.sightRay.origin.y = this.smoothedPivot.y;
-        this.sightRay.origin.z = this.smoothedPivot.z;
-        this.sightRay.dir.x = orbitDirection.x;
-        this.sightRay.dir.y = orbitDirection.y;
-        this.sightRay.dir.z = orbitDirection.z;
+    private castSight(
+        origin: Vector3,
+        direction: Vector3,
+        distance: number
+    ): RayColliderHit | null {
+        this.sightRay.origin.x = origin.x;
+        this.sightRay.origin.y = origin.y;
+        this.sightRay.origin.z = origin.z;
+        this.sightRay.dir.x = direction.x;
+        this.sightRay.dir.y = direction.y;
+        this.sightRay.dir.z = direction.z;
 
-        const hit = this.physicsWorld.castRay(
+        return this.physicsWorld.castRay(
             this.sightRay,
-            this.desiredFollowDistance,
+            distance,
             true,
             undefined,
             undefined,
             this.ignoredCollider
         );
+    }
 
+    private easeToUnobstructedDistance(
+        deltaSeconds: number,
+        desiredDistance: number,
+        easesInward: boolean
+    ): void {
+        const hit = this.castSight(this.blendedPivot, orbitDirection, desiredDistance);
         const unobstructedDistance = hit
             ? Math.max(hit.timeOfImpact - CAMERA.collisionPadding, CAMERA.minimumFollowDistance)
-            : this.desiredFollowDistance;
+            : desiredDistance;
+        const isPullingIn = unobstructedDistance <= this.followDistance;
 
-        if (unobstructedDistance <= this.followDistance) {
+        if (isPullingIn && !easesInward) {
             this.followDistance = unobstructedDistance;
             return;
         }
 
-        const easeFactor = 1 - Math.exp(-CAMERA.pullOutSmoothing * deltaSeconds);
+        const smoothing = isDistanceOccluded(hit !== null, unobstructedDistance, desiredDistance)
+            ? KILL_CAMERA.occlusionPullInSmoothing
+            : CAMERA.pullOutSmoothing;
+        const easeFactor = 1 - Math.exp(-smoothing * deltaSeconds);
         this.followDistance += (unobstructedDistance - this.followDistance) * easeFactor;
     }
 }
+
+interface IKillCamShot {
+    yaw: number;
+    pitch: number;
+    distance: number;
+}
+
+export function chooseKillCamShot(
+    pairAxisYaw: number,
+    currentYaw: number,
+    pairSpan: number,
+    isClear: (yaw: number, pitch: number, distance: number) => boolean
+): IKillCamShot {
+    let chosen: IKillCamShot | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (const candidate of KILL_CAMERA.candidates) {
+        const yaw = pairAxisYaw + candidate.yawOffset;
+        const distance = KILL_CAMERA.baseDistance + pairSpan * candidate.distanceScale;
+        if (!isClear(yaw, candidate.pitch, distance)) continue;
+
+        const score = Math.abs(angleDelta(currentYaw, yaw)) + candidate.penalty;
+        if (score >= bestScore) continue;
+
+        bestScore = score;
+        chosen = { yaw, pitch: candidate.pitch, distance };
+    }
+
+    return (
+        chosen ?? {
+            yaw: currentYaw,
+            pitch: KILL_CAMERA.fallbackPitch,
+            distance: CAMERA.targetFollowDistance,
+        }
+    );
+}
+
+function isDistanceOccluded(
+    hasHit: boolean,
+    unobstructedDistance: number,
+    desiredDistance: number
+): boolean {
+    return hasHit && unobstructedDistance < desiredDistance;
+}
+
+function setOrbitDirection(out: Vector3, yaw: number, pitch: number): Vector3 {
+    const horizontal = Math.cos(pitch);
+    return out.set(Math.sin(yaw) * horizontal, Math.sin(pitch), Math.cos(yaw) * horizontal);
+}
+
+const orbitDirection = new Vector3();
+const candidateShotDirection = new Vector3();
+
+const MAXIMUM_KILL_CAM_BLEND_STEP_SECONDS = 1 / 30;

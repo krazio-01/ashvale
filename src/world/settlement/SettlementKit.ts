@@ -62,7 +62,7 @@ export const SETTLEMENT_ROOFS = {
     long6x10: medievalProp("Roof_RoundTiles_6x10", 6.0),
 } as const;
 
-export const SETTLEMENT_STRUCTURE_PROPS: IThemeProp[] = [
+const SETTLEMENT_STRUCTURE_PROPS: IThemeProp[] = [
     ...Object.values(SETTLEMENT_MODULES),
     ...Object.values(SETTLEMENT_ROOFS),
 ];

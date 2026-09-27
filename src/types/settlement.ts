@@ -8,7 +8,7 @@ export enum SettlementCellKind {
     Window = "window",
 }
 
-export interface ISettlementClutterAnchor {
+interface ISettlementClutterAnchor {
     offsetCellX: number;
     offsetCellZ: number;
     rotationY: number;
@@ -51,7 +51,7 @@ export interface ISettlementKeepOutDisc {
     radius: number;
 }
 
-export interface ISettlementKeepOutLane {
+interface ISettlementKeepOutLane {
     fromX: number;
     fromZ: number;
     toX: number;

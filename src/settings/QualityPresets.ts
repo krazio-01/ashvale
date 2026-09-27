@@ -1,7 +1,12 @@
 import { LIGHT } from "@/constants/rendering";
-import type { GraphicsQuality, IGameSettings, ShadowQuality, OutlineQuality } from "@/types/settings";
+import type {
+    GraphicsQuality,
+    IGameSettings,
+    ShadowQuality,
+    OutlineQuality,
+} from "@/types/settings";
 
-export type GraphicsPresetValues = Pick<
+type GraphicsPresetValues = Pick<
     IGameSettings,
     "shadows" | "bloom" | "antiAliasing" | "outlines" | "atmosphere"
 >;

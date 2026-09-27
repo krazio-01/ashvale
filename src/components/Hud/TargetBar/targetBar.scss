@@ -1,0 +1,67 @@
+@use "../../../styles/variable" as *;
+@use "../../../styles/mixins" as *;
+
+.target-bar {
+    position: absolute;
+    top: 2.5rem;
+    left: 50%;
+    width: 22rem;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    opacity: 0;
+    transition: opacity 220ms $ease;
+
+    &[data-visible="true"] {
+        opacity: 1;
+    }
+
+    .target-name {
+        font-size: 0.62rem;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: var(--hud-readout);
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+    }
+
+    .health-frame,
+    .poise-frame {
+        @include hud-pill-frame;
+        width: 100%;
+    }
+
+    .poise-frame {
+        width: 70%;
+    }
+
+    .health-track,
+    .poise-track {
+        @include hud-bar-track;
+        width: 100%;
+        background: rgba(0, 0, 0, 0.4);
+    }
+
+    .health-track {
+        height: 7px;
+    }
+
+    .poise-track {
+        height: 4px;
+    }
+
+    .health-fill,
+    .poise-fill {
+        @include hud-bar-fill;
+    }
+
+    .health-fill {
+        background: var(--hud-fill-low);
+        box-shadow: 0 0 6px var(--hud-fill-low-glow);
+    }
+
+    .poise-fill {
+        background: var(--hud-poise);
+    }
+}

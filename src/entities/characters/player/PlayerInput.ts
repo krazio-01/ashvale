@@ -1,85 +1,108 @@
-export type InputAction = "forward" | "backward" | "left" | "right" | "jump" | "sprint";
+import { INPUT_BINDINGS, MOUSE_BINDINGS } from "@/constants/player";
+type KeyAction = keyof typeof INPUT_BINDINGS;
+type PointerAction = keyof typeof MOUSE_BINDINGS;
+type InputAction = KeyAction | PointerAction;
 
-const KEY_BINDINGS: Record<InputAction, string[]> = {
-    forward: ["KeyW", "ArrowUp"],
-    backward: ["KeyS", "ArrowDown"],
-    left: ["KeyA", "ArrowLeft"],
-    right: ["KeyD", "ArrowRight"],
-    jump: ["Space"],
-    sprint: ["ShiftLeft"],
-};
+function isKeyAction(value: string): value is KeyAction {
+    return value in INPUT_BINDINGS;
+}
 
-const ACTIONS_BY_KEY = new Map<string, InputAction>();
-for (const [action, codes] of Object.entries(KEY_BINDINGS) as [InputAction, string[]][])
-    for (const code of codes) ACTIONS_BY_KEY.set(code, action);
+function isPointerAction(value: string): value is PointerAction {
+    return value in MOUSE_BINDINGS;
+}
+
+const KEY_ACTIONS = new Map<string, KeyAction>();
+for (const [action, codes] of Object.entries(INPUT_BINDINGS))
+    if (isKeyAction(action)) for (const code of codes) KEY_ACTIONS.set(code, action);
+
+const POINTER_ACTIONS = new Map<number, PointerAction>();
+for (const [action, button] of Object.entries(MOUSE_BINDINGS))
+    if (isPointerAction(action)) POINTER_ACTIONS.set(button, action);
 
 export class PlayerInput {
-    private readonly heldCounts: Record<InputAction, number> = {
-        forward: 0,
-        backward: 0,
-        left: 0,
-        right: 0,
-        jump: 0,
-        sprint: 0,
-    };
-
-    private jumpQueued = false;
+    private readonly heldCounts = new Map<InputAction, number>();
+    private readonly pressed = new Set<InputAction>();
     private mouseDeltaX = 0;
     private mouseDeltaY = 0;
+    private wheelSteps = 0;
 
     private readonly handleKeyDown = (event: KeyboardEvent): void => {
         if (event.repeat) return;
-
-        const action = ACTIONS_BY_KEY.get(event.code);
-        if (!action) return;
-
-        this.heldCounts[action] += 1;
-        if (action === "jump") this.jumpQueued = true;
+        const action = KEY_ACTIONS.get(event.code);
+        if (action) this.press(action);
     };
 
     private readonly handleKeyUp = (event: KeyboardEvent): void => {
-        const action = ACTIONS_BY_KEY.get(event.code);
-        if (!action) return;
-
-        this.heldCounts[action] = Math.max(0, this.heldCounts[action] - 1);
+        const action = KEY_ACTIONS.get(event.code);
+        if (action) this.release(action);
     };
 
-    private readonly handleWindowBlur = (): void => {
-        for (const action of Object.keys(this.heldCounts) as InputAction[])
-            this.heldCounts[action] = 0;
+    private readonly handleMouseDown = (event: MouseEvent): void => {
+        if (!document.pointerLockElement) return;
+        const action = POINTER_ACTIONS.get(event.button);
+        if (action) this.press(action);
+    };
 
-        this.jumpQueued = false;
-        this.mouseDeltaX = 0;
-        this.mouseDeltaY = 0;
+    private readonly handleMouseUp = (event: MouseEvent): void => {
+        const action = POINTER_ACTIONS.get(event.button);
+        if (action) this.release(action);
     };
 
     private readonly handleMouseMove = (event: MouseEvent): void => {
         if (!document.pointerLockElement) return;
-
         this.mouseDeltaX += event.movementX;
         this.mouseDeltaY += event.movementY;
+    };
+
+    private readonly handleWheel = (event: WheelEvent): void => {
+        if (!document.pointerLockElement || event.deltaY === 0) return;
+        this.wheelSteps += Math.sign(event.deltaY);
+    };
+
+    private readonly handleContextMenu = (event: MouseEvent): void => {
+        if (document.pointerLockElement) event.preventDefault();
+    };
+
+    private readonly handleBlur = (): void => {
+        this.heldCounts.clear();
+        this.pressed.clear();
+        this.mouseDeltaX = 0;
+        this.mouseDeltaY = 0;
+        this.wheelSteps = 0;
     };
 
     constructor() {
         window.addEventListener("keydown", this.handleKeyDown);
         window.addEventListener("keyup", this.handleKeyUp);
-        window.addEventListener("blur", this.handleWindowBlur);
+        window.addEventListener("mousedown", this.handleMouseDown);
+        window.addEventListener("mouseup", this.handleMouseUp);
         window.addEventListener("mousemove", this.handleMouseMove);
+        window.addEventListener("wheel", this.handleWheel, { passive: true });
+        window.addEventListener("contextmenu", this.handleContextMenu);
+        window.addEventListener("blur", this.handleBlur);
     }
 
-    isPressed(action: InputAction): boolean {
-        return this.heldCounts[action] > 0;
+    isHeld(action: InputAction): boolean {
+        return (this.heldCounts.get(action) ?? 0) > 0;
     }
 
-    axis(negative: InputAction, positive: InputAction): number {
-        return Number(this.isPressed(positive)) - Number(this.isPressed(negative));
+    axis(negative: KeyAction, positive: KeyAction): number {
+        return Number(this.isHeld(positive)) - Number(this.isHeld(negative));
     }
 
-    consumeJump(): boolean {
-        const wasQueued = this.jumpQueued;
-        this.jumpQueued = false;
+    consumePress(action: InputAction): boolean {
+        return this.pressed.delete(action);
+    }
 
-        return wasQueued;
+    discardPresses(): void {
+        this.pressed.clear();
+        this.wheelSteps = 0;
+    }
+
+    consumeWheel(): number {
+        const steps = this.wheelSteps;
+        this.wheelSteps = 0;
+        return steps;
     }
 
     consumeMouseDelta(target: { x: number; y: number }): void {
@@ -92,7 +115,26 @@ export class PlayerInput {
     dispose(): void {
         window.removeEventListener("keydown", this.handleKeyDown);
         window.removeEventListener("keyup", this.handleKeyUp);
-        window.removeEventListener("blur", this.handleWindowBlur);
+        window.removeEventListener("mousedown", this.handleMouseDown);
+        window.removeEventListener("mouseup", this.handleMouseUp);
         window.removeEventListener("mousemove", this.handleMouseMove);
+        window.removeEventListener("wheel", this.handleWheel);
+        window.removeEventListener("contextmenu", this.handleContextMenu);
+        window.removeEventListener("blur", this.handleBlur);
+    }
+
+    private press(action: InputAction): void {
+        const count = (this.heldCounts.get(action) ?? 0) + 1;
+        this.heldCounts.set(action, count);
+        if (count > 1) return;
+
+        this.pressed.add(action);
+    }
+
+    private release(action: InputAction): void {
+        const count = this.heldCounts.get(action) ?? 0;
+        if (count === 0) return;
+
+        this.heldCounts.set(action, count - 1);
     }
 }

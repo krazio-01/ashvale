@@ -1,0 +1,37 @@
+@use "../../../styles/variable" as *;
+@use "../../../styles/mixins" as *;
+
+.finisher-prompt {
+    position: absolute;
+    left: 50%;
+    bottom: 22%;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 160ms $ease;
+
+    &[data-visible="true"] {
+        opacity: 1;
+    }
+
+    .prompt-key {
+        display: grid;
+        place-items: center;
+        width: 1.6rem;
+        height: 1.6rem;
+        border-radius: 4px;
+        font-family: $font-mono;
+        font-size: 0.75rem;
+        color: var(--hud-readout);
+        @include hud-glass-surface;
+    }
+
+    .prompt-label {
+        font-size: 0.62rem;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: var(--hud-readout);
+    }
+}

@@ -11,8 +11,7 @@ import {
 import type { BufferAttribute, PointsMaterialParameters } from "three";
 import { useFrame } from "@react-three/fiber";
 import { createSeededRandom, FULL_TURN, lerp } from "@/lib/helpers";
-import { LANDING_EMBERS, LANDING_FIREFLIES, LANDING_STARS } from "@/constants/landing";
-
+import { LANDING_EMBERS, LANDING_FIREFLIES, LANDING_STARS } from "@/constants/presentation";
 type IUpdateParticle<T> = (
     particle: T,
     index: number,

@@ -1,0 +1,25 @@
+@use "../../../styles/variable" as *;
+
+.damage-numbers {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+
+    .damage-number {
+        position: absolute;
+        top: 0;
+        left: 0;
+        opacity: 0;
+        font-family: $font-mono;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--hud-readout);
+        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+        will-change: transform, opacity;
+
+        &[data-emphasis="true"] {
+            font-size: 1.05rem;
+            color: var(--hud-focus);
+        }
+    }
+}

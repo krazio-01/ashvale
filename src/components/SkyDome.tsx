@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { BackSide, Color, Mesh, ShaderMaterial } from "three";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
@@ -87,6 +87,8 @@ const SkyDome = ({ environment }: { environment: IThemeEnvironment }) => {
             fog: false,
         });
     }, [environment]);
+
+    useEffect(() => () => material.dispose(), [material]);
 
     useFrame(({ camera }) => {
         domeRef.current?.position.copy(camera.position);

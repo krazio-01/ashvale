@@ -1,35 +1,30 @@
 import type { Vector3Tuple } from "three";
-import { ENEMY_PLACEMENT, EnemyArchetype, SPAWNING } from "@/constants/characters";
+import { ENEMY_PLACEMENT, SPAWNING, archetypeFor } from "@/constants/enemies";
 import { dominantArchetypeFor } from "@/entities/characters/enemies/EnemySpawner";
-import { specFor } from "@/entities/characters/enemies/EnemyModels";
+import type { EnemyArchetype } from "@/types/combat";
 import type { IChapterRegion } from "@/types/realm";
 import { FULL_TURN, clamp, createSeededRandom, hashString } from "@/lib/helpers";
 
-export interface IEnemyPlacement {
+interface IEnemyPlacement {
     archetype: EnemyArchetype;
     position: Vector3Tuple;
     facingYaw: number;
 }
 
-export interface IPlacementClearance {
+interface IPlacementClearance {
     x: number;
     z: number;
     radius: number;
 }
 
-export interface IEnemyPlacementContext {
+interface IEnemyPlacementContext {
     groundHeightAt: (worldX: number, worldZ: number) => number;
     groundSteepnessAt: (worldX: number, worldZ: number) => number;
     propIsClear: (worldX: number, worldZ: number, radius: number) => boolean;
     clearance: IPlacementClearance | null;
 }
 
-const ARCHETYPES = [
-    EnemyArchetype.Sentinel,
-    EnemyArchetype.Wraith,
-    EnemyArchetype.Golem,
-    EnemyArchetype.Gremlin,
-];
+const ARCHETYPES: readonly EnemyArchetype[] = ["sentinel", "wraith", "golem", "gremlin"];
 
 type RandomSource = () => number;
 
@@ -135,12 +130,7 @@ function isInsideClearance(run: IPlacementRun, x: number, z: number): boolean {
     return offsetX * offsetX + offsetZ * offsetZ < run.clearanceRadius * run.clearanceRadius;
 }
 
-function isCrowded(
-    points: number[],
-    x: number,
-    z: number,
-    minimumSpacingSquared: number
-): boolean {
+function isCrowded(points: number[], x: number, z: number, minimumSpacingSquared: number): boolean {
     for (let index = 0; index < points.length; index += 2) {
         const offsetX = x - (points[index] ?? 0);
         const offsetZ = z - (points[index + 1] ?? 0);
@@ -168,7 +158,7 @@ function appendCamp(
         const archetype = pickArchetype(dominant, nextRandom);
         const spawnY =
             context.groundHeightAt(x, z) +
-            specFor(archetype).height / 2 +
+            archetypeFor(archetype).height / 2 +
             SPAWNING.spawnClearanceBuffer;
 
         placements.push({
@@ -181,11 +171,7 @@ function appendCamp(
     return memberCount;
 }
 
-function spreadCampMembers(
-    run: IPlacementRun,
-    centre: [number, number],
-    size: number
-): number[] {
+function spreadCampMembers(run: IPlacementRun, centre: [number, number], size: number): number[] {
     const { context, nextRandom } = run;
     const members: number[] = [centre[0], centre[1]];
     const minimumMemberSpacingSquared =

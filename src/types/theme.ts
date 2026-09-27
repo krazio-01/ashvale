@@ -60,7 +60,7 @@ export interface IThemeLighting {
     hemisphereIntensity: number;
 }
 
-export interface ISoilTint {
+interface ISoilTint {
     color: string;
     strength: number;
     lightnessShift: number;
@@ -93,7 +93,7 @@ export interface IThemeEnvironment {
     water: IWaterProfile;
 }
 
-export interface ISeasonColorShift {
+interface ISeasonColorShift {
     hueShift: number;
     saturationScale: number;
     lightnessShift: number;

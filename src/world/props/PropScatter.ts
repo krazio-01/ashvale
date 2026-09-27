@@ -8,8 +8,8 @@ import {
     type IFieldContext,
     type IPlacementRules,
 } from "@/world/props/PropPlacement";
-import { PROP_FIELD } from "@/constants/placement";
 import { WATER_CHANNEL } from "@/constants/world";
+import { PROP_FIELD } from "@/constants/placement";
 import { FractalNoise } from "@/lib/noise";
 import { clamp, lerp, pickRandomSubset, scaleBetween, smoothstep, FULL_TURN } from "@/lib/helpers";
 
@@ -385,7 +385,7 @@ function fillPatch(
     }
 }
 
-export interface IPropClump {
+interface IPropClump {
     centerX: number;
     centerZ: number;
     radius: number;

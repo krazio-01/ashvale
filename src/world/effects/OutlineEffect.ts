@@ -2,7 +2,6 @@ import { Color, Uniform, Vector2 } from "three";
 import type { Camera, Texture, WebGLRenderer } from "three";
 import { ViewPositionEffect } from "@/world/effects/ViewPositionEffect";
 import { OUTLINE } from "@/constants/rendering";
-
 const fragmentShader = `
     uniform sampler2D foliageMask;
     uniform vec3 outlineColor;
@@ -95,7 +94,7 @@ const fragmentShader = `
     }
 `;
 
-export interface IOutlineEffectOptions {
+interface IOutlineEffectOptions {
     camera: Camera;
     foliageMask: Texture | null;
     outlineColor: string;

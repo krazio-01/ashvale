@@ -100,20 +100,6 @@ export function updateSettings(partial: Partial<IGameSettings>): void {
     notify();
 }
 
-export function setQualityPreset(preset: Exclude<GraphicsQuality, "custom">): void {
-    const presetValues = QUALITY_PRESETS[preset];
-    Object.assign(settings, {
-        qualityPreset: preset,
-        ...presetValues,
-    });
-    notify();
-}
-
-export function resetSettings(): void {
-    Object.assign(settings, DEFAULT_SETTINGS);
-    notify();
-}
-
 export function draftWithChange(
     draft: IGameSettings,
     partial: Partial<IGameSettings>

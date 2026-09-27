@@ -17,9 +17,9 @@ import {
     type ICorridorPath,
     type TerrainSampleGrid,
 } from "@/world/terrain/TerrainGeneration";
-import { LEDGE } from "@/constants/placement";
-import { PLAYER } from "@/constants/characters";
 import { TERRAIN, WORLD, WORLD_EDGE } from "@/constants/world";
+import { LEDGE } from "@/constants/placement";
+import { PLAYER } from "@/constants/player";
 import { clamp, createSeededRandom, FULL_TURN } from "@/lib/helpers";
 
 const shelfTransform = new Object3D();

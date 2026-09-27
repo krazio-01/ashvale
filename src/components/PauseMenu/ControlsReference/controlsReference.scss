@@ -1,0 +1,66 @@
+@use "../../../styles/variable" as *;
+
+.controls-reference {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.15rem 0;
+    border-bottom: 1px solid $ink-line-strong;
+    margin-bottom: 0.5rem;
+
+    .controls-group-title {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: $ink-muted;
+        margin-bottom: 0.6rem;
+    }
+
+    .control-entry {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.55rem 0;
+
+        &:not(:last-child) {
+            border-bottom: 1px solid $ink-line;
+        }
+    }
+
+    .control-keys {
+        display: flex;
+        flex-shrink: 0;
+        gap: 0.3rem;
+        min-width: 8rem;
+
+        kbd {
+            font-family: $font-mono;
+            font-size: 0.7rem;
+            color: $ink-text;
+            background: $ink-raised;
+            border: 1px solid $ink-line-strong;
+            border-radius: $radius-sm;
+            padding: 0.2rem 0.5rem;
+        }
+    }
+
+    .control-info {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        min-width: 0;
+
+        .control-action {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: $ink-text;
+        }
+
+        .control-desc {
+            font-size: 0.76rem;
+            line-height: 1.4;
+            color: $ink-muted;
+        }
+    }
+}

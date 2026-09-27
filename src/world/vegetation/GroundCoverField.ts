@@ -1,8 +1,7 @@
 import { Vector2, type DataTexture } from "three";
 import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
-import { GROUND_COVER } from "@/constants/placement";
 import { WORLD_EDGE } from "@/constants/world";
-
+import { GROUND_COVER } from "@/constants/placement";
 export const GROUND_COVER_GLSL = `
     uniform sampler2D terrainField;
     uniform vec2 fieldOrigin;
@@ -143,7 +142,7 @@ export const patchFieldUniforms = (patch: IPatchFieldSettings) => ({
     patchEdgeStrength: { value: patch.edgeStrength },
 });
 
-export interface IPatchFieldSettings {
+interface IPatchFieldSettings {
     spacing: number;
     radiusRange: [number, number];
     chance: number;

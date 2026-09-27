@@ -289,7 +289,7 @@ function buildGithubError(status: number, headers: ResponseHeaders, path: string
 
 type ResponseHeaders = Record<string, string | undefined>;
 
-export interface IGithubRepository {
+interface IGithubRepository {
     fullName: string;
     starCount: number;
     primaryLanguage: string | null;

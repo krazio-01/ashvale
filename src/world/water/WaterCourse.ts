@@ -703,7 +703,7 @@ function settleWaterline(points: IWaterPoint[], ground: IGroundProbe): void {
     }
 }
 
-export interface IGroundProbe {
+interface IGroundProbe {
     elevationAt(localX: number, localZ: number): number;
     footprintDistanceAt(localX: number, localZ: number): number;
 }

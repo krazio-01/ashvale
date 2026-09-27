@@ -4,7 +4,6 @@ import { ViewPositionEffect } from "@/world/effects/ViewPositionEffect";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
 import type { ISkyGradient } from "@/types/theme";
 import { ATMOSPHERE } from "@/constants/rendering";
-
 const fragmentShader = `
     uniform mat4 cameraWorldMatrix;
     uniform vec3 horizonColor;
@@ -43,7 +42,7 @@ const fragmentShader = `
     }
 `;
 
-export interface IAtmosphereEffectOptions {
+interface IAtmosphereEffectOptions {
     camera: Camera;
     sky: ISkyGradient;
     fogDensity: number;

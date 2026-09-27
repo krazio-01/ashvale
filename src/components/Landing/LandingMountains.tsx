@@ -3,8 +3,7 @@ import { useEffect, useMemo } from "react";
 import { BufferGeometry, DoubleSide, Float32BufferAttribute } from "three";
 import { FractalNoise } from "@/lib/noise";
 import { FULL_TURN, lerp } from "@/lib/helpers";
-import { LANDING_MOUNTAINS } from "@/constants/landing";
-
+import { LANDING_MOUNTAINS } from "@/constants/presentation";
 type IMountainLayer = (typeof LANDING_MOUNTAINS.layers)[number];
 
 interface IPoint3 {

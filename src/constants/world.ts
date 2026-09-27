@@ -1,4 +1,4 @@
-import { quad } from "@/lib/helpers";
+export const VIEW_DISTANCE = 700;
 
 export const SCALE = {
     unitsPerMetre: 2,
@@ -19,6 +19,9 @@ const CHARACTER_LAYER = 0x0002;
 
 export const COLLISION_GROUPS = {
     character: (CHARACTER_LAYER << 16) | WORLD_LAYER,
+    // Query-only mask (never assigned to a collider): must see every layer, unlike `character`, so obstacle rays also detect other characters.
+    obstacleProbe: (0xffff << 16) | 0xffff,
+    sightLine: (0xffff << 16) | WORLD_LAYER,
 };
 
 export const TERRAIN = {
@@ -134,9 +137,9 @@ export const WATER_SURFACE = {
     shallowAlpha: 0.55,
     deepAlpha: 0.88,
     flowSpeed: 1.0,
-    rippleWavelengths: quad(4.5, 2.4, 1.1, 0.5),
-    rippleAmplitudes: quad(0.024, 0.018, 0.012, 0.008),
-    rippleDrifts: quad(1.0, 0.7, 1.3, 0.9),
+    rippleWavelengths: [4.5, 2.4, 1.1, 0.5] as const,
+    rippleAmplitudes: [0.024, 0.018, 0.012, 0.008] as const,
+    rippleDrifts: [1.0, 0.7, 1.3, 0.9] as const,
     reflectivityAtNormal: 0.04,
     grazingCurve: 4.0,
     shoreFoamStrength: 0.15,

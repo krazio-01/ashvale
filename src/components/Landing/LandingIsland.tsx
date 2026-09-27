@@ -20,8 +20,9 @@ import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
 import { FractalNoise } from "@/lib/noise";
 import { blendColors, createSeededRandom, FULL_TURN } from "@/lib/helpers";
-import { ISLAND, LANDING_CHARACTER, LANDING_PROPS } from "@/constants/landing";
-import { CharacterMotion, CHARACTER, MOTION_CLIPS, PLAYER } from "@/constants/characters";
+import { ISLAND, LANDING_CHARACTER, LANDING_PROPS } from "@/constants/presentation";
+import { CHARACTER, CLIP } from "@/constants/characters";
+import { PLAYER } from "@/constants/player";
 import type { IThemeEnvironment } from "@/types/theme";
 import type { IModelTemplate, ISkinnedModel } from "@/types/world";
 
@@ -172,7 +173,7 @@ const LandingCharacterMesh = ({
 
     useEffect(() => {
         const mixer = new AnimationMixer(model.scene);
-        const idleClipName = MOTION_CLIPS[CharacterMotion.Idle].clipName;
+        const idleClipName = CLIP.idle;
         const idleClip = model.animations.find((clip) => clip.name === idleClipName);
 
         if (idleClip) {

@@ -1,8 +1,7 @@
+import { TRAIL, VIEW_DISTANCE, WORLD_EDGE } from "@/constants/world";
 import { pair } from "@/lib/helpers";
-import { CAMERA } from "./characters";
-import { TRAIL, WORLD_EDGE } from "./world";
 
-const PROP_VIEW_RATIO_OF_CAMERA_FAR = 0.5;
+const PROP_ACTIVATION_VIEW_RATIO = 0.5;
 
 const WORLD_EDGE_FADE_WIDTH = 14;
 
@@ -62,7 +61,7 @@ export const LEDGE = {
 };
 
 export const PROP_FIELD = {
-    activationRadius: CAMERA.far * PROP_VIEW_RATIO_OF_CAMERA_FAR,
+    activationRadius: VIEW_DISTANCE * PROP_ACTIVATION_VIEW_RATIO,
     activationJitter: 0.1,
     deactivationMargin: 15,
     occupancyCellSize: 6,

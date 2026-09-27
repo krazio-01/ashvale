@@ -1,6 +1,7 @@
 "use client";
 import type { IGameSettings, SettingSection } from "@/types/settings";
 import { getControlsForSection } from "@/settings/SettingsCatalogue";
+import { ControlsReference } from "./ControlsReference/ControlsReference";
 import { SettingControlRow, type SettingChangeHandler } from "./SettingControls";
 
 interface SettingsPanelProps {
@@ -11,6 +12,7 @@ interface SettingsPanelProps {
 
 export const SettingsPanel = ({ section, values, onChange }: SettingsPanelProps) => (
     <div className="settings-panel-list">
+        {section === "Controls" && <ControlsReference />}
         {getControlsForSection(section).map((descriptor) => (
             <SettingControlRow
                 key={String(descriptor.key)}

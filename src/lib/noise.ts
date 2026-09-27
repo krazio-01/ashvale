@@ -29,11 +29,6 @@ export class FractalNoise {
         return total / range;
     }
 
-    sampleRidged(x: number, z: number, octaves: number, gain: number): number {
-        const value = this.sample(x, z, octaves, gain);
-        return 1 - Math.abs(2 * value - 1);
-    }
-
     sampleTileable(
         unitX: number,
         unitZ: number,

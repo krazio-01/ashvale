@@ -579,7 +579,7 @@ function createSeededRandom(seed: number): () => number {
     };
 }
 
-export interface IChapterGeometry {
+interface IChapterGeometry {
     regions: IChapterRegion[];
     pathways: IRegionPathway[];
     spawnRegionId: string;

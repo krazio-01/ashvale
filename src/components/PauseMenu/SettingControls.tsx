@@ -49,7 +49,9 @@ const SliderRow = <K extends keyof IGameSettings>({
                     step={descriptor.step}
                     value={currentValue}
                     onChange={(e) =>
-                        onChange({ [descriptor.key]: Number(e.target.value) } as Partial<IGameSettings>)
+                        onChange({
+                            [descriptor.key]: Number(e.target.value),
+                        } as Partial<IGameSettings>)
                     }
                 />
                 <span className="slider-value">{formatted}</span>
@@ -107,7 +109,8 @@ const ChoiceRow = <K extends keyof IGameSettings>({
         <RowHeader label={descriptor.label} description={descriptor.description} />
         <div className="segmented-control" role="group" aria-label={descriptor.label}>
             {descriptor.options.map((option) => {
-                const isDerivedOnly = descriptor.key === "qualityPreset" && option.value === "custom";
+                const isDerivedOnly =
+                    descriptor.key === "qualityPreset" && option.value === "custom";
 
                 return (
                     <button
@@ -115,7 +118,11 @@ const ChoiceRow = <K extends keyof IGameSettings>({
                         type="button"
                         aria-pressed={option.value === currentValue}
                         disabled={isDerivedOnly}
-                        title={isDerivedOnly ? "Set automatically when options don't match a preset" : undefined}
+                        title={
+                            isDerivedOnly
+                                ? "Set automatically when options don't match a preset"
+                                : undefined
+                        }
                         className={option.value === currentValue ? "active" : ""}
                         onClick={() =>
                             onChange({ [descriptor.key]: option.value } as Partial<IGameSettings>)
@@ -153,7 +160,11 @@ export const SettingControlRow = <K extends keyof IGameSettings>({
             );
         case "choice":
             return (
-                <ChoiceRow descriptor={descriptor} currentValue={currentValue} onChange={onChange} />
+                <ChoiceRow
+                    descriptor={descriptor}
+                    currentValue={currentValue}
+                    onChange={onChange}
+                />
             );
     }
 };

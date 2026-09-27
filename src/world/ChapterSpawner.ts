@@ -3,9 +3,15 @@ import { PropBatch } from "@/world/props/PropBatch";
 import { TerrainSurface } from "@/world/terrain/TerrainSurface";
 import { GrassField } from "@/world/vegetation/GrassField";
 import { Player } from "@/entities/characters/player/Player";
-import { CharacterBody } from "@/entities/characters/CharacterBody";
-import { bossSpec } from "@/entities/characters/bosses/BossModel";
-import { spawnEnemyBody } from "@/entities/characters/enemies/EnemySpawner";
+import { composeBoss } from "@/entities/characters/bosses/BossComposer";
+import { CombatDiagnostics } from "@/systems/combat/services/CombatDiagnostics";
+import { AlertMarkerProjector } from "@/world/effects/combat/AlertMarkerProjector";
+import { DamageNumberProjector } from "@/world/effects/combat/DamageNumberProjector";
+import { CombatNoise } from "@/systems/enemyBehaviour/perception/CombatNoise";
+import { HitSparks } from "@/world/effects/combat/HitSparks";
+import { TelegraphFlares } from "@/world/effects/combat/TelegraphFlares";
+import { Enemy } from "@/entities/characters/enemies/Enemy";
+import { spawnEnemy } from "@/entities/characters/enemies/EnemySpawner";
 import { placeRegionEnemies } from "@/world/EnemyPlacement";
 import { buildPropField, type ICorridorLane, type IRegionSite } from "@/world/props/PropField";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
@@ -26,8 +32,10 @@ import type { ISettlementLayoutResult } from "@/types/settlement";
 import { buildSettlementLayout } from "@/world/settlement/SettlementLayout";
 import { SettlementColliders } from "@/world/settlement/SettlementColliders";
 import type { IPropGroup, IThemeManifest } from "@/types/theme";
+import type { CombatCharacter } from "@/entities/characters/CombatCharacter";
 import type { SpawnProgressListener } from "@/types/world";
-import { ENEMY_PLACEMENT, PLAYER, SPAWNING } from "@/constants/characters";
+import { ENEMY_PLACEMENT, SPAWNING } from "@/constants/enemies";
+import { PLAYER } from "@/constants/player";
 import { TERRAIN } from "@/constants/world";
 import { createSeededRandom, hashString, yieldToBrowser } from "@/lib/helpers";
 import { TerrainEdgeBarrier, TerrainLedges } from "./terrain/TerrainFeatures";
@@ -64,13 +72,21 @@ export async function spawnChapterWorld(
     );
 
     await beginStage("Waking the inhabitants");
-    spawnRegionEnemies(world, chapter, terrain, positionsByRegionId);
 
     const player = spawnPlayer(world, camera, chapter, positionsByRegionId, terrain);
 
     if (player) terrain.waterSurface?.follow(player.sceneObject, PLAYER.height / 2);
+    world.addEntity(new HitSparks(world.context.combatEvents));
+    world.addEntity(new TelegraphFlares(world.context.combatEvents));
+    world.addEntity(new CombatNoise(world.context.combatEvents));
+    world.addEntity(new DamageNumberProjector(world.context.combatEvents, camera));
+    if (process.env.NODE_ENV !== "production")
+        world.addEntity(new CombatDiagnostics(world.context, world.root, player));
 
-    spawnBoss(world, chapter, positionsByRegionId, terrain);
+    const alertMarkers = new AlertMarkerProjector(camera);
+    world.addEntity(alertMarkers);
+    spawnRegionEnemies(world, chapter, terrain, positionsByRegionId, player, alertMarkers);
+    spawnBoss(world, chapter, positionsByRegionId, terrain, player);
 }
 
 function createStageRunner(reportProgress?: SpawnProgressListener): StageRunner {
@@ -313,7 +329,6 @@ function spawnPlayer(
     if (!spawnPosition) return null;
 
     const player = new Player(
-        "player",
         world.context,
         camera,
         [
@@ -358,31 +373,43 @@ function spawnBoss(
     world: World,
     chapter: ChapterResponse,
     positionsByRegionId: Map<string, Vector3Tuple>,
-    terrain: ITerrainContext
+    terrain: ITerrainContext,
+    player: CombatCharacter | null
 ): void {
     const bossPosition = positionsByRegionId.get(chapter.bossRegionId);
     if (!chapter.boss || !bossPosition) return;
 
-    const spec = bossSpec();
+    const boss = composeBoss(chapter.boss, chapter.chapterIndex);
+    const archetype = boss.archetype;
 
-    world.addEntity(
-        new CharacterBody(spec, world.context, [
-            bossPosition[0],
-            terrain.groundHeightAt(bossPosition[0], bossPosition[2]) +
-                spec.height / 2 +
-                SPAWNING.spawnClearanceBuffer,
-            bossPosition[2],
-        ])
-    );
+    const spawnY =
+        terrain.groundHeightAt(bossPosition[0], bossPosition[2]) +
+        archetype.height / 2 +
+        SPAWNING.spawnClearanceBuffer;
+
+    const bossEnemy = new Enemy({
+        id: boss.id,
+        archetype,
+        context: world.context,
+        spawnPosition: [bossPosition[0], spawnY, bossPosition[2]],
+        spawnYaw: 0,
+        player,
+        passive: true,
+    });
+
+    world.addEntity(bossEnemy);
 }
 
 function spawnRegionEnemies(
     world: World,
     chapter: ChapterResponse,
     terrain: ITerrainContext,
-    positionsByRegionId: Map<string, Vector3Tuple>
+    positionsByRegionId: Map<string, Vector3Tuple>,
+    player: CombatCharacter | null,
+    alertMarkers: AlertMarkerProjector
 ): void {
     const playerSpawn = positionsByRegionId.get(chapter.spawnRegionId);
+    let enemyIndex = 0;
 
     for (const region of chapter.regions) {
         if (region.regionId === chapter.bossRegionId) continue;
@@ -402,15 +429,22 @@ function spawnRegionEnemies(
                     : null,
         });
 
-        for (const placement of placements)
-            world.addEntity(
-                spawnEnemyBody(
-                    placement.archetype,
-                    world.context,
-                    placement.position,
-                    placement.facingYaw
-                )
+        for (const placement of placements) {
+            enemyIndex += 1;
+            const enemyId = `${region.regionId}-enemy-${enemyIndex}`;
+
+            const enemy = spawnEnemy(
+                placement.archetype,
+                enemyId,
+                world.context,
+                placement.position,
+                placement.facingYaw,
+                player
             );
+
+            alertMarkers.track(enemy);
+            world.addEntity(enemy);
+        }
     }
 }
 
