@@ -19,6 +19,7 @@ import type { IThemeEnvironment } from "@/types/theme";
 
 export interface IWorldEntity {
     readonly sceneObject: Object3D;
+    readonly updatesAfterBodies?: boolean;
     fixedUpdate?(fixedTimestep: number): void;
     postStep?(): void;
     update(deltaSeconds: number, interpolationAlpha: number): void;

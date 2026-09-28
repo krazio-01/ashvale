@@ -8,7 +8,7 @@ import { DefenseReader } from "@/systems/enemyBehaviour/combat/DefenseReader";
 import { SpamTracker } from "@/systems/enemyBehaviour/combat/SpamTracker";
 import type { AttackCoordinator } from "@/systems/combat/services/AttackCoordinator";
 import { ENEMY_DEFENSE_MOVE_IDS } from "@/systems/combat/moveSets/enemy/enemyMoveKit";
-import { ATTACK_COORDINATOR, ENGAGE_TACTICS } from "@/constants/enemies";
+import { ENGAGE_TACTICS } from "@/constants/enemies";
 import { angleDelta, clamp, horizontalDistance, yawTowards } from "@/lib/helpers";
 import type { IAttackThreatSource, ICombatant } from "@/types/combat";
 
@@ -59,6 +59,7 @@ export class EngageBehaviour extends EnemyBehaviour<IEnemyCombatBody> {
     exit(): void {
         this.body.relax();
         this.coordinator.releaseRingSlot(this.enemyId);
+        this.abandonCombo();
     }
 
     notifyLightHitLanded(): void {
@@ -69,7 +70,12 @@ export class EngageBehaviour extends EnemyBehaviour<IEnemyCombatBody> {
         this.spam.tick(deltaSeconds);
         const tactics = this.body.archetype.tactics;
         const isFrenzied = this.body.healthFraction < tactics.frenzyBelowHealth;
-        this.planner.tick(deltaSeconds, isFrenzied ? 1 / tactics.frenzyCooldownScale : 1);
+        const isPunishWindow = this.target.isReeling;
+        this.planner.tick(
+            deltaSeconds,
+            (isFrenzied ? 1 / tactics.frenzyCooldownScale : 1) *
+                (isPunishWindow ? ENGAGE_TACTICS.punishCooldownRate : 1)
+        );
 
         const isAimedAtMe = this.target.currentTarget?.id === this.enemyId;
         const threat = isAimedAtMe ? this.target.attackThreat : null;
@@ -92,7 +98,7 @@ export class EngageBehaviour extends EnemyBehaviour<IEnemyCombatBody> {
             horizontalDistance(body.position, targetPosition) - body.bodyRadius - targetRadius;
 
         this.rescoreRemaining -= deltaSeconds;
-        if (this.rescoreRemaining <= 0) {
+        if (this.rescoreRemaining <= 0 || (isPunishWindow && this.currentTactic !== "attack")) {
             this.currentTactic = this.chooseTactic(gap);
             this.rescoreRemaining = ENGAGE_TACTICS.rescoreSeconds;
         }
@@ -178,10 +184,10 @@ export class EngageBehaviour extends EnemyBehaviour<IEnemyCombatBody> {
         if (!body.performMove(attack.openingMove)) return;
 
         this.rollCombo(attack);
-        const comboSeconds = ATTACK_COORDINATOR.comboStepSeconds * (this.comboSteps.length - 1);
         this.coordinator.tryAcquire(
+            this.enemyId,
             attack.tokenCost,
-            ATTACK_COORDINATOR.holdSeconds + comboSeconds,
+            this.comboSteps.length - 1,
             isPaired
         );
         this.planner.commit(attack);
@@ -206,12 +212,18 @@ export class EngageBehaviour extends EnemyBehaviour<IEnemyCombatBody> {
         if (steps.length === 0) return false;
 
         if (this.body.activeMoveId !== steps[this.comboIndex]) {
-            steps.length = 0;
+            this.abandonCombo();
             return false;
         }
 
         const next = steps[this.comboIndex + 1];
         if (next !== undefined && this.body.performMove(next)) this.comboIndex += 1;
         return true;
+    }
+
+    private abandonCombo(): void {
+        if (this.comboIndex < this.comboSteps.length - 1)
+            this.coordinator.dropExtension(this.enemyId);
+        this.comboSteps.length = 0;
     }
 }

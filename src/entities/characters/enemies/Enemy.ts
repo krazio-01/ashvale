@@ -148,10 +148,6 @@ export class Enemy extends CombatCharacter implements IEnemyCombatBody, IAlertMa
         return this.perception ? alertMarkerFillFor(this.perception.meter) : 0;
     }
 
-    get activeMoveId(): string | null {
-        return this.machine.activeMove?.id ?? null;
-    }
-
     moveTowards(point: Vector3, speed: number, stopDistance: number, pointRadius = 0): number {
         const distance = horizontalDirection(this.position, point, this.desiredVelocity);
         if (distance <= stopDistance || distance < 1e-4) {
