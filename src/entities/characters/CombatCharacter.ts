@@ -280,6 +280,10 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         return this.machine.state === "staggered";
     }
 
+    get isReeling(): boolean {
+        return this.machine.state === "reaction" || this.machine.state === "staggered";
+    }
+
     get isAttacking(): boolean {
         const move = this.machine.activeMove;
         return move !== null && isStrikeMove(move);
@@ -307,6 +311,10 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
 
     get isPaired(): boolean {
         return this.machine.state === "paired";
+    }
+
+    get activeMoveId(): string | null {
+        return this.machine.activeMove?.id ?? null;
     }
 
     get currentTarget(): ICombatant | null {

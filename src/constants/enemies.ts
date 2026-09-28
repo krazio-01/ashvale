@@ -165,6 +165,7 @@ export const ENGAGE_TACTICS = {
     ringSettleDistance: metres(0.08),
     circleSpeedFraction: 0.55,
     orbitLookaheadSeconds: 0.5,
+    punishCooldownRate: 2,
 };
 
 interface ICombatTactics extends IDefenseTactics {
@@ -247,7 +248,8 @@ function attack(
 const SENTINEL_REACH = metres(1.2);
 const GOLEM_REACH = metres(1.6);
 const GREMLIN_REACH = metres(0.8);
-const WRAITH_CAST_RANGE: readonly [number, number] = [metres(1.5), metres(8)];
+const WRAITH_RETREAT_RANGE = metres(2.5);
+const WRAITH_CAST_RANGE: readonly [number, number] = [WRAITH_RETREAT_RANGE, metres(8)];
 
 const GOLEM_ATTACKS: readonly IEnemyAttack[] = [
     attack("great_cleave", GOLEM_MOVE_IDS.greatCleave, [0, GOLEM_REACH], 3, 2.2, { tokenCost: 2 }),
@@ -362,7 +364,7 @@ const ENEMY_ARCHETYPES: Record<EnemyArchetype, IEnemyArchetype> = {
         attackPower: 6,
         tactics: {
             preferredRange: metres(6),
-            retreatRange: metres(2.5),
+            retreatRange: WRAITH_RETREAT_RANGE,
             frenzyBelowHealth: 0,
             frenzyCooldownScale: 1,
             reactionSeconds: 0.1,

@@ -10,6 +10,7 @@ import type {
 } from "@/types/combat";
 
 export interface ITelegraphSource extends ICombatant {
+    readonly activeMoveId: string | null;
     sampleHitShape(shape: HitShape, segment: IStrikeSegment): boolean;
 }
 

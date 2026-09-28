@@ -117,12 +117,15 @@ export class ProjectileSystem {
             projectile.position.addScaledVector(projectile.velocity, deltaSeconds);
             projectile.age += deltaSeconds;
 
-            if (this.resolveHits(projectile)) continue;
             if (
+                projectile.payload?.attacker.isDead ||
                 projectile.age >= PROJECTILE_POOL.lifetimeSeconds ||
                 this.isWorldBlocked(projectile.previous, projectile.position)
-            )
+            ) {
                 this.release(projectile);
+                continue;
+            }
+            this.resolveHits(projectile);
         }
     }
 
@@ -133,9 +136,9 @@ export class ProjectileSystem {
         this.sceneObject.clear();
     }
 
-    private resolveHits(projectile: IProjectile): boolean {
+    private resolveHits(projectile: IProjectile): void {
         const payload = projectile.payload;
-        if (!payload) return false;
+        if (!payload) return;
         const count = projectile.sweep.sweep(
             projectile.previous,
             projectile.position,
@@ -153,7 +156,7 @@ export class ProjectileSystem {
             const outcome = defender.receiveHit(payload);
             if (outcome.kind === "parried") {
                 this.release(projectile);
-                return true;
+                return;
             }
             if (!isConnected(outcome)) continue;
 
@@ -174,9 +177,8 @@ export class ProjectileSystem {
                 projectile.position
             );
             this.release(projectile);
-            return true;
+            return;
         }
-        return false;
     }
 
     private release(projectile: IProjectile): void {

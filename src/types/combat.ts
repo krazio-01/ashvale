@@ -171,6 +171,7 @@ export interface ICombatant {
     readonly isDead: boolean;
     readonly isPaired: boolean;
     readonly isStaggered: boolean;
+    readonly isReeling: boolean;
     readonly isAttacking: boolean;
     readonly healthFraction: number;
     readonly awareness: AwarenessState;

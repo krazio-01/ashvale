@@ -29,6 +29,7 @@ export class World {
     private readonly environment: IThemeEnvironment;
     private readonly worldContext: IWorldContext;
     private readonly entities = new Set<IWorldEntity>();
+    private readonly lateEntities = new Set<IWorldEntity>();
     private readonly steppedEntities = new Set<IWorldEntity>();
     private unsimulatedTime = 0;
     private isDisposed = false;
@@ -86,7 +87,7 @@ export class World {
     addEntity(entity: IWorldEntity): void {
         if (this.isDisposed) return;
 
-        this.entities.add(entity);
+        (entity.updatesAfterBodies ? this.lateEntities : this.entities).add(entity);
         if (entity.fixedUpdate || entity.postStep) this.steppedEntities.add(entity);
         this.sceneRoot.add(entity.sceneObject);
     }
@@ -118,6 +119,7 @@ export class World {
 
         const interpolationAlpha = isCatchingUp ? 1 : this.unsimulatedTime / fixedTimestep;
         for (const entity of this.entities) entity.update(frameDelta, interpolationAlpha);
+        for (const entity of this.lateEntities) entity.update(frameDelta, interpolationAlpha);
     }
 
     dispose(): void {
@@ -125,12 +127,14 @@ export class World {
         this.isDisposed = true;
 
         for (const entity of this.entities) entity.dispose();
+        for (const entity of this.lateEntities) entity.dispose();
         this.projectiles.dispose();
 
         this.combatEvents.clear();
         this.timeDilation.clear();
         this.sceneRoot.clear();
         this.entities.clear();
+        this.lateEntities.clear();
         this.steppedEntities.clear();
         this.assetLibrary.dispose();
         this.materialLibrary.dispose();

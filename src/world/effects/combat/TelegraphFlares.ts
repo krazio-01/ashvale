@@ -25,6 +25,7 @@ interface IFlareSlot {
     sprite: Sprite;
     material: SpriteMaterial;
     source: ITelegraphSource | null;
+    moveId: string;
     shape: HitShape;
     readonly socketShape: Extract<HitShape, { kind: "socket" }>;
     danger: TelegraphDanger;
@@ -48,6 +49,7 @@ function createGlowTexture(): DataTexture {
 
 export class TelegraphFlares implements IWorldEntity {
     readonly sceneObject = new Group();
+    readonly updatesAfterBodies = true;
 
     private readonly texture = createGlowTexture();
     private readonly slots: IFlareSlot[] = [];
@@ -74,6 +76,7 @@ export class TelegraphFlares implements IWorldEntity {
                 sprite,
                 material,
                 source: null,
+                moveId: "",
                 shape: { kind: "weapon" },
                 socketShape: { kind: "socket", bone: "", radius: 0 },
                 danger: "parryable",
@@ -93,6 +96,7 @@ export class TelegraphFlares implements IWorldEntity {
             if (
                 slot.age >= TELEGRAPH_FLARES.seconds ||
                 source.isDead ||
+                source.activeMoveId !== slot.moveId ||
                 !source.sampleHitShape(slot.shape, this.segment)
             ) {
                 this.release(slot);
@@ -131,6 +135,7 @@ export class TelegraphFlares implements IWorldEntity {
         }
 
         chosen.source = event.combatant;
+        chosen.moveId = event.moveId;
         if (event.shape.kind === "socket") {
             chosen.socketShape.bone = event.shape.bone;
             chosen.socketShape.radius = event.shape.radius;

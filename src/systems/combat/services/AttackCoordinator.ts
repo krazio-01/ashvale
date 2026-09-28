@@ -2,7 +2,9 @@ import { ATTACK_COORDINATOR } from "@/constants/enemies";
 import { angleDelta } from "@/lib/helpers";
 
 interface IPendingRelease {
+    holderId: string;
     cost: number;
+    baseResumesAt: number;
     resumesAt: number;
 }
 
@@ -38,12 +40,28 @@ export class AttackCoordinator {
         return !targetPaired && cost <= this.available;
     }
 
-    tryAcquire(cost: number, holdSeconds: number, targetPaired: boolean): boolean {
+    tryAcquire(
+        holderId: string,
+        cost: number,
+        extraComboSteps: number,
+        targetPaired: boolean
+    ): boolean {
         if (!this.canAcquire(cost, targetPaired)) return false;
 
         this.available -= cost;
-        this.pending.push({ cost, resumesAt: this.elapsed + holdSeconds });
+        const baseResumesAt = this.elapsed + ATTACK_COORDINATOR.holdSeconds;
+        this.pending.push({
+            holderId,
+            cost,
+            baseResumesAt,
+            resumesAt: baseResumesAt + ATTACK_COORDINATOR.comboStepSeconds * extraComboSteps,
+        });
         return true;
+    }
+
+    dropExtension(holderId: string): void {
+        for (const entry of this.pending)
+            if (entry.holderId === holderId) entry.resumesAt = entry.baseResumesAt;
     }
 
     private claimRingSlot(enemyId: string, bearing = 0): number {
