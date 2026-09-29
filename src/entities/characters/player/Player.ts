@@ -20,7 +20,7 @@ import {
     PLAYER_STARTING_WEAPON,
     CAMERA,
     PLAYER,
-    PLAYER_REACTION_LOCKOUT,
+    PLAYER_REACTIONS,
     PLAYER_VITALS,
     STAMINA,
     CAMERA_SHAKE,
@@ -66,6 +66,7 @@ export class Player extends CombatCharacter {
     private crouchToggled = false;
     private isCrouching = false;
     private isCrouchSprinting = false;
+    private isWinded = false;
     private previousChargeLevel = 0;
     private lockCandidatesGathered = false;
 
@@ -94,7 +95,9 @@ export class Player extends CombatCharacter {
             spawnPosition,
             spawnYaw,
             flashesOnHit: false,
-            reactionLockout: PLAYER_REACTION_LOCKOUT,
+            reactionLockout: PLAYER_REACTIONS.lockout,
+            ignoredReactions: PLAYER_REACTIONS.ignored,
+            reactionDodgeCancelSeconds: PLAYER_REACTIONS.dodgeCancelSeconds,
         });
 
         this.spawnPoint.fromArray(spawnPosition);
@@ -270,11 +273,15 @@ export class Player extends CombatCharacter {
         if (this.hasDirectionalInput) moveDirection.normalize();
 
         this.isCrouching = this.crouchToggled;
+        const stamina = this.vitals.stamina;
+        if (stamina <= 0) this.isWinded = true;
+        else if (stamina >= STAMINA.sprintResumeFraction * this.vitals.maxStamina)
+            this.isWinded = false;
         const isHurrying =
             commands.wantsSprint &&
             this.hasDirectionalInput &&
-            (this.machine.state === "locomotion" ||
-                this.machine.output.move?.tags.includes("jump") === true) &&
+            !this.isWinded &&
+            (this.machine.state === "locomotion" || this.isJumping) &&
             this.vitals.drainStamina(STAMINA.sprintPerSecond * deltaSeconds);
         this.isSprinting = isHurrying && !this.isCrouching;
         this.isCrouchSprinting = isHurrying && this.isCrouching;
