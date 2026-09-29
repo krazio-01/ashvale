@@ -26,7 +26,48 @@ export interface IClipJob {
     calibrationReason?: string;
     alignToTravel?: boolean;
     speed?: number;
+    holdFeet?: boolean;
+    grounding?: "auto" | "none";
 }
+
+export type CharacterVector = [number, number, number];
+
+export interface IHandTarget {
+    position: CharacterVector;
+    aim?: CharacterVector;
+    roll?: number;
+}
+
+export interface IFootPlacement {
+    shift: CharacterVector;
+    yaw?: number;
+}
+
+export interface IFootKey {
+    time: number;
+    left?: IFootPlacement;
+    right?: IFootPlacement;
+    arrival?: "snap" | "settle";
+}
+
+export interface IPoseKey {
+    time: number;
+    pelvisShift?: CharacterVector;
+    hand?: IHandTarget;
+    offHand?: IHandTarget;
+    arrival?: "snap" | "settle";
+    rotations?: Partial<Record<string, CharacterVector>>;
+}
+
+export interface IPosedClipJob {
+    output: ClipName;
+    duration: number;
+    basePose: { clip: ClipName; frame: number };
+    poseKeys: IPoseKey[];
+    footKeys?: IFootKey[];
+}
+
+export type ClipJob = IClipJob | IPosedClipJob;
 
 const COMBAT_ROOT =
     process.env.COMBAT_ASSETS_ROOT ?? path.join(os.homedir(), "Downloads/assets/Combat/extracted");
@@ -69,7 +110,10 @@ const MOCAP_CENTRAL_IDLE = path.join(MOCAP_CENTRAL, "Idle");
 const KEVIN_COMBAT = clipSource("kevin/Animations/Male/Combat");
 
 type JobOptions = Partial<
-    Pick<IClipJob, "action" | "calibrationFrame" | "calibrationReason" | "alignToTravel" | "speed">
+    Pick<
+        IClipJob,
+        "action" | "calibrationFrame" | "calibrationReason" | "alignToTravel" | "speed" | "holdFeet"
+    >
 >;
 
 function job(
@@ -95,13 +139,14 @@ function kevinCombat(output: ClipName, file: string): IClipJob {
     return job(output, path.join(KEVIN_COMBAT, file), "kevin", FULL_RANGE, "inPlace");
 }
 
-export const CLIP_JOBS: IClipJob[] = [
+const AUTHORED_JOBS: IClipJob[] = [
     job(
         CLIP.combatIdle,
         path.join(MOCAP_ONLINE_SWORD, "KBS_Ready_Idle_001.fbx"),
         "motus",
         FULL_RANGE,
-        "inPlace"
+        "inPlace",
+        { holdFeet: true }
     ),
     strafe(CLIP.strafeForward, path.join(KEVIN_RUN, "HumanM@Run01_Forward.fbx")),
     strafe(CLIP.strafeForwardRight, path.join(KEVIN_STRAFE, "HumanM@StrafeRun01_ForwardRight.fbx")),
@@ -305,14 +350,6 @@ export const CLIP_JOBS: IClipJob[] = [
         { calibrationFrame: 1 }
     ),
     job(
-        CLIP.deathBackward,
-        path.join(ROKOKO_LEGACY, "Combat/DyingonBattlefield_HUMANIK_769.fbx"),
-        "humanikCharacter",
-        [200, 580],
-        "extract",
-        { calibrationFrame: 200 }
-    ),
-    job(
         CLIP.finisherKickdownAttacker,
         path.join(MOCAP_CENTRAL, "Fight/af_Ready_Fight_02_Kickdown_B.FBX"),
         "manny",
@@ -345,14 +382,6 @@ export const CLIP_JOBS: IClipJob[] = [
         { calibrationFrame: 620 }
     ),
     job(
-        CLIP.finisherExecution,
-        path.join(ROKOKO_COMBAT, "Sword_Samurai_ue.fbx"),
-        "ue",
-        [160, 190],
-        "extract",
-        { calibrationFrame: 160 }
-    ),
-    job(
         CLIP.finisherBackstab,
         clipSource("rokoko_weapons/20210714_s085_stabTwist_Knife_tk01_ERJA-mvn085.fbx"),
         "motus",
@@ -360,6 +389,12 @@ export const CLIP_JOBS: IClipJob[] = [
         "extract",
         { calibrationFrame: 430 }
     ),
+    job(CLIP.finisherExecution, UAL_EXTENDED, "ual", [4, 48], "extract", {
+        action: "Sword_Regular_C",
+    }),
+    job(CLIP.finisherExecutionSlam, UAL_EXTENDED, "ual", [55, 104], "extract", {
+        action: "Sword_Heavy_Combo",
+    }),
     job(CLIP.enemyPunch, UAL_STANDARD, "ual", FULL_RANGE, "inPlace", { action: "Punch_Cross" }),
     job(
         CLIP.enemySwipe,
@@ -398,7 +433,7 @@ export const CLIP_JOBS: IClipJob[] = [
         "mixamo",
         [770, 990],
         "inPlace",
-        { calibrationFrame: 770 }
+        { calibrationFrame: 770, holdFeet: true }
     ),
     job(
         CLIP.idleFidgetSwordRoll,
@@ -406,7 +441,7 @@ export const CLIP_JOBS: IClipJob[] = [
         "mixamo",
         [100, 175],
         "inPlace",
-        { calibrationFrame: 100 }
+        { calibrationFrame: 100, holdFeet: true }
     ),
     job(
         CLIP.idleFidgetScratchArm,
@@ -414,7 +449,7 @@ export const CLIP_JOBS: IClipJob[] = [
         "manny",
         [1, 141],
         "inPlace",
-        { calibrationFrame: 1 }
+        { calibrationFrame: 1, holdFeet: true }
     ),
     job(
         CLIP.idleFidgetLookAround,
@@ -422,6 +457,14 @@ export const CLIP_JOBS: IClipJob[] = [
         "manny",
         [1, 151],
         "inPlace",
-        { calibrationFrame: 1 }
+        { calibrationFrame: 1, holdFeet: true }
+    ),
+];
+
+const ENEMY_CLIP_PREFIX = "Enemy_";
+
+export const CLIP_JOBS: ClipJob[] = [
+    ...AUTHORED_JOBS.map((clipJob): IClipJob =>
+        clipJob.output.startsWith(ENEMY_CLIP_PREFIX) ? { ...clipJob, grounding: "none" } : clipJob
     ),
 ];
