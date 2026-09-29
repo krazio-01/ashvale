@@ -73,6 +73,8 @@ interface ICombatCharacterConfig {
     spawnYaw: number;
     flashesOnHit: boolean;
     reactionLockout?: Partial<Record<ReactionTier, number>>;
+    ignoredReactions?: readonly ReactionTier[];
+    reactionDodgeCancelSeconds?: number;
 }
 
 const flashMaterial = new MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
@@ -140,6 +142,8 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
     private readonly strafeLocomotion: IStrafeLocomotion | null;
     private readonly flashesOnHit: boolean;
     private readonly reactionLockout: Partial<Record<ReactionTier, number>>;
+    private readonly ignoredReactions: readonly ReactionTier[];
+    private readonly reactionDodgeCancelSeconds: number;
     private readonly reactionClipsByTier: Record<ReactionTier, readonly string[]>;
     private readonly skeletons: Skeleton[] = [];
     private readonly meshes: Mesh[] = [];
@@ -217,6 +221,9 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         this.strafeLocomotion = config.strafeLocomotion;
         this.flashesOnHit = config.flashesOnHit;
         this.reactionLockout = config.reactionLockout ?? {};
+        this.ignoredReactions = config.ignoredReactions ?? [];
+        this.reactionDodgeCancelSeconds =
+            config.reactionDodgeCancelSeconds ?? Number.POSITIVE_INFINITY;
         this.facingYaw = config.spawnYaw;
         this.previousFacingYaw = config.spawnYaw;
 
@@ -317,6 +324,14 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         return this.machine.activeMove?.id ?? null;
     }
 
+    protected get isJumping(): boolean {
+        return this.machine.output.move?.tags.includes("jump") === true;
+    }
+
+    private get steersFreely(): boolean {
+        return this.machine.output.allowsLocomotion || this.isJumping;
+    }
+
     get currentTarget(): ICombatant | null {
         return this.target;
     }
@@ -401,13 +416,15 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
             return { kind: "staggered", reaction: "stagger", damageDealt: dealt };
         }
 
-        const reaction = reactionFor(payload.impact, defender);
+        const rawReaction = reactionFor(payload.impact, defender);
+        const reaction = this.ignoredReactions.includes(rawReaction) ? "none" : rawReaction;
         if (reaction !== "none") {
             this.pendingReactionClip = this.pickReactionClip(reaction);
             const clipSeconds = this.animator.durationOf(this.pendingReactionClip);
             this.machine.react(
                 reaction,
-                Math.min(clipSeconds, this.reactionLockout[reaction] ?? clipSeconds)
+                Math.min(clipSeconds, this.reactionLockout[reaction] ?? clipSeconds),
+                this.reactionDodgeCancelSeconds
             );
         }
         this.onDamaged(payload, reaction);
@@ -475,11 +492,11 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         this.animator.playOneShot(clip, PAIRED_LOOP_PLAYBACK);
     }
 
-    playPaired(clip: string, yaw: number): void {
+    playPaired(clip: string, yaw: number, blendInSeconds = PAIRED_PLAYBACK.fadeSeconds): void {
         this.faceImmediately(yaw);
         this.pairedClip = clip;
         this.pairedTime = 0;
-        this.animator.playOneShot(clip, PAIRED_PLAYBACK);
+        this.animator.playOneShot(clip, { ...PAIRED_PLAYBACK, fadeSeconds: blendInSeconds });
     }
 
     drivePaired(clipSeconds: number): void {
@@ -516,9 +533,13 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         this.animator.returnToLocomotion(PAIRED_RETURN_FADE);
     }
 
-    finishOff(killer: ICombatant): void {
+    finishOff(killer: ICombatant, deathClip?: string): void {
         if (this.isDead) return;
-        this.die(killer, this.pairedClip === null, this.moveSet.reactions.finisherDeath);
+        this.die(
+            killer,
+            this.pairedClip === null,
+            deathClip ?? this.moveSet.reactions.finisherDeath
+        );
     }
 
     clipDuration(clip: string): number {
@@ -610,7 +631,7 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         this.sceneObject.position.copy(position);
 
         if (!this.isDead && this.machine.state !== "paired") {
-            if (this.machine.state === "move" && !this.machine.output.allowsLocomotion) {
+            if (this.machine.state === "move" && !this.steersFreely) {
                 this.sceneObject.rotation.y =
                     this.previousFacingYaw +
                     angleDelta(this.previousFacingYaw, this.facingYaw) * interpolationAlpha;
@@ -750,7 +771,7 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         }
 
         const velocity = this.moveDesiredVelocity(move, output);
-        this.updateFacing(velocity, output);
+        this.updateFacing(velocity);
         this.motor.setAutostep(this.machine.state === "locomotion");
         this.motor.step(
             deltaSeconds,
@@ -840,8 +861,8 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         this.facingYaw += angleDelta(this.facingYaw, desired) * step;
     }
 
-    private updateFacing(velocity: Vector3, output: IMachineOutput): void {
-        if (!output.allowsLocomotion) return;
+    private updateFacing(velocity: Vector3): void {
+        if (!this.steersFreely) return;
 
         if (this.facesTarget && this.target && !this.target.isDead) {
             this.facingYaw = yawTowards(this.sceneObject.position, this.target.position);

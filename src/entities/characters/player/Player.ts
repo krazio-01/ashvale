@@ -20,7 +20,7 @@ import {
     PLAYER_STARTING_WEAPON,
     CAMERA,
     PLAYER,
-    PLAYER_REACTION_LOCKOUT,
+    PLAYER_REACTIONS,
     PLAYER_VITALS,
     STAMINA,
     CAMERA_SHAKE,
@@ -29,7 +29,7 @@ import {
     DODGE,
 } from "@/constants/player";
 import { CHARACTER } from "@/constants/characters";
-import { COMBAT_TIMING, FINISHER_RULES, TARGETING } from "@/constants/combat";
+import { COMBAT_TIMING, FINISHER_RULES, SLOW_MOTION, TARGETING } from "@/constants/combat";
 import { SIGHT } from "@/constants/enemies";
 import { PLAYER_MOVE_IDS, PLAYER_MOVES } from "@/systems/combat/moveSets/playerMoves";
 import { cycleTarget, selectTarget } from "@/systems/combat/services/TargetSelector";
@@ -66,6 +66,7 @@ export class Player extends CombatCharacter {
     private crouchToggled = false;
     private isCrouching = false;
     private isCrouchSprinting = false;
+    private isWinded = false;
     private previousChargeLevel = 0;
     private lockCandidatesGathered = false;
 
@@ -94,7 +95,9 @@ export class Player extends CombatCharacter {
             spawnPosition,
             spawnYaw,
             flashesOnHit: false,
-            reactionLockout: PLAYER_REACTION_LOCKOUT,
+            reactionLockout: PLAYER_REACTIONS.lockout,
+            ignoredReactions: PLAYER_REACTIONS.ignored,
+            reactionDodgeCancelSeconds: PLAYER_REACTIONS.dodgeCancelSeconds,
         });
 
         this.spawnPoint.fromArray(spawnPosition);
@@ -235,6 +238,12 @@ export class Player extends CombatCharacter {
                 if (event.defender === this)
                     this.followCamera.addTrauma(CAMERA_SHAKE.trauma[event.impact] * 1.3);
             }),
+            events.on("finisherImpact", (event) => {
+                if (event.attacker !== this) return;
+                this.followCamera.addTrauma(CAMERA_SHAKE.trauma.finisher);
+                this.followCamera.punch();
+                this.context.timeDilation.requestSlowMotion(SLOW_MOTION.finisherImpact);
+            }),
             events.on("finisherKill", (event) => {
                 if (event.attacker === this)
                     this.followCamera.addTrauma(CAMERA_SHAKE.trauma.finisher);
@@ -270,11 +279,15 @@ export class Player extends CombatCharacter {
         if (this.hasDirectionalInput) moveDirection.normalize();
 
         this.isCrouching = this.crouchToggled;
+        const stamina = this.vitals.stamina;
+        if (stamina <= 0) this.isWinded = true;
+        else if (stamina >= STAMINA.sprintResumeFraction * this.vitals.maxStamina)
+            this.isWinded = false;
         const isHurrying =
             commands.wantsSprint &&
             this.hasDirectionalInput &&
-            (this.machine.state === "locomotion" ||
-                this.machine.output.move?.tags.includes("jump") === true) &&
+            !this.isWinded &&
+            (this.machine.state === "locomotion" || this.isJumping) &&
             this.vitals.drainStamina(STAMINA.sprintPerSecond * deltaSeconds);
         this.isSprinting = isHurrying && !this.isCrouching;
         this.isCrouchSprinting = isHurrying && this.isCrouching;

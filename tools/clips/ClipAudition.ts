@@ -4,17 +4,22 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { runRetarget } from "./BlenderRunner";
-import { MANIFEST, SOURCE_RIGS } from "./combatClipManifest";
-import type { IClipJob, SourceRig } from "./combatClipManifest";
+import { CLIP_JOBS, MANIFEST, SOURCE_RIGS } from "./combatClipManifest";
+import type { IPosedClipJob, SourceRig } from "./combatClipManifest";
 
 const SHEET_COLUMNS = 10;
 const SHEET_PAGE_FRAMES = 40;
-const VIEWS = ["front", "side"] as const;
+const VIEWS = ["front", "side", "close"] as const;
 const SCRATCH_ROOT = fs.realpathSync(os.tmpdir());
 
-interface IAuditionJob extends Omit<IClipJob, "output"> {
-    target: string;
-    output: string;
+function posedAuditionJob(clipName: string): Record<string, unknown> {
+    const posed = CLIP_JOBS.find(
+        (candidate): candidate is IPosedClipJob =>
+            candidate.output === clipName && "poseKeys" in candidate
+    );
+    if (!posed) throw new Error(`no posed clip named ${clipName} in the manifest`);
+    const base = CLIP_JOBS.find((candidate) => candidate.output === posed.basePose.clip);
+    return { ...posed, target: path.resolve(MANIFEST.target), prerequisites: base ? [base] : [] };
 }
 
 const isSourceRig = (rig: string): rig is SourceRig =>
@@ -71,38 +76,47 @@ async function main(): Promise<void> {
             calibration: { type: "string" },
             out: { type: "string" },
             action: { type: "string" },
+            clip: { type: "string" },
             extract: { type: "boolean", default: false },
             "align-travel": { type: "boolean", default: false },
         },
     });
 
-    if (!values.source || !values.rig || !values.out)
-        throw new Error("audition needs --source, --rig and --out");
-    if (!isSourceRig(values.rig))
-        throw new Error(`unknown --rig ${values.rig}, expected one of ${SOURCE_RIGS.join(", ")}`);
+    if (!values.out) throw new Error("audition needs --out");
+    if (!values.clip) {
+        if (!values.source || !values.rig)
+            throw new Error("audition needs --source and --rig, or --clip for a posed clip");
+        if (!isSourceRig(values.rig))
+            throw new Error(
+                `unknown --rig ${values.rig}, expected one of ${SOURCE_RIGS.join(", ")}`
+            );
+    }
 
     const outDirectory = path.resolve(values.out);
     prepareOutDirectory(outDirectory);
 
     const from = Number(values.from);
-    const job: IAuditionJob = {
-        target: path.resolve(MANIFEST.target),
-        output: "Audition",
-        source: path.resolve(values.source),
-        rig: values.rig,
-        frames: [from, Number(values.to)],
-        rootMotion: values.extract ? "extract" : "inPlace",
-        calibrationFrame: values.calibration === undefined ? from : Number(values.calibration),
-        ...(values.action ? { action: values.action } : {}),
-        ...(values["align-travel"] ? { alignToTravel: true } : {}),
-    };
+    const job: Record<string, unknown> = values.clip
+        ? posedAuditionJob(values.clip)
+        : {
+              target: path.resolve(MANIFEST.target),
+              output: "Audition",
+              source: path.resolve(values.source ?? ""),
+              rig: values.rig,
+              frames: [from, Number(values.to)],
+              rootMotion: values.extract ? "extract" : "inPlace",
+              calibrationFrame:
+                  values.calibration === undefined ? from : Number(values.calibration),
+              ...(values.action ? { action: values.action } : {}),
+              ...(values["align-travel"] ? { alignToTravel: true } : {}),
+          };
     const jobPath = path.join(outDirectory, "job.json");
     fs.writeFileSync(jobPath, JSON.stringify(job));
 
     const lines = runRetarget(
         "audition",
         [jobPath, outDirectory, values.step],
-        ["STRIKE", "AUDITION"]
+        ["STRIKE", "AUDITION", "JOINTS"]
     );
     fs.writeFileSync(
         path.join(outDirectory, "profile.txt"),

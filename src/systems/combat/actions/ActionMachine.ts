@@ -117,6 +117,7 @@ export class ActionMachine {
     private charge = 0;
     private moveSerial = 0;
     private stateRemaining = 0;
+    private dodgeCancelOpensAtRemaining = Number.NEGATIVE_INFINITY;
     private pendingMoveStarted = false;
     private pendingReaction: ReactionTier | null = null;
     private pendingStagger = false;
@@ -200,10 +201,11 @@ export class ActionMachine {
         return true;
     }
 
-    react(tier: ReactionTier, seconds: number): void {
+    react(tier: ReactionTier, seconds: number, reactionDodgeCancelSeconds: number): void {
         if (tier === "none" || this.isLocked) return;
 
         this.enterTimedState("reaction", seconds);
+        this.dodgeCancelOpensAtRemaining = seconds - reactionDodgeCancelSeconds;
         this.pendingReaction = tier;
     }
 
@@ -259,7 +261,11 @@ export class ActionMachine {
         if (this.currentState === "move" && input.isGrounded) this.land(input.hasDirectionalInput);
         if (this.currentState === "move" && this.time >= 1) this.finishMove();
         if (this.currentState === "move") this.advanceMove(input);
-        if (this.currentState === "locomotion" || this.currentState === "move")
+        if (
+            this.currentState === "locomotion" ||
+            this.currentState === "move" ||
+            this.currentState === "reaction"
+        )
             this.tryStartQueued(input);
 
         return this.publish();
@@ -341,6 +347,8 @@ export class ActionMachine {
 
     private permits(tag: MoveTag): boolean {
         if (this.currentState === "locomotion") return true;
+        if (this.currentState === "reaction")
+            return tag === "dodge" && this.stateRemaining <= this.dodgeCancelOpensAtRemaining;
 
         const move = this.currentMove;
         return move !== null && (this.time >= 1 || allowsCancel(move, this.time, tag));

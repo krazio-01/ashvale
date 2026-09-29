@@ -190,6 +190,9 @@ export interface IFinisherDefinition {
     bearing: number;
     relativeYaw: number;
     killAt: number;
+    impactAt?: readonly number[];
+    victimDeath?: string;
+    blendInSeconds?: number;
 }
 
 export interface IBoss {

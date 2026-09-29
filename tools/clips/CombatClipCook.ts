@@ -70,7 +70,11 @@ async function main(): Promise<void> {
             })
         );
 
-        runRetarget("bake", [jobsPath, rawPath], ["BAKED", "EXPORTED", "MISSING_LIBRARY_CLIPS"]);
+        runRetarget(
+            "bake",
+            [jobsPath, rawPath],
+            ["BAKED", "GROUND", "JOINTS", "EXPORTED", "MISSING_LIBRARY_CLIPS"]
+        );
 
         await stripChannels(io, rawPath);
     } finally {

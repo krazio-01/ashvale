@@ -3,7 +3,7 @@ import { STRIDE } from "@/constants/characters";
 import { WEAPONS } from "@/constants/combat";
 import { VIEW_DISTANCE } from "@/constants/world";
 import type { WeaponDefinition } from "@/types/weapons";
-import type { ImpactTier } from "@/types/combat";
+import type { ImpactTier, ReactionTier } from "@/types/combat";
 
 const PLAYER_HEIGHT = metres(2.1);
 
@@ -44,12 +44,17 @@ export const DODGE = {
 
 export const STAMINA = {
     sprintPerSecond: 14,
+    sprintResumeFraction: 0.3,
 };
 
-export const PLAYER_REACTION_LOCKOUT = {
-    flinch: 0.3,
-    knockback: 0.55,
-    knockdown: 1,
+export const PLAYER_REACTIONS: {
+    lockout: Partial<Record<ReactionTier, number>>;
+    ignored: readonly ReactionTier[];
+    dodgeCancelSeconds: number;
+} = {
+    lockout: { knockback: 0.55, knockdown: 1 },
+    ignored: ["flinch"],
+    dodgeCancelSeconds: 0.1,
 };
 
 export const PLAYER_VITALS = {

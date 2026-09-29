@@ -27,6 +27,7 @@ export interface ICombatEventMap {
     staggered: { combatant: ICombatant };
     killed: { combatant: ICombatant; killer: ICombatant | null };
     finisherStarted: { attacker: ICombatant; victim: ICombatant; finisher: IFinisherDefinition };
+    finisherImpact: { attacker: ICombatant; victim: ICombatant };
     finisherKill: { attacker: ICombatant; victim: ICombatant };
     telegraph: {
         combatant: ITelegraphSource;
@@ -64,6 +65,7 @@ export class CombatEvents {
         staggered: new Set(),
         killed: new Set(),
         finisherStarted: new Set(),
+        finisherImpact: new Set(),
         finisherKill: new Set(),
         telegraph: new Set(),
         noise: new Set(),

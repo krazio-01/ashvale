@@ -18,12 +18,12 @@ export interface IPairedParticipant extends ICombatant {
     readonly disposed: boolean;
     beginPaired(role: PairedRole): void;
     playPairedLoop(clip: string, yaw: number): void;
-    playPaired(clip: string, yaw: number): void;
+    playPaired(clip: string, yaw: number, blendInSeconds?: number): void;
     drivePaired(clipSeconds: number): void;
     movePaired(delta: Vector3): void;
     setPairedYaw(yaw: number): void;
     endPaired(): void;
-    finishOff(killer: ICombatant): void;
+    finishOff(killer: ICombatant, deathClip?: string): void;
     clipDuration(clip: string): number;
 }
 
@@ -59,6 +59,7 @@ export class PairedAnimationDirector {
     private elapsed = 0;
     private duration = 0;
     private killed = false;
+    private impactsFired = 0;
 
     constructor(services: PairedServices) {
         this.services = services;
@@ -114,6 +115,7 @@ export class PairedAnimationDirector {
         this.victim = victim;
         this.finisher = finisher;
         this.killed = false;
+        this.impactsFired = 0;
         this.elapsed = 0;
         this.approachElapsed = 0;
         this.victimClip = null;
@@ -210,7 +212,7 @@ export class PairedAnimationDirector {
         this.attackerSyncFromYaw = attacker.yaw;
         this.victimSyncFromYaw = victim.yaw;
 
-        attacker.playPaired(finisher.attackerClip, attacker.yaw);
+        attacker.playPaired(finisher.attackerClip, attacker.yaw, finisher.blendInSeconds);
         const pairedVictimClip = finisher.pairedVictimClip;
         if (pairedVictimClip) victim.playPaired(pairedVictimClip, victim.yaw);
 
@@ -248,6 +250,11 @@ export class PairedAnimationDirector {
         const push = enforceSeparation(attacker.position, victim.position, minimum, scratchPush);
         if (push.lengthSq() > 0) victim.movePaired(push);
 
+        const nextImpactAt = finisher.impactAt?.[this.impactsFired];
+        if (nextImpactAt !== undefined && this.elapsed >= nextImpactAt * this.duration) {
+            this.impactsFired += 1;
+            this.services.combatEvents.emit("finisherImpact", { attacker, victim });
+        }
         if (!this.killed && this.elapsed >= finisher.killAt * this.duration)
             this.kill(attacker, victim);
         if (this.elapsed < this.duration) return false;
@@ -274,7 +281,7 @@ export class PairedAnimationDirector {
 
     private kill(attacker: IPairedParticipant, victim: IPairedParticipant): void {
         this.killed = true;
-        victim.finishOff(attacker);
+        victim.finishOff(attacker, this.finisher?.victimDeath);
         this.services.combatEvents.emit("finisherKill", { attacker, victim });
     }
 }
