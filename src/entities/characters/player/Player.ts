@@ -29,7 +29,7 @@ import {
     DODGE,
 } from "@/constants/player";
 import { CHARACTER } from "@/constants/characters";
-import { COMBAT_TIMING, FINISHER_RULES, TARGETING } from "@/constants/combat";
+import { COMBAT_TIMING, FINISHER_RULES, SLOW_MOTION, TARGETING } from "@/constants/combat";
 import { SIGHT } from "@/constants/enemies";
 import { PLAYER_MOVE_IDS, PLAYER_MOVES } from "@/systems/combat/moveSets/playerMoves";
 import { cycleTarget, selectTarget } from "@/systems/combat/services/TargetSelector";
@@ -237,6 +237,12 @@ export class Player extends CombatCharacter {
                 }
                 if (event.defender === this)
                     this.followCamera.addTrauma(CAMERA_SHAKE.trauma[event.impact] * 1.3);
+            }),
+            events.on("finisherImpact", (event) => {
+                if (event.attacker !== this) return;
+                this.followCamera.addTrauma(CAMERA_SHAKE.trauma.finisher);
+                this.followCamera.punch();
+                this.context.timeDilation.requestSlowMotion(SLOW_MOTION.finisherImpact);
             }),
             events.on("finisherKill", (event) => {
                 if (event.attacker === this)

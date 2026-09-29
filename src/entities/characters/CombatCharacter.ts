@@ -492,11 +492,11 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         this.animator.playOneShot(clip, PAIRED_LOOP_PLAYBACK);
     }
 
-    playPaired(clip: string, yaw: number): void {
+    playPaired(clip: string, yaw: number, blendInSeconds = PAIRED_PLAYBACK.fadeSeconds): void {
         this.faceImmediately(yaw);
         this.pairedClip = clip;
         this.pairedTime = 0;
-        this.animator.playOneShot(clip, PAIRED_PLAYBACK);
+        this.animator.playOneShot(clip, { ...PAIRED_PLAYBACK, fadeSeconds: blendInSeconds });
     }
 
     drivePaired(clipSeconds: number): void {
@@ -533,9 +533,13 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         this.animator.returnToLocomotion(PAIRED_RETURN_FADE);
     }
 
-    finishOff(killer: ICombatant): void {
+    finishOff(killer: ICombatant, deathClip?: string): void {
         if (this.isDead) return;
-        this.die(killer, this.pairedClip === null, this.moveSet.reactions.finisherDeath);
+        this.die(
+            killer,
+            this.pairedClip === null,
+            deathClip ?? this.moveSet.reactions.finisherDeath
+        );
     }
 
     clipDuration(clip: string): number {

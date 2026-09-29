@@ -34,6 +34,7 @@ export const HITSTOP = {
 
 export const SLOW_MOTION = {
     perfectDodge: { scale: 0.4, seconds: 0.3, rampInSeconds: 0.03, rampOutSeconds: 0.12 },
+    finisherImpact: { scale: 0.25, seconds: 0.4, rampInSeconds: 0.02, rampOutSeconds: 0.35 },
 } satisfies Record<string, ISlowMotionProfile>;
 
 export const FOCUS = {
