@@ -48,7 +48,11 @@ interface ICastSpec {
 
 function baseMove(id: string, clip: string, playbackRate: number): IMoveDefinition {
     return defineMove(
-        { fadeSeconds: 0.08, requires: "any", minimumWarningSeconds: TELEGRAPH.leadSeconds },
+        {
+            fadeSeconds: 0.08,
+            requires: "any",
+            minimumWindupSeconds: TELEGRAPH.minimumWindupSeconds,
+        },
         { id, clip, tags: ["light"], playbackRate }
     );
 }

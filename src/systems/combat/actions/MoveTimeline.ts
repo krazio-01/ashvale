@@ -36,7 +36,7 @@ export function firstStrikeAt(move: IMoveDefinition): number | null {
 export function telegraphTime(move: IMoveDefinition, windupUnitSeconds: number): number | null {
     const strikeAt = firstStrikeAt(move);
     if (strikeAt === null) return null;
-    return Math.max(0, strikeAt - TELEGRAPH.leadSeconds / Math.max(windupUnitSeconds, 1e-3));
+    return Math.max(0, strikeAt - TELEGRAPH.flashLeadSeconds / Math.max(windupUnitSeconds, 1e-3));
 }
 
 export function telegraphDanger(move: IMoveDefinition): TelegraphDanger {

@@ -16,7 +16,7 @@ export const SHARED_REACTIONS: Pick<
 export type MoveSpec = Pick<IMoveDefinition, "id" | "clip" | "tags"> & Partial<IMoveDefinition>;
 
 export function defineMove(
-    defaults: Pick<IMoveDefinition, "fadeSeconds" | "requires" | "minimumWarningSeconds">,
+    defaults: Pick<IMoveDefinition, "fadeSeconds" | "requires" | "minimumWindupSeconds">,
     spec: MoveSpec
 ): IMoveDefinition {
     return {

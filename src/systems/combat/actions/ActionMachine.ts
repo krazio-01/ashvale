@@ -158,8 +158,8 @@ export class ActionMachine {
         const playbackSeconds = this.secondsFor(move);
         const strikeAt = firstStrikeAt(move);
         const windupUnitSeconds =
-            move.minimumWarningSeconds !== undefined && strikeAt !== null && strikeAt > 0
-                ? Math.max(playbackSeconds, move.minimumWarningSeconds / strikeAt)
+            move.minimumWindupSeconds !== undefined && strikeAt !== null && strikeAt > 0
+                ? Math.max(playbackSeconds, move.minimumWindupSeconds / strikeAt)
                 : playbackSeconds;
         this.windupUnitSecondsByMove.set(move.id, windupUnitSeconds);
         return windupUnitSeconds;

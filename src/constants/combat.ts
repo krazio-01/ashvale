@@ -74,7 +74,7 @@ export const FINISHER_RULES = {
 
 export const KNOCKBACK_DECAY = 10;
 
-export const TELEGRAPH = { leadSeconds: 0.38 };
+export const TELEGRAPH = { minimumWindupSeconds: 0.38, flashLeadSeconds: 0.3 };
 
 export interface IProjectileSpec {
     speed: number;

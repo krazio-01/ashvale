@@ -98,7 +98,7 @@ export interface IMoveDefinition {
     onLand?: string;
     loop?: boolean;
     durationSeconds?: number;
-    minimumWarningSeconds?: number;
+    minimumWindupSeconds?: number;
     launch?: number;
     projectile?: IProjectileLaunch;
 }
