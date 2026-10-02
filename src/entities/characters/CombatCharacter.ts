@@ -34,7 +34,7 @@ import type {
 import { createWeapon } from "@/entities/weapons/createWeapon";
 import type { Weapon } from "@/entities/weapons/Weapon";
 import { HAND_BONES } from "@/constants/characters";
-import { COMBAT_TIMING, FOCUS, MOVEMENT, SLOW_MOTION } from "@/constants/combat";
+import { COMBAT_TIMING, CONTACT, FOCUS, MOVEMENT, SLOW_MOTION } from "@/constants/combat";
 import { angleDelta, pickRandom, yawTowards } from "@/lib/helpers";
 import type {
     AwarenessState,
@@ -739,7 +739,7 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
 
         let displacement: Vector3 | null = null;
         const move = output.move;
-        if (!move) this.momentumSpeed = 0;
+        if (!move) this.handMomentumToMotor();
 
         if (move) {
             const clipSeconds = this.animator.durationOf(move.clip);
@@ -794,6 +794,8 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         if (move.motion === "physics") return null;
 
         const displacement = scratchRootMotion.set(0, 0, 0);
+        const contact = this.motor.contact;
+        const isBlockedHeadOn = output.previousTime > 0 && contact.isHeadOn;
         if (move.motion === "rootMotion") {
             this.animator.sampleRootMotion(
                 move.clip,
@@ -804,17 +806,48 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
             );
             displacement.y = 0;
             displacement.multiplyScalar(move.rootMotionScale);
+        } else if (this.momentumSpeed > 0 && output.allowsLocomotion && this.hasDirectionalInput) {
+            this.handMomentumToMotor();
         } else if (this.momentumSpeed > 0) {
-            const glide = this.momentumSpeed * deltaSeconds;
-            displacement.set(Math.sin(this.facingYaw) * glide, 0, Math.cos(this.facingYaw) * glide);
-            this.momentumSpeed = Math.max(
-                0,
-                this.momentumSpeed - (move.momentum?.deceleration ?? 0) * deltaSeconds
-            );
+            const reach = move.momentum?.poseReach;
+            if (isBlockedHeadOn || (reach !== undefined && this.isLowObstacleAhead(reach))) {
+                this.momentumSpeed = 0;
+                if (move.blockedInto) this.machine.forceMove(move.blockedInto);
+            } else {
+                const glide = this.momentumSpeed * deltaSeconds;
+                displacement.set(
+                    Math.sin(this.facingYaw) * glide,
+                    0,
+                    Math.cos(this.facingYaw) * glide
+                );
+                this.momentumSpeed = Math.max(
+                    0,
+                    this.momentumSpeed - (move.momentum?.deceleration ?? 0) * deltaSeconds
+                );
+            }
         }
 
         this.executor.applyWarp(move, output.previousTime, output.time, displacement, deltaSeconds);
         return displacement;
+    }
+
+    protected isLowObstacleAhead(reach: number): boolean {
+        return this.motor.isWorldBlockedAhead(
+            Math.sin(this.facingYaw),
+            Math.cos(this.facingYaw),
+            reach + CONTACT.lowProbeMargin,
+            CONTACT.lowProbeHeightFraction
+        );
+    }
+
+    private handMomentumToMotor(): void {
+        if (this.momentumSpeed <= 0) return;
+        this.motor.velocity.set(
+            Math.sin(this.facingYaw) * this.momentumSpeed,
+            0,
+            Math.cos(this.facingYaw) * this.momentumSpeed
+        );
+        this.momentumSpeed = 0;
     }
 
     private moveDesiredVelocity(move: IMoveDefinition | null, output: IMachineOutput): Vector3 {

@@ -54,6 +54,7 @@ export interface IWarpWindow extends IMoveWindow {
 
 export interface IMomentum {
     deceleration: number;
+    poseReach?: number;
 }
 
 export interface ISlowMotionProfile {
@@ -92,6 +93,7 @@ export interface IMoveDefinition {
     holdAt?: number;
     next?: Partial<Record<"light" | "heavy", string>>;
     followedBy?: string;
+    blockedInto?: string;
     momentum?: IMomentum;
     motion: MoveMotion;
     requires?: MoveGround;

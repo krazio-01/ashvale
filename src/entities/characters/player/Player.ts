@@ -170,6 +170,7 @@ export class Player extends CombatCharacter {
         if (!pressed) return;
 
         if (this.isSprinting) {
+            if (this.isLowObstacleAhead(PLAYER.slidePoseReach)) return;
             this.dodgeYaw = this.facingYaw;
             this.machine.queue("slide");
         } else if (this.machine.state === "locomotion") this.crouchToggled = !this.crouchToggled;

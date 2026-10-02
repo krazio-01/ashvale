@@ -29,7 +29,8 @@ const EVERYTHING: readonly MoveTag[] = [
     "jump",
 ];
 const SWORD_WARP = { maxDistance: metres(5), strikeDistance: metres(0.45) };
-const SLIDE_MOMENTUM: IMomentum = { deceleration: PLAYER.height * 4.5 };
+const SLIDE_GLIDE: IMomentum = { deceleration: PLAYER.height, poseReach: PLAYER.slidePoseReach };
+const SLIDE_BRAKE: IMomentum = { ...SLIDE_GLIDE, deceleration: PLAYER.height * 3 };
 const SLIDE_FOLLOW_UP = { light: "sword_dash_attack" };
 const JUMP_RISE_SECONDS = PLAYER.jumpForce / Math.abs(WORLD.gravity);
 const LAND_SECONDS = 0.4;
@@ -278,7 +279,8 @@ export const PLAYER_MOVES: IMoveSet = {
                 playbackRate: 1.2,
                 staminaCost: 12,
                 fadeSeconds: 0.08,
-                momentum: SLIDE_MOMENTUM,
+                momentum: SLIDE_GLIDE,
+                blockedInto: "slide_exit",
                 invulnerable: { from: 0.35, to: 0.7 },
                 cancels: [
                     { from: 0, to: 1, into: ["jump"] },
@@ -293,7 +295,8 @@ export const PLAYER_MOVES: IMoveSet = {
                 clip: CLIP.slideHold,
                 tags: ["dodge"],
                 fadeSeconds: 0.1,
-                momentum: SLIDE_MOMENTUM,
+                momentum: SLIDE_GLIDE,
+                blockedInto: "slide_exit",
                 cancels: [{ from: 0, to: 1, into: ["light", "dodge", "jump"] }],
                 next: SLIDE_FOLLOW_UP,
                 followedBy: "slide_exit",
@@ -304,7 +307,7 @@ export const PLAYER_MOVES: IMoveSet = {
                 clip: CLIP.slideExit,
                 tags: ["dodge"],
                 fadeSeconds: 0.1,
-                momentum: SLIDE_MOMENTUM,
+                momentum: SLIDE_BRAKE,
                 cancels: [
                     { from: 0, to: 1, into: ["jump"] },
                     { from: 0.35, to: 1, into: EVERYTHING },

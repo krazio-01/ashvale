@@ -18,6 +18,7 @@ export const PLAYER = {
     strafeSpeed: PLAYER_HEIGHT * STRIDE.strafe,
     crouchSpeed: PLAYER_HEIGHT * 1.0,
     crouchSprintSpeed: PLAYER_HEIGHT * 1.8,
+    slidePoseReach: PLAYER_HEIGHT * 0.33,
     turnSmoothing: 15,
     groundAcceleration: 34,
     airAcceleration: 14,

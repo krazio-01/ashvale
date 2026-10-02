@@ -75,7 +75,13 @@ function validateMoveSet(moveSet: IMoveSet): void {
         moveSet.air?.land,
     ];
     for (const move of Object.values(moveSet.moves))
-        references.push(move.followedBy, move.onLand, move.next?.light, move.next?.heavy);
+        references.push(
+            move.followedBy,
+            move.onLand,
+            move.blockedInto,
+            move.next?.light,
+            move.next?.heavy
+        );
 
     for (const id of references)
         if (id !== undefined && !moveSet.moves[id]) throw new Error(`unknown move id "${id}"`);
