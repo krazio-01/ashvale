@@ -123,6 +123,7 @@ export class ActionMachine {
     private charge = 0;
     private moveSerial = 0;
     private stateRemaining = 0;
+    private cancelsOpen = false;
     private dodgeCancelOpensAtRemaining = Number.NEGATIVE_INFINITY;
     private pendingMoveStarted = false;
     private pendingReaction: ReactionTier | null = null;
@@ -205,6 +206,10 @@ export class ActionMachine {
 
         this.beginMove(move);
         return true;
+    }
+
+    openCancels(): void {
+        if (this.currentState === "move") this.cancelsOpen = true;
     }
 
     react(tier: ReactionTier, seconds: number, reactionDodgeCancelSeconds: number): void {
@@ -348,7 +353,7 @@ export class ActionMachine {
         if (this.currentState !== "move" || !current) return false;
         if (this.time >= 1) return true;
 
-        return move.tags.some((tag) => allowsCancel(current, this.time, tag));
+        return move.tags.some((tag) => allowsCancel(current, this.time, tag, this.cancelsOpen));
     }
 
     private permits(tag: MoveTag): boolean {
@@ -357,7 +362,10 @@ export class ActionMachine {
             return tag === "dodge" && this.stateRemaining <= this.dodgeCancelOpensAtRemaining;
 
         const move = this.currentMove;
-        return move !== null && (this.time >= 1 || allowsCancel(move, this.time, tag));
+        return (
+            move !== null &&
+            (this.time >= 1 || allowsCancel(move, this.time, tag, this.cancelsOpen))
+        );
     }
 
     private resolveIntent(intent: IntentKind, input: IMachineInput): IMoveDefinition | null {
@@ -394,6 +402,7 @@ export class ActionMachine {
         this.time = 0;
         this.previousTime = 0;
         this.charge = 0;
+        this.cancelsOpen = false;
         this.pendingMoveStarted = true;
     }
 
@@ -439,7 +448,7 @@ export class ActionMachine {
         output.windupUnitSeconds = move ? this.windupUnitSecondsFor(move) : 0;
         output.allowsLocomotion =
             this.currentState === "locomotion" ||
-            (move !== null && allowsCancel(move, this.time, "movement"));
+            (move !== null && allowsCancel(move, this.time, "movement", this.cancelsOpen));
 
         const invulnerable = move?.invulnerable;
         output.isInvulnerable = isWithin(invulnerable, output.time);

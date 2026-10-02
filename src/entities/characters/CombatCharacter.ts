@@ -180,6 +180,7 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
     private readonly flashOriginals: (Material | Material[])[] = [];
     private isFlashing = false;
     private momentumSpeed = 0;
+    private isRootMotionBlocked = false;
     private previousFacingYaw: number;
     private readonly moveVelocity = new Vector3();
     private flashRemaining = 0;
@@ -797,15 +798,26 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         const contact = this.motor.contact;
         const isBlockedHeadOn = output.previousTime > 0 && contact.isHeadOn;
         if (move.motion === "rootMotion") {
-            this.animator.sampleRootMotion(
-                move.clip,
-                output.previousTime * clipSeconds,
-                output.time * clipSeconds,
-                this.facingYaw,
-                displacement
-            );
-            displacement.y = 0;
-            displacement.multiplyScalar(move.rootMotionScale);
+            if (
+                !this.isRootMotionBlocked &&
+                move.tags.includes("dodge") &&
+                isBlockedHeadOn &&
+                contact.movedFraction < CONTACT.stalledFraction
+            ) {
+                this.isRootMotionBlocked = true;
+                this.machine.openCancels();
+            }
+            if (!this.isRootMotionBlocked) {
+                this.animator.sampleRootMotion(
+                    move.clip,
+                    output.previousTime * clipSeconds,
+                    output.time * clipSeconds,
+                    this.facingYaw,
+                    displacement
+                );
+                displacement.y = 0;
+                displacement.multiplyScalar(move.rootMotionScale);
+            }
         } else if (this.momentumSpeed > 0 && output.allowsLocomotion && this.hasDirectionalInput) {
             this.handMomentumToMotor();
         } else if (this.momentumSpeed > 0) {
@@ -873,6 +885,7 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         if (move.motion === "physics") this.motor.velocity.set(handoverX, 0, handoverZ);
         else this.motor.velocity.set(0, 0, 0);
         this.momentumSpeed = move.motion === "momentum" ? Math.hypot(handoverX, handoverZ) : 0;
+        this.isRootMotionBlocked = false;
         if (move.launch !== undefined) this.motor.jump(move.launch);
 
         this.previousFacingYaw = this.sceneObject.rotation.y;

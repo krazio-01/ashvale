@@ -13,9 +13,15 @@ export function hasCrossed(mark: number | undefined, previous: number, current: 
     return mark !== undefined && previous < mark && current >= mark;
 }
 
-export function allowsCancel(move: IMoveDefinition, time: number, tag: MoveTag): boolean {
+export function allowsCancel(
+    move: IMoveDefinition,
+    time: number,
+    tag: MoveTag,
+    opensEarly = false
+): boolean {
     for (const cancel of move.cancels)
-        if (cancel.into.includes(tag) && isWithin(cancel, time)) return true;
+        if (cancel.into.includes(tag) && (opensEarly ? time <= cancel.to : isWithin(cancel, time)))
+            return true;
     return false;
 }
 
