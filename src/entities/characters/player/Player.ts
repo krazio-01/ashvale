@@ -29,7 +29,7 @@ import {
     DODGE,
 } from "@/constants/player";
 import { CHARACTER } from "@/constants/characters";
-import { COMBAT_TIMING, FINISHER_RULES, SLOW_MOTION, TARGETING } from "@/constants/combat";
+import { COMBAT_TIMING, CONTACT, FINISHER_RULES, SLOW_MOTION, TARGETING } from "@/constants/combat";
 import { SIGHT } from "@/constants/enemies";
 import { PLAYER_MOVE_IDS, PLAYER_MOVES } from "@/systems/combat/moveSets/playerMoves";
 import { cycleTarget, selectTarget } from "@/systems/combat/services/TargetSelector";
@@ -66,6 +66,7 @@ export class Player extends CombatCharacter {
     private crouchToggled = false;
     private isCrouching = false;
     private isCrouchSprinting = false;
+    private isHurrying = false;
     private isWinded = false;
     private previousChargeLevel = 0;
     private lockCandidatesGathered = false;
@@ -288,10 +289,13 @@ export class Player extends CombatCharacter {
             commands.wantsSprint &&
             this.hasDirectionalInput &&
             !this.isWinded &&
-            (this.machine.state === "locomotion" || this.isJumping) &&
-            this.vitals.drainStamina(STAMINA.sprintPerSecond * deltaSeconds);
-        this.isSprinting = isHurrying && !this.isCrouching;
+            (this.machine.output.allowsLocomotion || this.isJumping) &&
+            (this.motor.contact.movedFraction < CONTACT.stalledFraction ||
+                this.vitals.drainStamina(STAMINA.sprintPerSecond * deltaSeconds));
+        this.isHurrying = isHurrying && !this.isCrouching;
         this.isCrouchSprinting = isHurrying && this.isCrouching;
+        this.isSprinting =
+            this.isHurrying && (this.machine.state === "locomotion" || this.isJumping);
         this.facesTarget = this.lockTarget !== null && !this.lockTarget.isDead && !this.isSprinting;
         if (this.facesTarget) this.target = this.lockTarget;
         this.isLockedTargetFar =
@@ -307,7 +311,7 @@ export class Player extends CombatCharacter {
     }
 
     private locomotionSpeed(): number {
-        if (this.isSprinting) return PLAYER.sprintSpeed;
+        if (this.isHurrying) return PLAYER.sprintSpeed;
         if (this.isCrouchSprinting) return PLAYER.crouchSprintSpeed;
         if (this.isCrouching) return PLAYER.crouchSpeed;
         return this.facesTarget ? PLAYER.strafeSpeed : PLAYER.walkSpeed;
@@ -315,7 +319,7 @@ export class Player extends CombatCharacter {
 
     private footstepGait(): FootstepGait {
         if (!this.motor.isGrounded || !this.hasDirectionalInput) return "still";
-        if (this.isSprinting) return "sprint";
+        if (this.isHurrying) return "sprint";
         return this.isCrouching && !this.isCrouchSprinting ? "crouch" : "walk";
     }
 
