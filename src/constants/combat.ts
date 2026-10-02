@@ -76,6 +76,13 @@ export const KNOCKBACK_DECAY = 10;
 
 export const TELEGRAPH = { minimumWindupSeconds: 0.38, flashLeadSeconds: 0.3 };
 
+export const CONTACT = {
+    headOnDot: -0.7,
+    stalledFraction: 0.3,
+    lowProbeMargin: metres(0.15),
+    lowProbeHeightFraction: 0.38,
+};
+
 export interface IProjectileSpec {
     speed: number;
     radius: number;

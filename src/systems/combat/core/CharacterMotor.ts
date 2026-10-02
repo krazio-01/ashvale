@@ -7,7 +7,7 @@ import type {
 } from "@dimforge/rapier3d-compat";
 import { Vector3 } from "three";
 import type { Vector3Tuple } from "three";
-import { KNOCKBACK_DECAY } from "@/constants/combat";
+import { CONTACT, KNOCKBACK_DECAY } from "@/constants/combat";
 import { COLLISION_GROUPS, WORLD } from "@/constants/world";
 export interface IMotorSpec {
     height: number;
@@ -22,6 +22,12 @@ export interface IMotorSpec {
     groundAcceleration: number;
     airAcceleration: number;
     pushesDynamicBodies: boolean;
+}
+
+export interface IMotorContact {
+    movedFraction: number;
+    isHeadOn: boolean;
+    readonly resolvedVelocity: Vector3;
 }
 
 const REST_EPSILON = 1e-4;
@@ -45,6 +51,12 @@ export class CharacterMotor {
     private readonly nextTranslation = { x: 0, y: 0, z: 0 };
     private readonly obstacleProbe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
     private readonly groundProbe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+    private readonly collisionScratch = new RAPIER.CharacterCollision();
+    private readonly contactState: IMotorContact = {
+        movedFraction: 1,
+        isHeadOn: false,
+        resolvedVelocity: new Vector3(),
+    };
     private autostepEnabled = true;
     private verticalVelocity = 0;
     private grounded = false;
@@ -79,6 +91,10 @@ export class CharacterMotor {
         this.controller.setApplyImpulsesToDynamicBodies(spec.pushesDynamicBodies);
     }
 
+    get contact(): Readonly<IMotorContact> {
+        return this.contactState;
+    }
+
     get isGrounded(): boolean {
         return this.grounded;
     }
@@ -106,6 +122,9 @@ export class CharacterMotor {
         followGround = false
     ): void {
         this.previousPosition.copy(this.simulatedPosition);
+        this.contactState.movedFraction = 1;
+        this.contactState.isHeadOn = false;
+        this.contactState.resolvedVelocity.set(0, 0, 0);
         if (deltaSeconds <= 0 || !this.isCollidable) return;
 
         const isSettled = this.grounded && this.verticalVelocity <= 0;
@@ -144,6 +163,7 @@ export class CharacterMotor {
         this.grounded = this.controller.computedGrounded();
 
         const resolved = this.controller.computedMovement();
+        this.recordContact(moveX, moveZ, resolved.x, resolved.z, deltaSeconds);
         const current = this.simulatedPosition;
         this.commitTranslation(
             current.x + resolved.x,
@@ -153,9 +173,40 @@ export class CharacterMotor {
     }
 
     isPathBlocked(directionX: number, directionZ: number, distance: number): boolean {
+        return this.isWallWithin(
+            directionX,
+            directionZ,
+            distance,
+            PROBE_HEIGHT_FRACTION,
+            COLLISION_GROUPS.obstacleProbe
+        );
+    }
+
+    isWorldBlockedAhead(
+        directionX: number,
+        directionZ: number,
+        distance: number,
+        heightFraction: number
+    ): boolean {
+        return this.isWallWithin(
+            directionX,
+            directionZ,
+            distance,
+            heightFraction,
+            COLLISION_GROUPS.character
+        );
+    }
+
+    private isWallWithin(
+        directionX: number,
+        directionZ: number,
+        distance: number,
+        heightFraction: number,
+        groups: number
+    ): boolean {
         const origin = this.obstacleProbe.origin;
         origin.x = this.simulatedPosition.x;
-        origin.y = this.simulatedPosition.y - this.spec.height * PROBE_HEIGHT_FRACTION;
+        origin.y = this.simulatedPosition.y - this.spec.height * heightFraction;
         origin.z = this.simulatedPosition.z;
         const direction = this.obstacleProbe.dir;
         direction.x = directionX;
@@ -167,10 +218,46 @@ export class CharacterMotor {
             distance + this.spec.radius,
             true,
             undefined,
-            COLLISION_GROUPS.obstacleProbe,
+            groups,
             this.collider
         );
         return hit !== null && hit.normal.y < WALKABLE_NORMAL_Y;
+    }
+
+    private recordContact(
+        requestX: number,
+        requestZ: number,
+        resolvedX: number,
+        resolvedZ: number,
+        deltaSeconds: number
+    ): void {
+        const contact = this.contactState;
+        contact.resolvedVelocity.set(resolvedX / deltaSeconds, 0, resolvedZ / deltaSeconds);
+
+        const requested = Math.hypot(requestX, requestZ);
+        if (requested < REST_EPSILON) return;
+
+        const directionX = requestX / requested;
+        const directionZ = requestZ / requested;
+        contact.movedFraction = Math.max(
+            0,
+            Math.min(1, (resolvedX * directionX + resolvedZ * directionZ) / requested)
+        );
+        if (contact.movedFraction > 1 - REST_EPSILON) return;
+
+        const collisions = this.controller.numComputedCollisions();
+
+        for (let index = 0; index < collisions; index += 1) {
+            const collision = this.controller.computedCollision(index, this.collisionScratch);
+            if (!collision) continue;
+            const normal = collision.normal1;
+            const horizontal = Math.hypot(normal.x, normal.z);
+            if (normal.y >= WALKABLE_NORMAL_Y || horizontal < REST_EPSILON) continue;
+            if ((normal.x * directionX + normal.z * directionZ) / horizontal < CONTACT.headOnDot) {
+                contact.isHeadOn = true;
+                return;
+            }
+        }
     }
 
     groundGap(maxGap: number): number {

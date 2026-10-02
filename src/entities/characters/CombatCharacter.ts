@@ -875,15 +875,19 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
 
     private feedLocomotion(): void {
         const velocity = this.motor.velocity;
+        const resolved = this.motor.contact.resolvedVelocity;
+        const intendedSpeed = Math.hypot(velocity.x, velocity.z);
+        const speed = Math.min(intendedSpeed, Math.hypot(resolved.x, resolved.z));
+        const scale = intendedSpeed > 0 ? speed / intendedSpeed : 0;
         const yaw = this.sceneObject.rotation.y;
         const cosine = Math.cos(yaw);
         const sine = Math.sin(yaw);
-        const forward = velocity.x * sine + velocity.z * cosine;
-        const right = -velocity.x * cosine + velocity.z * sine;
+        const forward = (velocity.x * sine + velocity.z * cosine) * scale;
+        const right = (-velocity.x * cosine + velocity.z * sine) * scale;
         const strafe = this.facesTarget && !this.isSprinting ? this.strafeLocomotion : null;
 
         this.animator.setLocomotion(this.locomotionOverride ?? strafe ?? this.freeLocomotion);
-        this.animator.setLocomotionInput(right, forward, Math.hypot(velocity.x, velocity.z));
+        this.animator.setLocomotionInput(right, forward, speed);
     }
 
     private launchProjectile(launch: IProjectileLaunch): void {
