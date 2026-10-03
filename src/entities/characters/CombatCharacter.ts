@@ -25,6 +25,12 @@ import type { ICombatEventMap } from "@/systems/combat/services/CombatEvents";
 import { Vitals } from "@/systems/combat/core/Vitals";
 import type { IVitalsSpec } from "@/systems/combat/core/Vitals";
 import { CharacterAnimator } from "@/entities/characters/CharacterAnimator";
+import { ProceduralRig } from "@/entities/characters/ProceduralRig";
+import type {
+    IBladeSource,
+    IProceduralFrame,
+    ProceduralDetail,
+} from "@/entities/characters/ProceduralRig";
 import type {
     IFreeLocomotion,
     IOneShotOptions,
@@ -33,9 +39,9 @@ import type {
 } from "@/entities/characters/CharacterAnimator";
 import { createWeapon } from "@/entities/weapons/createWeapon";
 import type { Weapon } from "@/entities/weapons/Weapon";
-import { HAND_BONES } from "@/constants/characters";
-import { COMBAT_TIMING, CONTACT, FOCUS, MOVEMENT, SLOW_MOTION } from "@/constants/combat";
-import { angleDelta, pickRandom, yawTowards } from "@/lib/helpers";
+import { HAND_BONES, PROCEDURAL } from "@/constants/characters";
+import { COMBAT_TIMING, CONTACT, FOCUS, MOVEMENT, PARRY, SLOW_MOTION } from "@/constants/combat";
+import { angleDelta, clamp, pickRandom, yawTowards } from "@/lib/helpers";
 import type {
     AwarenessState,
     HitShape,
@@ -45,15 +51,17 @@ import type {
     IHitOutcome,
     IHitPayload,
     IMoveDefinition,
+    IParryResult,
     IProjectileLaunch,
     IMoveSet,
     ReactionTier,
+    SwingDirection,
     Team,
     VictimRig,
     IStrikeSegment,
     DodgeSide,
 } from "@/types/combat";
-import type { IHandRig, WeaponDefinition } from "@/types/weapons";
+import type { Handedness, IHandRig, WeaponDefinition } from "@/types/weapons";
 import type { ISkinnedModel, IWorldContext, IWorldEntity } from "@/types/world";
 
 interface ICombatCharacterConfig {
@@ -84,6 +92,7 @@ const scratchRootMotion = new Vector3();
 const scratchDesired = new Vector3();
 const scratchLaunchOrigin = new Vector3();
 const scratchLaunchAim = new Vector3();
+const scratchPush = new Vector3();
 
 const REACTION_PLAYBACK: IOneShotOptions = {
     fadeSeconds: COMBAT_TIMING.reactionFade,
@@ -92,6 +101,7 @@ const REACTION_PLAYBACK: IOneShotOptions = {
     rate: 1,
 };
 const STAGGER_PLAYBACK: IOneShotOptions = { fadeSeconds: 0.08, loop: true, driven: false, rate: 1 };
+const PARRIED_PLAYBACK: IOneShotOptions = { ...STAGGER_PLAYBACK, fadeSeconds: 0.03 };
 const DEATH_PLAYBACK: IOneShotOptions = {
     fadeSeconds: COMBAT_TIMING.deathFade,
     loop: false,
@@ -107,7 +117,9 @@ const PAIRED_LOOP_PLAYBACK: IOneShotOptions = {
 };
 const PAIRED_RETURN_FADE = 0.25;
 
-export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPairedParticipant {
+export abstract class CombatCharacter
+    implements IWorldEntity, IAttackOwner, IPairedParticipant, IBladeSource
+{
     readonly id: string;
     readonly team: Team;
     readonly victimRig: VictimRig;
@@ -120,6 +132,16 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
     protected readonly context: IWorldContext;
     protected readonly motor: CharacterMotor;
     protected readonly animator: CharacterAnimator;
+    protected readonly procedural: ProceduralRig;
+    private readonly proceduralFrame: IProceduralFrame = {
+        deltaSeconds: 0,
+        detail: "full",
+        weaponHand: "right",
+        gripWeight: 0,
+        grounded: false,
+        plantFeet: false,
+        lookTarget: null,
+    };
     protected readonly modelInstance: Object3D;
     protected readonly moveSet: IMoveSet;
     protected readonly desiredVelocity = new Vector3();
@@ -136,6 +158,7 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
     protected locomotionOverride: LocomotionDefinition | null = null;
 
     private readonly hurtbox: ICapsule;
+    private readonly guardBox: ICapsule;
     private readonly bodyHeight: number;
     private readonly turnSmoothing: number;
     private readonly freeLocomotion: IFreeLocomotion;
@@ -185,6 +208,7 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
     private readonly moveVelocity = new Vector3();
     private flashRemaining = 0;
     private pendingStaggerClip: string | null = null;
+    private pendingStaggerIsParried = false;
     private pendingReactionClip: string | null = null;
     private deathClip: string | null = null;
     private deathClipTime = 0;
@@ -255,6 +279,7 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
             config.motor,
             config.spawnPosition
         );
+        this.procedural = new ProceduralRig(this.modelInstance, this.sceneObject, this.motor);
         this.vitals = new Vitals(config.vitals);
         this.machine = new ActionMachine(config.moveSet, (clip) => this.animator.durationOf(clip));
         this.machineInput = {
@@ -271,7 +296,8 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         this.executor = new AttackExecutor(this, config.context);
 
         this.hurtbox = { start: new Vector3(), end: new Vector3(), radius: config.motor.radius };
-        this.hurtboxes = [this.hurtbox];
+        this.guardBox = { start: new Vector3(), end: new Vector3(), radius: 0 };
+        this.hurtboxes = [this.hurtbox, this.guardBox];
         this.broadRadius = config.motor.height / 2 + config.motor.radius;
         this.updateHurtbox(this.sceneObject.position);
 
@@ -387,13 +413,32 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         }
 
         if (defense === "parried") {
+            const parry = this.resolveParry(output.elapsedSeconds);
             this.vitals.gainFocus(FOCUS.perParry);
             this.context.combatEvents.emit("parried", {
                 attacker: payload.attacker,
                 defender: this,
             });
-            if (!payload.ranged) this.onParrySucceeded(payload.attacker);
-            return { kind: "parried", reaction: "none", damageDealt: 0 };
+            this.procedural.impact(
+                this.pushDirectionAwayFrom(payload.attacker.sceneObject.position),
+                parry.tier === "perfect" ? "parryPerfect" : "parry"
+            );
+            if (!payload.ranged && payload.attacker instanceof CombatCharacter) {
+                this.procedural.beginBladeContact(
+                    this,
+                    payload.attacker,
+                    this.weaponHand(),
+                    PROCEDURAL.bladeContact.maxCorrection
+                );
+                payload.attacker.procedural.beginBladeContact(
+                    payload.attacker,
+                    this,
+                    payload.attacker.weaponHand(),
+                    PROCEDURAL.bladeContact.attackerMaxCorrection
+                );
+            }
+            if (!payload.ranged) this.onParrySucceeded(payload.attacker, parry, payload.swing);
+            return { kind: "parried", reaction: "none", damageDealt: 0, parry };
         }
 
         const result = this.vitals.applyDamage(
@@ -403,6 +448,10 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         );
         const dealt = result.dealt;
         this.applyKnockback(payload);
+        this.procedural.impact(
+            this.pushDirectionAwayFrom(payload.origin),
+            payload.impact === "light" ? "hitLight" : "hitHeavy"
+        );
         this.flash();
 
         if (result.killed) {
@@ -471,10 +520,21 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         this.vitals.gainFocus(move.focusGain);
     }
 
-    onAttackParried(_defender: ICombatant): void {
-        this.pendingStaggerClip = this.moveSet.reactions.parried;
+    onAttackParried(defender: ICombatant, parry: IParryResult, swing: SwingDirection): void {
+        this.procedural.impact(
+            this.pushDirectionAwayFrom(defender.sceneObject.position),
+            parry.tier === "perfect" ? "guardBroken" : "recoil"
+        );
+        this.pendingStaggerClip = this.moveSet.reactions.parried[parry.tier][swing];
+        this.pendingStaggerIsParried = true;
         this.vitals.breakPoise();
-        this.machine.stagger(COMBAT_TIMING.parriedStaggerSeconds);
+        this.machine.stagger(parry.staggerSeconds);
+        if (parry.knockback === 0 || this.machine.state === "paired") return;
+
+        const dx = this.sceneObject.position.x - defender.sceneObject.position.x;
+        const dz = this.sceneObject.position.z - defender.sceneObject.position.z;
+        const length = Math.hypot(dx, dz);
+        if (length > 1e-4) this.motor.addKnockback(dx / length, dz / length, parry.knockback);
     }
 
     beginPaired(role: PairedRole): void {
@@ -644,7 +704,18 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
             this.feedLocomotion();
         }
 
+        this.procedural.restore();
         this.animator.update(deltaSeconds * scale, interpolationAlpha);
+        const frame = this.proceduralFrame;
+        frame.deltaSeconds = deltaSeconds * scale;
+        frame.detail =
+            this.isDead || this.machine.state === "paired" ? "none" : this.proceduralDetail();
+        frame.weaponHand = this.weaponHand();
+        frame.gripWeight = this.gripWeight();
+        frame.grounded = this.motor.isGrounded;
+        frame.plantFeet = !this.isTranslating();
+        frame.lookTarget = this.target && !this.target.isDead ? this.target.position : null;
+        this.procedural.update(frame);
         this.updateHurtbox(position);
         this.updateFlash(deltaSeconds);
         this.weapon?.update(
@@ -668,9 +739,59 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
 
     protected onMoveStarted(_move: IMoveDefinition): void {}
 
+    bladeSegment(hilt: Vector3, tip: Vector3): boolean {
+        if (!this.weapon) return false;
+        this.weapon.bladeSegment(hilt, tip);
+        return true;
+    }
+
+    protected weaponHand(): Handedness {
+        return this.weapon?.spec.gripHand ?? "right";
+    }
+
+    protected pushDirectionAwayFrom(source: Vector3): Vector3 {
+        const position = this.sceneObject.position;
+        scratchPush.set(position.x - source.x, 0, position.z - source.z);
+        if (scratchPush.lengthSq() < 1e-8)
+            scratchPush.set(Math.sin(this.facingYaw), 0, Math.cos(this.facingYaw));
+        return scratchPush.normalize();
+    }
+
+    private isTranslating(): boolean {
+        const resolved = this.motor.contact.resolvedVelocity;
+        return Math.hypot(resolved.x, resolved.z) > MOVING_SPEED;
+    }
+
+    private gripWeight(): number {
+        if (this.machine.state !== "move") return 0;
+        const output = this.machine.output;
+        const grip = output.move?.procedural?.grip;
+        if (!grip) return 0;
+        const outside = Math.max(
+            grip.from * output.moveSeconds - output.elapsedSeconds,
+            output.elapsedSeconds - grip.to * output.moveSeconds,
+            0
+        );
+        return clamp(1 - outside / PROCEDURAL.grip.rampSeconds, 0, 1);
+    }
+
+    private proceduralDetail(): ProceduralDetail {
+        const distance = this.sceneObject.position.distanceTo(this.context.combatRegistry.lodOrigin);
+        if (distance <= PROCEDURAL.lod.fullMetres) return "full";
+        return distance <= PROCEDURAL.lod.impactMetres ? "impact" : "none";
+    }
+
     protected onDamaged(_payload: IHitPayload, _reaction: ReactionTier): void {}
 
-    protected onParrySucceeded(_attacker: ICombatant): void {}
+    protected resolveParry(_elapsedSeconds: number): IParryResult {
+        return PARRY.enemyParryResult;
+    }
+
+    protected onParrySucceeded(
+        _attacker: ICombatant,
+        _parry: IParryResult,
+        _swing: SwingDirection
+    ): void {}
 
     protected onKilled(_killer: ICombatant | null): void {}
 
@@ -730,9 +851,10 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         if (output.staggerStarted) {
             this.animator.playOneShot(
                 this.pendingStaggerClip ?? this.moveSet.reactions.stagger,
-                STAGGER_PLAYBACK
+                this.pendingStaggerIsParried ? PARRIED_PLAYBACK : STAGGER_PLAYBACK
             );
             this.pendingStaggerClip = null;
+            this.pendingStaggerIsParried = false;
         }
 
         if (output.returnedToLocomotion)
@@ -982,6 +1104,17 @@ export abstract class CombatCharacter implements IWorldEntity, IAttackOwner, IPa
         const halfSpan = Math.max(this.bodyHeight / 2 - this.hurtbox.radius, 0);
         this.hurtbox.start.set(position.x, position.y - halfSpan, position.z);
         this.hurtbox.end.set(position.x, position.y + halfSpan, position.z);
+
+        const guarding =
+            this.machine.state === "move" &&
+            this.machine.output.isParrying &&
+            this.bladeSegment(this.guardBox.start, this.guardBox.end);
+        if (guarding) this.guardBox.radius = PARRY.guardRadius;
+        else {
+            this.guardBox.start.copy(position);
+            this.guardBox.end.copy(position);
+            this.guardBox.radius = 0;
+        }
     }
 
     private boneNamed(name: string): Object3D | null {

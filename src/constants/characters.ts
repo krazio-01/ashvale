@@ -1,4 +1,4 @@
-import { pair } from "@/lib/helpers";
+import { metres, pair } from "@/lib/helpers";
 
 export const STRIDE = {
     walk: 1.25,
@@ -58,6 +58,22 @@ export const HAND_BONES = {
     },
 };
 
+export const SKELETON_BONES = {
+    pelvis: "pelvis",
+    chest: "spine_03",
+    neck: "neck_01",
+    head: "Head",
+    clavicles: { left: "clavicle_l", right: "clavicle_r" },
+    arms: {
+        left: ["upperarm_l", "lowerarm_l", "hand_l"],
+        right: ["upperarm_r", "lowerarm_r", "hand_r"],
+    },
+    legs: {
+        left: ["thigh_l", "calf_l", "foot_l"],
+        right: ["thigh_r", "calf_r", "foot_r"],
+    },
+} as const;
+
 export const CLIP = {
     idle: "Idle_Loop",
     walk: "Walk_Loop",
@@ -92,6 +108,12 @@ export const CLIP = {
     slideHold: "Slide_Hold",
     slideExit: "Slide_Exit",
     parry: "Parry",
+    parryGuard: "Parry_Guard",
+    parryReguard: "Parry_Reguard",
+    parryDeflectHigh: "Parry_Deflect_High",
+    parryDeflectSide: "Parry_Deflect_Side",
+    parryPerfectHigh: "Parry_Perfect_High",
+    parryPerfectSide: "Parry_Perfect_Side",
     reactFlinch: "React_Flinch",
     reactHitHead: "React_Hit_Head",
     reactCombatDamage: "React_Combat_Damage",
@@ -99,6 +121,10 @@ export const CLIP = {
     reactKnockdown: "React_Knockdown",
     reactStagger: "React_Stagger",
     reactParried: "React_Parried",
+    reactParriedHigh: "React_Parried_High",
+    reactParriedSide: "React_Parried_Side",
+    reactGuardBrokenHigh: "React_GuardBroken_High",
+    reactGuardBrokenSide: "React_GuardBroken_Side",
     deathForward: "Death_Forward",
     deathCollapse: "Death_Collapse",
     deathKnockback: "Death_Knockback",
@@ -135,3 +161,130 @@ export const CLIP = {
 } as const;
 
 export type ClipName = (typeof CLIP)[keyof typeof CLIP];
+
+export type ImpactProfileName =
+    "parry" | "parryPerfect" | "recoil" | "guardBroken" | "hitLight" | "hitHeavy";
+
+interface IImpactLink {
+    bone: string;
+    gain: number;
+}
+
+interface IImpactProfile {
+    strength: number;
+    stiffness: number;
+    damping: number;
+    chain: readonly IImpactLink[];
+}
+
+const SWORD_ARM_INWARD: readonly IImpactLink[] = [
+    { bone: "hand_r", gain: 0.3 },
+    { bone: "lowerarm_r", gain: 0.3 },
+    { bone: "upperarm_r", gain: 0.25 },
+    { bone: "clavicle_r", gain: 0.2 },
+    { bone: "spine_03", gain: 0.4 },
+    { bone: "spine_02", gain: 0.35 },
+    { bone: "spine_01", gain: 0.25 },
+    { bone: "pelvis", gain: 0.15 },
+    { bone: "Head", gain: -0.15 },
+];
+
+const WEAPON_ARM_THROWN: readonly IImpactLink[] = [
+    { bone: "hand_r", gain: 0.6 },
+    { bone: "lowerarm_r", gain: 0.5 },
+    { bone: "upperarm_r", gain: 0.55 },
+    { bone: "clavicle_r", gain: 0.3 },
+    { bone: "spine_03", gain: 0.45 },
+    { bone: "spine_02", gain: 0.3 },
+    { bone: "spine_01", gain: 0.2 },
+    { bone: "pelvis", gain: 0.1 },
+    { bone: "Head", gain: 0.25 },
+];
+
+const TORSO_STRUCK: readonly IImpactLink[] = [
+    { bone: "spine_03", gain: 0.4 },
+    { bone: "clavicle_l", gain: 0.15 },
+    { bone: "clavicle_r", gain: 0.15 },
+    { bone: "spine_02", gain: 0.3 },
+    { bone: "spine_01", gain: 0.2 },
+    { bone: "pelvis", gain: 0.1 },
+    { bone: "Head", gain: 0.3 },
+];
+
+export const PROCEDURAL = {
+    lod: { fullMetres: metres(15), impactMetres: metres(40) },
+    ik: { reachLimit: 0.999 },
+    springs: { maxRadians: 0.6, maxStepSeconds: 1 / 30, maxSubsteps: 4, linkDelaySeconds: 1 / 60 },
+    impacts: {
+        parry: {
+            strength: 6,
+            stiffness: 260,
+            damping: 16,
+            chain: SWORD_ARM_INWARD,
+        },
+        parryPerfect: {
+            strength: 5,
+            stiffness: 420,
+            damping: 24,
+            chain: SWORD_ARM_INWARD,
+        },
+        recoil: {
+            strength: 13,
+            stiffness: 180,
+            damping: 14,
+            chain: WEAPON_ARM_THROWN,
+        },
+        guardBroken: {
+            strength: 16,
+            stiffness: 140,
+            damping: 11,
+            chain: WEAPON_ARM_THROWN,
+        },
+        hitLight: {
+            strength: 5,
+            stiffness: 300,
+            damping: 20,
+            chain: TORSO_STRUCK,
+        },
+        hitHeavy: {
+            strength: 9,
+            stiffness: 220,
+            damping: 16,
+            chain: TORSO_STRUCK,
+        },
+    } satisfies Record<ImpactProfileName, IImpactProfile>,
+    ambient: {
+        leanGain: 0.02,
+        leanMaxRadians: 0.1,
+        leanResponse: 6,
+        leanShares: [
+            ["spine_01", 0.4],
+            ["spine_02", 0.35],
+            ["spine_03", 0.25],
+        ] as const,
+        breathHz: 0.3,
+        breathRadians: 0.012,
+        clavicleBreathShare: 0.5,
+        lookMaxYaw: 0.87,
+        lookMaxPitch: 0.35,
+        lookResponse: 8,
+        neckShare: 0.4,
+        headShare: 0.6,
+    },
+    feet: {
+        liftHeight: metres(0.06),
+        maxDrift: metres(0.12),
+        blendSeconds: 0.08,
+        correctionSeconds: 0.08,
+        probeAbove: metres(0.6),
+        floorRise: metres(0.25),
+        maxPelvisDrop: metres(0.25),
+        maxRaise: metres(0.35),
+    },
+    bladeContact: {
+        seconds: 0.12,
+        maxCorrection: metres(0.06),
+        attackerMaxCorrection: metres(0.2),
+    },
+    grip: { rampSeconds: 0.08 },
+};
