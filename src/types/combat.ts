@@ -15,6 +15,17 @@ export type AlertPhase = "unaware" | "suspicious" | "alert" | "searching" | "ret
 export type VictimRig = "humanoid" | "creature";
 export type FinisherKind = "counter" | "execution" | "backstab";
 export type EnemyArchetype = "sentinel" | "wraith" | "golem" | "gremlin";
+export type ParryTier = "parry" | "perfect";
+export type SwingDirection = "high" | "side";
+export type ParriedReactions = Readonly<
+    Record<ParryTier, Readonly<Record<SwingDirection, string>>>
+>;
+
+export interface IParryResult {
+    tier: ParryTier;
+    staggerSeconds: number;
+    knockback: number;
+}
 
 export interface IMoveWindow {
     from: number;
@@ -37,6 +48,7 @@ export interface IHitWindow extends IMoveWindow {
     knockback: number;
     parryable: boolean;
     perilous: boolean;
+    swing: SwingDirection;
 }
 
 export interface ICancelWindow extends IMoveWindow {
@@ -73,6 +85,10 @@ export interface IProjectileLaunch {
     socket: string;
 }
 
+export interface IProceduralMove {
+    grip?: IMoveWindow;
+}
+
 export interface IMoveDefinition {
     id: string;
     clip: string;
@@ -87,11 +103,13 @@ export interface IMoveDefinition {
     cancels: readonly ICancelWindow[];
     invulnerable?: IMoveWindow;
     armor?: IMoveWindow;
-    parryWindow?: IMoveWindow;
+    parrySeconds?: number;
     tracking?: ITrackingWindow;
     warp?: IWarpWindow;
     holdAt?: number;
-    next?: Partial<Record<"light" | "heavy", string>>;
+    counterAt?: number;
+    yieldsToMovement?: boolean;
+    next?: Partial<Record<IntentKind, string>>;
     followedBy?: string;
     blockedInto?: string;
     momentum?: IMomentum;
@@ -103,6 +121,7 @@ export interface IMoveDefinition {
     minimumWindupSeconds?: number;
     launch?: number;
     projectile?: IProjectileLaunch;
+    procedural?: IProceduralMove;
 }
 
 export interface IReactionClips {
@@ -110,7 +129,7 @@ export interface IReactionClips {
     knockback: readonly string[];
     knockdown: readonly string[];
     stagger: string;
-    parried: string;
+    parried: ParriedReactions;
     finisherDeath: string;
     deaths: readonly string[];
 }
@@ -142,14 +161,25 @@ export interface IHitPayload {
     parryable: boolean;
     perilous: boolean;
     ranged: boolean;
+    swing: SwingDirection;
     origin: Vector3;
 }
 
-export interface IHitOutcome {
-    kind: HitOutcomeKind;
+interface IHitOutcomeBase {
     reaction: ReactionTier;
     damageDealt: number;
 }
+
+interface IParriedOutcome extends IHitOutcomeBase {
+    kind: "parried";
+    parry: IParryResult;
+}
+
+interface IUnparriedOutcome extends IHitOutcomeBase {
+    kind: Exclude<HitOutcomeKind, "parried">;
+}
+
+export type IHitOutcome = IParriedOutcome | IUnparriedOutcome;
 
 export interface IAttackThreat {
     moveSerial: number;

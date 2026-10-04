@@ -40,6 +40,7 @@ export interface IMachineOutput {
     time: number;
     moveSerial: number;
     moveSeconds: number;
+    elapsedSeconds: number;
     windupUnitSeconds: number;
     allowsLocomotion: boolean;
     isInvulnerable: boolean;
@@ -79,8 +80,7 @@ function validateMoveSet(moveSet: IMoveSet): void {
             move.followedBy,
             move.onLand,
             move.blockedInto,
-            move.next?.light,
-            move.next?.heavy
+            ...Object.values(move.next ?? {})
         );
 
     for (const id of references)
@@ -99,6 +99,7 @@ export class ActionMachine {
         time: 0,
         moveSerial: 0,
         moveSeconds: 0,
+        elapsedSeconds: 0,
         windupUnitSeconds: 0,
         allowsLocomotion: true,
         isInvulnerable: false,
@@ -190,6 +191,10 @@ export class ActionMachine {
         this.intents.push(intent);
     }
 
+    get currentMoveSerial(): number {
+        return this.moveSerial;
+    }
+
     forceMove(moveId: string): boolean {
         if (this.isLocked) return false;
         const move = this.moveSet.moves[moveId];
@@ -271,6 +276,7 @@ export class ActionMachine {
 
         if (this.currentState === "move" && input.isGrounded) this.land(input.hasDirectionalInput);
         if (this.currentState === "move" && this.time >= 1) this.finishMove();
+        if (this.currentState === "move" && this.yieldsToMovement(input)) this.toLocomotion();
         if (this.currentState === "move") this.advanceMove(input);
         if (
             this.currentState === "locomotion" ||
@@ -280,6 +286,15 @@ export class ActionMachine {
             this.tryStartQueued(input);
 
         return this.publish();
+    }
+
+    private yieldsToMovement(input: IMachineInput): boolean {
+        const move = this.currentMove;
+        return (
+            move?.yieldsToMovement === true &&
+            input.hasDirectionalInput &&
+            allowsCancel(move, this.time, "movement", this.cancelsOpen)
+        );
     }
 
     private advanceMove(input: IMachineInput): void {
@@ -371,10 +386,8 @@ export class ActionMachine {
     private resolveIntent(intent: IntentKind, input: IMachineInput): IMoveDefinition | null {
         const move = this.currentMove;
 
-        if (this.currentState === "move" && move && (intent === "light" || intent === "heavy")) {
-            const nextId = move.next?.[intent];
-            if (nextId) return this.moveSet.moves[nextId] ?? null;
-        }
+        const nextId = this.currentState === "move" ? move?.next?.[intent] : undefined;
+        if (nextId) return this.moveSet.moves[nextId] ?? null;
 
         const entryId =
             (input.isGrounded ? undefined : this.moveSet.airEntry[intent]) ??
@@ -445,6 +458,7 @@ export class ActionMachine {
         output.time = move ? this.time : 0;
         output.moveSerial = this.moveSerial;
         output.moveSeconds = move ? this.secondsFor(move) : 0;
+        output.elapsedSeconds = output.time * output.moveSeconds;
         output.windupUnitSeconds = move ? this.windupUnitSecondsFor(move) : 0;
         output.allowsLocomotion =
             this.currentState === "locomotion" ||
@@ -456,7 +470,8 @@ export class ActionMachine {
             invulnerable && output.isInvulnerable
                 ? secondsSinceStart(invulnerable, output.time, output.moveSeconds)
                 : 0;
-        output.isParrying = isWithin(move?.parryWindow, output.time);
+        output.isParrying =
+            move?.parrySeconds !== undefined && output.elapsedSeconds <= move.parrySeconds;
         output.isArmored = isWithin(move?.armor, output.time);
         output.chargeLevel = this.charge;
 

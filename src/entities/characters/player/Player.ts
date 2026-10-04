@@ -29,9 +29,20 @@ import {
     DODGE,
 } from "@/constants/player";
 import { CHARACTER } from "@/constants/characters";
-import { COMBAT_TIMING, CONTACT, FINISHER_RULES, SLOW_MOTION, TARGETING } from "@/constants/combat";
+import {
+    COMBAT_TIMING,
+    CONTACT,
+    FINISHER_RULES,
+    PARRY,
+    SLOW_MOTION,
+    TARGETING,
+} from "@/constants/combat";
 import { SIGHT } from "@/constants/enemies";
-import { PLAYER_MOVE_IDS, PLAYER_MOVES } from "@/systems/combat/moveSets/playerMoves";
+import {
+    PARRY_DEFLECT_MOVES,
+    PLAYER_MOVE_IDS,
+    PLAYER_MOVES,
+} from "@/systems/combat/moveSets/playerMoves";
 import { cycleTarget, selectTarget } from "@/systems/combat/services/TargetSelector";
 import { FootstepNoise } from "@/entities/characters/player/FootstepNoise";
 import type { FootstepGait } from "@/entities/characters/player/FootstepNoise";
@@ -46,6 +57,8 @@ import type {
     ICombatant,
     IFinisherDefinition,
     IMoveDefinition,
+    IParryResult,
+    SwingDirection,
 } from "@/types/combat";
 import type { IWorldContext } from "@/types/world";
 
@@ -62,6 +75,8 @@ export class Player extends CombatCharacter {
     private promptKind: FinisherKind | null = null;
     private readonly finisherTrigger = new FinisherTrigger();
     private lastFinisherId: string | null = null;
+    private counterKillTarget: ICombatant | null = null;
+    private counterKillDeflectSerial = 0;
     private dodgeYaw = 0;
     private crouchToggled = false;
     private isCrouching = false;
@@ -126,6 +141,7 @@ export class Player extends CombatCharacter {
     }
 
     update(deltaSeconds: number, interpolationAlpha: number): void {
+        this.context.combatRegistry.lodOrigin.copy(this.position);
         this.applyMouseLook();
         super.update(deltaSeconds, interpolationAlpha);
         this.trackKillCam();
@@ -164,6 +180,7 @@ export class Player extends CombatCharacter {
         this.footsteps.tick(deltaSeconds, this.footstepGait(), this.position);
         this.refreshPrompt();
         this.issueCombatIntents(commands);
+        this.tickPerfectFollowUp();
         this.publishVitals();
     }
 
@@ -181,12 +198,46 @@ export class Player extends CombatCharacter {
         if (move.tags.includes("dodge")) this.faceImmediately(this.dodgeYaw);
     }
 
-    protected onParrySucceeded(attacker: ICombatant): void {
+    protected resolveParry(elapsedSeconds: number): IParryResult {
+        return PARRY.tiers[elapsedSeconds <= PARRY.perfectSeconds ? "perfect" : "parry"];
+    }
+
+    protected onParrySucceeded(
+        attacker: ICombatant,
+        parry: IParryResult,
+        swing: SwingDirection
+    ): void {
+        const feel = PARRY.tiers[parry.tier];
+        this.context.timeDilation.hitstop(this, feel.hitstopFrames);
+        this.context.timeDilation.hitstop(attacker, feel.hitstopFrames);
+        if (feel.slowMotion) this.context.timeDilation.requestSlowMotion(feel.slowMotion);
+        this.followCamera.addTrauma(feel.trauma);
         this.target = attacker;
+        this.machine.forceMove(PARRY_DEFLECT_MOVES[parry.tier][swing]);
+        this.counterKillTarget = parry.tier === "perfect" ? attacker : null;
+        this.counterKillDeflectSerial = this.machine.currentMoveSerial;
+    }
+
+    private tickPerfectFollowUp(): void {
+        const target = this.counterKillTarget;
+        if (!target) return;
+
+        const output = this.machine.output;
+        if (output.moveSerial < this.counterKillDeflectSerial) return;
+        if (output.moveSerial > this.counterKillDeflectSerial) {
+            this.counterKillTarget = null;
+            return;
+        }
+        const counterAt = output.move?.counterAt;
+        if (counterAt === undefined || output.time < counterAt) return;
+
+        this.counterKillTarget = null;
         if (
-            attacker instanceof CombatCharacter &&
-            attacker.canBeCounterKilled &&
-            this.startFinisher(attacker, "counter")
+            target instanceof CombatCharacter &&
+            !target.vitals.isDead &&
+            target.machine.state !== "paired" &&
+            target.canBeCounterKilled &&
+            this.startFinisher(target, "counter")
         )
             return;
         this.machine.forceMove(PLAYER_MOVE_IDS.counter);
