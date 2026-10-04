@@ -598,13 +598,15 @@ class FootLayer extends ProceduralLayer {
                 foot.animatedPosition.z,
                 modelHeight + settings.probeAbove
             );
-            const targetCorrection = clamp(
-                (ground ?? modelHeight) -
-                    modelHeight -
-                    (foot.lowestAnimatedHeight - foot.restHeight),
-                -settings.maxPelvisDrop,
-                settings.maxRaise
-            );
+            const targetCorrection = frame.plantFeet
+                ? clamp(
+                      (ground ?? modelHeight) -
+                          modelHeight -
+                          (foot.lowestAnimatedHeight - foot.restHeight),
+                      -settings.maxPelvisDrop,
+                      settings.maxRaise
+                  )
+                : 0;
             foot.heightCorrection += (targetCorrection - foot.heightCorrection) * correctionBlend;
             pelvisDrop = Math.min(pelvisDrop, foot.heightCorrection);
 
