@@ -27,6 +27,7 @@ export const GREMLIN_MOVES = enemyMoveSet(
             poiseDamage: 8,
             impact: "light",
             knockback: 2,
+            swing: "side",
             chainAt: 0.24,
         }),
         strike({
@@ -39,6 +40,7 @@ export const GREMLIN_MOVES = enemyMoveSet(
             poiseDamage: 10,
             impact: "light",
             knockback: 3,
+            swing: "side",
             chainAt: 0.27,
         }),
         ...strikeWithRecovery(
@@ -51,6 +53,7 @@ export const GREMLIN_MOVES = enemyMoveSet(
                 poiseDamage: 14,
                 impact: "light",
                 knockback: 4,
+                swing: "side",
             },
             CLIP.enemyHookRecover
         ),
@@ -64,6 +67,7 @@ export const GREMLIN_MOVES = enemyMoveSet(
             poiseDamage: 12,
             impact: "light",
             knockback: 3,
+            swing: "side",
         }),
         strike({
             id: GREMLIN_MOVE_IDS.pounce,
@@ -74,6 +78,7 @@ export const GREMLIN_MOVES = enemyMoveSet(
             poiseDamage: 14,
             impact: "light",
             knockback: 4,
+            swing: "side",
             warp: { from: 0, to: 0.17, maxDistance: metres(2.5), strikeDistance: metres(0.5) },
         }),
     ],

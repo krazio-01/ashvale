@@ -42,6 +42,7 @@ export const WRAITH_MOVES = enemyMoveSet(
             poiseDamage: 12,
             impact: "light",
             knockback: 3,
+            swing: "side",
         }),
     ],
     CLIP.dodgeBackstep

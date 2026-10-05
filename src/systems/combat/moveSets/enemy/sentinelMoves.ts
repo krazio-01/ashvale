@@ -29,6 +29,7 @@ export const SENTINEL_MOVES = enemyMoveSet(
                 poiseDamage: 14,
                 impact: "light",
                 knockback: 3,
+                swing: "side",
                 chainAt: 0.75,
             },
             CLIP.enemySlashARecover
@@ -43,6 +44,7 @@ export const SENTINEL_MOVES = enemyMoveSet(
                 poiseDamage: 14,
                 impact: "light",
                 knockback: 3,
+                swing: "side",
                 chainAt: 0.67,
             },
             CLIP.enemySlashBRecover
@@ -56,6 +58,7 @@ export const SENTINEL_MOVES = enemyMoveSet(
             poiseDamage: 24,
             impact: "heavy",
             knockback: 6,
+            swing: "side",
         }),
         strike({
             id: SENTINEL_MOVE_IDS.cleave,
@@ -66,6 +69,7 @@ export const SENTINEL_MOVES = enemyMoveSet(
             poiseDamage: 30,
             impact: "heavy",
             knockback: 7,
+            swing: "high",
         }),
         strike({
             id: SENTINEL_MOVE_IDS.risingCut,
@@ -76,6 +80,7 @@ export const SENTINEL_MOVES = enemyMoveSet(
             poiseDamage: 18,
             impact: "light",
             knockback: 4,
+            swing: "high",
         }),
         strike({
             id: SENTINEL_MOVE_IDS.lunge,
@@ -86,6 +91,7 @@ export const SENTINEL_MOVES = enemyMoveSet(
             poiseDamage: 18,
             impact: "light",
             knockback: 5,
+            swing: "side",
             warp: { from: 0, to: 0.17, maxDistance: metres(3), strikeDistance: metres(0.6) },
         }),
         strike({
@@ -97,6 +103,7 @@ export const SENTINEL_MOVES = enemyMoveSet(
             poiseDamage: 40,
             impact: "heavy",
             knockback: 8,
+            swing: "side",
             perilous: true,
         }),
     ],

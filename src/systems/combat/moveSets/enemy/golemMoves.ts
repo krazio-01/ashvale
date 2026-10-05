@@ -21,6 +21,7 @@ export const GOLEM_MOVES = enemyMoveSet(
             poiseDamage: 40,
             impact: "heavy",
             knockback: 8,
+            swing: "high",
             armor: { from: 0.1, to: 0.4 },
         }),
         strike({
@@ -32,6 +33,7 @@ export const GOLEM_MOVES = enemyMoveSet(
             poiseDamage: 25,
             impact: "light",
             knockback: 6,
+            swing: "side",
         }),
         strike({
             id: GOLEM_MOVE_IDS.lowSweep,
@@ -42,6 +44,7 @@ export const GOLEM_MOVES = enemyMoveSet(
             poiseDamage: 50,
             impact: "heavy",
             knockback: 9,
+            swing: "side",
             perilous: true,
             armor: { from: 0.1, to: 0.4 },
         }),
@@ -55,6 +58,7 @@ export const GOLEM_MOVES = enemyMoveSet(
             poiseDamage: 40,
             impact: "heavy",
             knockback: 8,
+            swing: "high",
             armor: { from: 0.2, to: 0.48 },
         }),
     ],
