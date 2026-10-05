@@ -51,6 +51,7 @@ export class CharacterMotor {
     private readonly nextTranslation = { x: 0, y: 0, z: 0 };
     private readonly obstacleProbe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
     private readonly groundProbe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+    private readonly footProbe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
     private readonly collisionScratch = new RAPIER.CharacterCollision();
     private readonly contactState: IMotorContact = {
         movedFraction: 1,
@@ -258,6 +259,22 @@ export class CharacterMotor {
                 return;
             }
         }
+    }
+
+    groundHeightAt(x: number, z: number, fromY: number): number | null {
+        const origin = this.footProbe.origin;
+        origin.x = x;
+        origin.y = fromY;
+        origin.z = z;
+        const hit = this.physicsWorld.castRay(
+            this.footProbe,
+            this.spec.height * 2,
+            true,
+            undefined,
+            COLLISION_GROUPS.character,
+            this.collider
+        );
+        return hit && hit.timeOfImpact > 0 ? fromY - hit.timeOfImpact : null;
     }
 
     groundGap(maxGap: number): number {
