@@ -31,17 +31,18 @@ from Rig import (
     rest_world,
     set_scene_fps,
 )
-from PoseAuthoring import AuthoredClipBaker, PoseLibrary
+from PoseAuthoring import AUTHORED_BAKERS, GameFit, PoseLibrary, ReferenceMotion
 
 BODY_BONES = ("pelvis", "neck_01", "thigh_l", "thigh_r", "calf_l", "foot_l")
 STRIKE_SPEED_FRACTION = 0.6
-BLADE_LENGTH = 1.0
 BLADE_GRIP_OVERHANG = 0.12
 RENDER_SIZE = (288, 384)
 SKIN_COLOUR = (0.78, 0.62, 0.42, 1.0)
 BLADE_COLOUR = (0.85, 0.1, 0.1, 1.0)
 CLOSE_CAMERA = Vector((-3.5, -4.5, 1.6))
 CLOSE_CAMERA_FOCUS = Vector((0.0, 0.0, 1.15))
+REAR_CAMERA = Vector((1.8, 5.0, 2.6))
+REAR_CAMERA_FOCUS = Vector((0.0, 0.0, 1.1))
 
 
 def facing_backward(head_of, names):
@@ -281,18 +282,23 @@ class HipTrack:
 
 
 class ClipBaker:
-    def __init__(self, target):
+    def __init__(self, target, fit):
         probe = SoleProbe(target)
         self.retargeter = MocapRetargeter(target, probe)
         self.library = PoseLibrary(target)
-        self.authoring = AuthoredClipBaker(target, self.library, probe)
+        references = ReferenceMotion()
+        self.authored_bakers = [baker_class(target, self.library, probe, references, fit) for baker_class in AUTHORED_BAKERS]
 
     def bake(self, job):
-        baker = self.authoring if "keys" in job else self.retargeter
+        baker = next((baker for baker in self.authored_bakers if baker.job_key in job), self.retargeter)
         action, frame_count, source_fps = baker.bake(job)
         self.library.baked[job["output"]] = action
         print(f"BAKED {job['output']} frames={frame_count}")
         return action, frame_count, source_fps
+
+    @property
+    def clip_marks(self):
+        return {output: marks for baker in self.authored_bakers for output, marks in baker.clip_marks.items()}
 
     def close(self):
         self.library.close()
@@ -317,7 +323,7 @@ def strike_window(speeds):
     return start / last, end / last, peak_index / last
 
 
-def print_motion_profile(target, frame_count):
+def print_motion_profile(target, frame_count, blade_length):
     previous = None
     speeds = []
     for frame in range(1, frame_count + 1):
@@ -329,7 +335,7 @@ def print_motion_profile(target, frame_count):
         speeds.append(speed)
         previous = hand.copy()
         centre, direction = blade_axis(target)
-        tip = CHARACTER_TO_ARMATURE @ (centre + direction * BLADE_LENGTH - root)
+        tip = CHARACTER_TO_ARMATURE @ (centre + direction * blade_length - root)
         aim = CHARACTER_TO_ARMATURE @ direction
         grip = CHARACTER_TO_ARMATURE @ (hand - root)
         feet = [CHARACTER_TO_ARMATURE @ (pose_head(target, name) - root) for name in ("foot_l", "foot_r")]
@@ -349,8 +355,9 @@ class AuditionRenderer:
         "side": ((6.0, 0.0, 1.0), (math.pi / 2, 0.0, math.pi / 2), 3.2),
     }
 
-    def __init__(self, target):
+    def __init__(self, target, blade_length):
         self.target = target
+        self.blade_length = blade_length
         scene = bpy.context.scene
         scene.render.engine = "BLENDER_WORKBENCH"
         scene.render.resolution_x, scene.render.resolution_y = RENDER_SIZE
@@ -360,13 +367,18 @@ class AuditionRenderer:
         bpy.ops.mesh.primitive_cube_add(size=1.0)
         self.blade = bpy.context.active_object
         self.blade.name = "BladeProxy"
-        self.blade.scale = (0.03, 0.03, BLADE_LENGTH + BLADE_GRIP_OVERHANG)
+        self.blade.scale = (0.03, 0.03, blade_length + BLADE_GRIP_OVERHANG)
         self.blade.color = BLADE_COLOUR
         self.blade.rotation_mode = "QUATERNION"
 
     def render(self, frame_count, step, frame_label, directory):
         close_rotation = (CLOSE_CAMERA_FOCUS - CLOSE_CAMERA).to_track_quat("-Z", "Y").to_euler()
-        views = {**self.VIEWS, "close": (tuple(CLOSE_CAMERA), tuple(close_rotation), 2.3)}
+        rear_rotation = (REAR_CAMERA_FOCUS - REAR_CAMERA).to_track_quat("-Z", "Y").to_euler()
+        views = {
+            **self.VIEWS,
+            "close": (tuple(CLOSE_CAMERA), tuple(close_rotation), 2.3),
+            "rear": (tuple(REAR_CAMERA), tuple(rear_rotation), 2.6),
+        }
         scene = bpy.context.scene
         for label, (location, rotation, ortho_scale) in views.items():
             camera_data = bpy.data.cameras.new(f"{label}Camera")
@@ -385,7 +397,7 @@ class AuditionRenderer:
 
     def place_blade(self):
         centre, direction = blade_axis(self.target)
-        self.blade.location = centre + direction * ((BLADE_LENGTH - BLADE_GRIP_OVERHANG) / 2)
+        self.blade.location = centre + direction * ((self.blade_length - BLADE_GRIP_OVERHANG) / 2)
         self.blade.rotation_quaternion = Vector((0.0, 0.0, 1.0)).rotation_difference(direction)
 
 
@@ -396,13 +408,14 @@ def reset_pose(target):
         pose_bone.location = (0.0, 0.0, 0.0)
 
 
-def run_bake(jobs_path, output_path):
+def run_bake(jobs_path, output_path, marks_path):
     config = json.loads(Path(jobs_path).read_text())
     reset_scene()
     target = import_target(config["target"])
-    baker = ClipBaker(target)
-    produced = [baker.bake(job)[0] for job in config["jobs"]]
+    baker = ClipBaker(target, GameFit.from_config(config["game"], target))
+    produced = [action for job in config["jobs"] for action, _, _ in [baker.bake(job)] if not job.get("poseSource")]
     baker.close()
+    Path(marks_path).write_text(json.dumps(baker.clip_marks, indent=2, sort_keys=True))
     for action in list(bpy.data.actions):
         if action not in produced:
             bpy.data.actions.remove(action)
@@ -425,13 +438,14 @@ def run_audition(jobs_path, directory, step):
     config = json.loads(Path(jobs_path).read_text())
     reset_scene()
     target = import_target(config["target"])
-    baker = ClipBaker(target)
+    fit = GameFit.from_config(config["game"], target)
+    baker = ClipBaker(target, fit)
     *prerequisites, job = config["jobs"]
     for prerequisite in prerequisites:
         baker.bake(prerequisite)
     _, frame_count, source_fps = baker.bake(job)
     baker.close()
-    print_motion_profile(target, frame_count)
+    print_motion_profile(target, frame_count, fit.blade_length)
     source_start = job.get("frames", [0, 0])[0]
 
     def frame_label(frame):
@@ -439,7 +453,7 @@ def run_audition(jobs_path, directory, step):
             return f"t{(frame - 1) / OUTPUT_FPS:.2f}"
         return f"src{source_start + round((frame - 1) / OUTPUT_FPS * source_fps)}"
 
-    AuditionRenderer(target).render(frame_count, step, frame_label, directory)
+    AuditionRenderer(target, fit.blade_length).render(frame_count, step, frame_label, directory)
     print(f"AUDITION {job['output']} frames={frame_count} sourceFps={source_fps}")
 
 
@@ -466,7 +480,7 @@ def export_weapon(target, output_name, output_directory):
         export_apply=True,
         export_yup=True,
     )
-    print(f"EXPORTED {object_name} -> {output_directory}/{output_name}.gltf")
+    print(f"EXPORTED {target.name} -> {output_directory}/{output_name}.gltf")
 
 
 def run_split_weapons(source, output_directory, renames):
@@ -496,6 +510,7 @@ def parse_arguments():
     bake_mode = modes.add_parser("bake")
     bake_mode.add_argument("jobs_path")
     bake_mode.add_argument("output_path")
+    bake_mode.add_argument("marks_path")
     audition_mode = modes.add_parser("audition")
     audition_mode.add_argument("jobs_path")
     audition_mode.add_argument("directory")
@@ -511,7 +526,7 @@ def parse_arguments():
 
 arguments = parse_arguments()
 if arguments.mode == "bake":
-    run_bake(arguments.jobs_path, arguments.output_path)
+    run_bake(arguments.jobs_path, arguments.output_path, arguments.marks_path)
 elif arguments.mode == "audition":
     run_audition(arguments.jobs_path, arguments.directory, arguments.step)
 else:

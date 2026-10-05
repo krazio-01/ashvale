@@ -1,7 +1,8 @@
-import type { Vector3 } from "three";
+import { Vector3 } from "three";
 import type { ICombatant, Team } from "@/types/combat";
 
 export class CombatRegistry {
+    readonly lodOrigin = new Vector3();
     private readonly combatants: ICombatant[] = [];
 
     register(combatant: ICombatant): void {

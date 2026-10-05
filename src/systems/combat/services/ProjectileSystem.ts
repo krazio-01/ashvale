@@ -92,6 +92,7 @@ export class ProjectileSystem {
             parryable: true,
             perilous: false,
             ranged: true,
+            swing: "side",
             origin: new Vector3(),
         });
         payload.attacker = owner;

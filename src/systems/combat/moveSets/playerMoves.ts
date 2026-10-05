@@ -1,11 +1,14 @@
 import { CLIP } from "@/constants/characters";
-import { TARGETING } from "@/constants/combat";
+import { PARRY, TARGETING } from "@/constants/combat";
 import { DODGE, PLAYER } from "@/constants/player";
 import { WORLD } from "@/constants/world";
 import { metres } from "@/lib/helpers";
 import {
+    clipGripWindow,
+    clipMark,
     defineMove,
     SHARED_REACTIONS,
+    uniformParried,
     WEAPON_HIT_SHAPE,
     type MoveSpec,
 } from "@/systems/combat/moveSets/moveDefinition";
@@ -17,6 +20,8 @@ import type {
     IMoveSet,
     IWarpWindow,
     MoveTag,
+    ParryTier,
+    SwingDirection,
 } from "@/types/combat";
 
 const EVERYTHING: readonly MoveTag[] = [
@@ -29,10 +34,59 @@ const EVERYTHING: readonly MoveTag[] = [
     "jump",
 ];
 const SWORD_WARP = { maxDistance: metres(5), strikeDistance: metres(0.45) };
-const SLIDE_MOMENTUM: IMomentum = { deceleration: PLAYER.height * 4.5 };
+const SLIDE_GLIDE: IMomentum = { deceleration: PLAYER.height, poseReach: PLAYER.slidePoseReach };
+const SLIDE_BRAKE: IMomentum = { ...SLIDE_GLIDE, deceleration: PLAYER.height * 3 };
 const SLIDE_FOLLOW_UP = { light: "sword_dash_attack" };
 const JUMP_RISE_SECONDS = PLAYER.jumpForce / Math.abs(WORLD.gravity);
 const LAND_SECONDS = 0.4;
+const PARRY_TIERS: readonly ParryTier[] = ["parry", "perfect"];
+const SWING_DIRECTIONS: readonly SwingDirection[] = ["high", "side"];
+
+export const PARRY_DEFLECT_MOVES = {
+    parry: { high: "parry_deflect_high", side: "parry_deflect_side" },
+    perfect: { high: "parry_perfect_high", side: "parry_perfect_side" },
+} as const satisfies Record<ParryTier, Record<SwingDirection, string>>;
+
+const PARRY_DEFLECT_CLIPS: Record<ParryTier, Record<SwingDirection, string>> = {
+    parry: { high: CLIP.parryDeflectHigh, side: CLIP.parryDeflectSide },
+    perfect: { high: CLIP.parryPerfectHigh, side: CLIP.parryPerfectSide },
+};
+
+function guardMove(id: string, clip: string, fadeSeconds: number): IMoveDefinition {
+    return move({
+        id,
+        clip,
+        tags: ["parry"],
+        fadeSeconds,
+        parrySeconds: PARRY.windowSeconds,
+        cancels: [{ from: clipMark(clip, "lowering"), to: 1, into: EVERYTHING }],
+        procedural: { grip: clipGripWindow(clip) },
+        yieldsToMovement: true,
+    });
+}
+
+function deflectMove(tier: ParryTier, swing: SwingDirection): IMoveDefinition {
+    const clip = PARRY_DEFLECT_CLIPS[tier][swing];
+    const cancels: ICancelWindow[] =
+        tier === "perfect"
+            ? [{ from: clipMark(clip, "counter"), to: 1, into: EVERYTHING }]
+            : [
+                  { from: clipMark(clip, "out"), to: 1, into: ["parry", "dodge"] },
+                  { from: clipMark(clip, "idle"), to: 1, into: EVERYTHING },
+              ];
+    return move({
+        id: PARRY_DEFLECT_MOVES[tier][swing],
+        clip,
+        tags: [],
+        fadeSeconds: 0,
+        cancels,
+        next: { parry: "parry_reguard" },
+        procedural: { grip: clipGripWindow(clip) },
+        ...(tier === "perfect"
+            ? { counterAt: clipMark(clip, "counter") }
+            : { yieldsToMovement: true }),
+    });
+}
 
 function bladeHit(from: number, to: number, overrides: Partial<IHitWindow> = {}): IHitWindow {
     return {
@@ -45,6 +99,7 @@ function bladeHit(from: number, to: number, overrides: Partial<IHitWindow> = {})
         knockback: 3,
         parryable: true,
         perilous: false,
+        swing: "side",
         ...overrides,
     };
 }
@@ -278,7 +333,8 @@ export const PLAYER_MOVES: IMoveSet = {
                 playbackRate: 1.2,
                 staminaCost: 12,
                 fadeSeconds: 0.08,
-                momentum: SLIDE_MOMENTUM,
+                momentum: SLIDE_GLIDE,
+                blockedInto: "slide_exit",
                 invulnerable: { from: 0.35, to: 0.7 },
                 cancels: [
                     { from: 0, to: 1, into: ["jump"] },
@@ -293,7 +349,8 @@ export const PLAYER_MOVES: IMoveSet = {
                 clip: CLIP.slideHold,
                 tags: ["dodge"],
                 fadeSeconds: 0.1,
-                momentum: SLIDE_MOMENTUM,
+                momentum: SLIDE_GLIDE,
+                blockedInto: "slide_exit",
                 cancels: [{ from: 0, to: 1, into: ["light", "dodge", "jump"] }],
                 next: SLIDE_FOLLOW_UP,
                 followedBy: "slide_exit",
@@ -304,7 +361,7 @@ export const PLAYER_MOVES: IMoveSet = {
                 clip: CLIP.slideExit,
                 tags: ["dodge"],
                 fadeSeconds: 0.1,
-                momentum: SLIDE_MOMENTUM,
+                momentum: SLIDE_BRAKE,
                 cancels: [
                     { from: 0, to: 1, into: ["jump"] },
                     { from: 0.35, to: 1, into: EVERYTHING },
@@ -343,6 +400,7 @@ export const PLAYER_MOVES: IMoveSet = {
                     { from: 0, to: 1, into: ["light", "heavy", "dodge", "parry", "shoot", "jump"] },
                     { from: 0.25, to: 1, into: ["movement"] },
                 ],
+                yieldsToMovement: true,
             }),
             move({
                 id: "air_slash",
@@ -372,14 +430,11 @@ export const PLAYER_MOVES: IMoveSet = {
                 ],
                 cancels: comboCancels(0.73, 0.63, 0.94),
             }),
-            move({
-                id: "parry",
-                clip: CLIP.parry,
-                tags: ["parry"],
-                fadeSeconds: 0.03,
-                parryWindow: { from: 0, to: 0.4 },
-                cancels: [{ from: 0.55, to: 1, into: EVERYTHING }],
-            }),
+            guardMove("parry", CLIP.parryGuard, PARRY.guardFadeSeconds),
+            guardMove("parry_reguard", CLIP.parryReguard, PARRY.reguardFadeSeconds),
+            ...PARRY_TIERS.flatMap((tier) =>
+                SWING_DIRECTIONS.map((swing) => deflectMove(tier, swing))
+            ),
         ].map((definition) => [definition.id, definition])
     ),
     entry: {
@@ -399,6 +454,7 @@ export const PLAYER_MOVES: IMoveSet = {
         flinch: [CLIP.reactFlinch, CLIP.reactHitHead],
         knockback: [CLIP.reactCombatDamage],
         stagger: CLIP.reactCombatDamage,
+        parried: uniformParried(CLIP.reactParried),
         ...SHARED_REACTIONS,
     },
 };

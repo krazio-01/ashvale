@@ -1,5 +1,5 @@
 import { CLIP } from "@/constants/characters";
-import { TELEGRAPH } from "@/constants/combat";
+import { PARRY, TELEGRAPH } from "@/constants/combat";
 import { defineMove, SHARED_REACTIONS } from "@/systems/combat/moveSets/moveDefinition";
 import type {
     HitShape,
@@ -10,6 +10,7 @@ import type {
     ImpactTier,
     IProjectileLaunch,
     IWarpWindow,
+    SwingDirection,
 } from "@/types/combat";
 
 export const ENEMY_DEFENSE_MOVE_IDS = {
@@ -31,6 +32,7 @@ interface IStrikeSpec {
     poiseDamage: number;
     impact: ImpactTier;
     knockback: number;
+    swing: SwingDirection;
     perilous?: boolean;
     armor?: IMoveWindow;
     chainAt?: number;
@@ -48,7 +50,11 @@ interface ICastSpec {
 
 function baseMove(id: string, clip: string, playbackRate: number): IMoveDefinition {
     return defineMove(
-        { fadeSeconds: 0.08, requires: "any", minimumWarningSeconds: TELEGRAPH.leadSeconds },
+        {
+            fadeSeconds: 0.08,
+            requires: "any",
+            minimumWindupSeconds: TELEGRAPH.minimumWindupSeconds,
+        },
         { id, clip, tags: ["light"], playbackRate }
     );
 }
@@ -84,6 +90,7 @@ export function strike(spec: IStrikeSpec): IMoveDefinition {
                 knockback: spec.knockback,
                 parryable: !perilous,
                 perilous,
+                swing: spec.swing,
             },
         ],
         cancels: attackCancels(to, spec.chainAt),
@@ -121,7 +128,7 @@ export function enemyMoveSet(moves: readonly IMoveDefinition[], dodgeClip: strin
             ...baseMove(ENEMY_DEFENSE_MOVE_IDS.parry, CLIP.parry, 1),
             tags: ["parry"],
             fadeSeconds: 0.03,
-            parryWindow: { from: 0, to: 0.4 },
+            parrySeconds: PARRY.windowSeconds,
             cancels: [{ from: 0.55, to: 1, into: ["movement"] }],
         },
         [ENEMY_DEFENSE_MOVE_IDS.dodge]: {
@@ -144,6 +151,10 @@ export function enemyMoveSet(moves: readonly IMoveDefinition[], dodgeClip: strin
             flinch: [CLIP.reactFlinch],
             knockback: [CLIP.reactKnockback],
             stagger: CLIP.reactStagger,
+            parried: {
+                parry: { high: CLIP.reactParriedHigh, side: CLIP.reactParriedSide },
+                perfect: { high: CLIP.reactGuardBrokenHigh, side: CLIP.reactGuardBrokenSide },
+            },
             ...SHARED_REACTIONS,
         },
     };

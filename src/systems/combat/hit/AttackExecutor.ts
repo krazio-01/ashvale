@@ -14,7 +14,9 @@ import type {
     IHitPayload,
     IHitWindow,
     IMoveDefinition,
+    IParryResult,
     IStrikeSegment,
+    SwingDirection,
 } from "@/types/combat";
 import type { IWorldContext } from "@/types/world";
 
@@ -43,6 +45,7 @@ export class AttackExecutor {
             parryable: false,
             perilous: false,
             ranged: false,
+            swing: "side",
             origin: new Vector3(),
         };
         this.hitEvent = {
@@ -148,12 +151,13 @@ export class AttackExecutor {
         payload.knockback = window.knockback;
         payload.parryable = window.parryable;
         payload.perilous = window.perilous;
+        payload.swing = window.swing;
         payload.origin.copy(this.owner.position);
 
         const outcome = defender.receiveHit(payload);
 
         if (outcome.kind === "parried") {
-            this.owner.onAttackParried(defender);
+            this.owner.onAttackParried(defender, outcome.parry, payload.swing);
             return true;
         }
 
@@ -184,7 +188,7 @@ export interface IAttackOwner extends ICombatant {
     readonly attackPower: number;
     sampleHitShape(shape: HitShape, segment: IStrikeSegment): boolean;
     onHitConfirmed(defender: ICombatant, outcome: IHitOutcome, move: IMoveDefinition): void;
-    onAttackParried(defender: ICombatant): void;
+    onAttackParried(defender: ICombatant, parry: IParryResult, swing: SwingDirection): void;
 }
 
 const scratchSegment: IStrikeSegment = { start: new Vector3(), end: new Vector3(), radius: 0 };

@@ -8,6 +8,8 @@ import { EXTMeshoptCompression } from "@gltf-transform/extensions";
 import { dedup, prune, resample } from "@gltf-transform/functions";
 import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
 import { CLIP } from "@/constants/characters";
+import { PARRY_CLIP_MARKS } from "@/constants/combat";
+import type { IClipMarks } from "@/constants/combat";
 import { ASSET_CATALOGUE } from "../assets/AssetCategories";
 import {
     Blender,
@@ -20,7 +22,10 @@ import {
     CLIP_JOBS,
     CLIP_LIBRARY,
     CLIPS_PROVIDED_BY_CHARACTER_MODEL,
+    GAME_FIT,
+    authoredPoses,
     isAuthoredJob,
+    isBeatJob,
     SOURCE_RIGS,
     type ClipJob,
     type IRetargetJob,
@@ -34,10 +39,23 @@ const BAKE_LOG_PREFIXES = ["BAKED", "GROUND", "CHECK", "EXPORTED"];
 const AUDITION_LOG_PREFIXES = ["BAKED", "GROUND", "CHECK", "STRIKE", "AUDITION"];
 const SHEET_COLUMNS = 10;
 const SHEET_PAGE_FRAMES = 40;
-const SHEET_VIEWS = ["front", "side", "close"] as const;
+const SHEET_VIEWS = ["front", "side", "close", "rear"] as const;
 const SCRATCH_ROOT = fs.realpathSync(os.tmpdir());
+const CLIP_MARK_PRECISION = 1000;
+const MARK_TOLERANCE = 0.002;
+const MAX_MARK_DRIFT_FRAMES = 2;
 const SAME_ROTATION_DEGREES = 0.01;
 const SAME_TRANSLATION_CENTIMETRES = 0.01;
+
+interface IBakedClipMarks extends IClipMarks {
+    seconds: number;
+}
+
+const round = (value: number): number =>
+    Math.round(value * CLIP_MARK_PRECISION) / CLIP_MARK_PRECISION;
+
+const roundMark = (_key: string, value: unknown): unknown =>
+    typeof value === "number" ? round(value) : value;
 
 async function createClipIo(): Promise<NodeIO> {
     await MeshoptEncoder.ready;
@@ -59,14 +77,19 @@ export class ClipCooker extends PipelineCommand {
         try {
             const jobsPath = path.join(workDirectory, "jobs.json");
             const rawPath = path.join(workDirectory, "raw.glb");
+            const marksPath = path.join(workDirectory, "marks.json");
             const stagedPath = path.join(workDirectory, path.basename(CLIP_LIBRARY.output));
             fs.writeFileSync(
                 jobsPath,
-                JSON.stringify({ target: path.resolve(CLIP_LIBRARY.target), jobs: CLIP_JOBS })
+                JSON.stringify({
+                    target: path.resolve(CLIP_LIBRARY.target),
+                    jobs: CLIP_JOBS,
+                    game: GAME_FIT,
+                })
             );
             new Blender().runScript(
                 PIPELINE_CONFIG.blender.script,
-                ["bake", jobsPath, rawPath],
+                ["bake", jobsPath, rawPath, marksPath],
                 BAKE_LOG_PREFIXES
             );
             await this.stripChannels(io, rawPath, stagedPath);
@@ -74,6 +97,7 @@ export class ClipCooker extends PipelineCommand {
             const animations = (await io.read(stagedPath)).getRoot().listAnimations();
             const names = new Set(animations.map((animation) => animation.getName()));
             this.verifyCatalogue(names);
+            const durations = new Map<string, number>();
             for (const animation of animations) {
                 const seconds = Math.max(
                     0,
@@ -81,10 +105,12 @@ export class ClipCooker extends PipelineCommand {
                         .listSamplers()
                         .map((sampler) => sampler.getInput()?.getMax([])[0] ?? 0)
                 );
+                durations.set(animation.getName(), seconds);
                 console.log(`CLIP ${animation.getName()} ${seconds.toFixed(3)}`);
             }
 
             this.enforceBudget(stagedPath, names.size);
+            this.verifyClipMarks(marksPath, durations);
             this.publish(stagedPath);
         } finally {
             fs.rmSync(workDirectory, { recursive: true, force: true });
@@ -113,6 +139,61 @@ export class ClipCooker extends PipelineCommand {
             .setRequired(true)
             .setEncoderOptions({ method: EXTMeshoptCompression.EncoderMethod.QUANTIZE });
         await io.write(outputPath, document);
+    }
+
+    private verifyClipMarks(marksPath: string, durations: Map<string, number>): void {
+        const baked: Record<string, IBakedClipMarks> = JSON.parse(
+            fs.readFileSync(marksPath, "utf8")
+        );
+        const problems: string[] = [];
+        for (const [name, clip] of Object.entries(baked)) {
+            const seconds = durations.get(name);
+            if (
+                seconds === undefined ||
+                Math.abs(seconds - clip.seconds) > MAX_MARK_DRIFT_FRAMES / OUTPUT_FPS
+            )
+                throw new Error(
+                    `${name}: baked marks assume ${clip.seconds}s but the published clip is ${seconds}s`
+                );
+
+            const normalise = (time: number): number => Math.min(1, time / seconds);
+            const baked01: IClipMarks = {
+                marks: Object.fromEntries(
+                    Object.entries(clip.marks).map(([mark, time]) => [mark, normalise(time)])
+                ),
+                grip: clip.grip && { from: normalise(clip.grip.from), to: normalise(clip.grip.to) },
+            };
+            const isEmpty = Object.keys(baked01.marks).length === 0 && !baked01.grip;
+            const known = PARRY_CLIP_MARKS[name];
+            if (!known) {
+                if (!isEmpty)
+                    problems.push(
+                        `${name}: missing from PARRY_CLIP_MARKS, baked ${JSON.stringify(baked01, roundMark)}`
+                    );
+                continue;
+            }
+            const drifted = [
+                ...Object.entries(baked01.marks).map(
+                    ([mark, value]) => [mark, value, known.marks[mark]] as const
+                ),
+                ...(baked01.grip
+                    ? ([
+                          ["grip.from", baked01.grip.from, known.grip?.from],
+                          ["grip.to", baked01.grip.to, known.grip?.to],
+                      ] as const)
+                    : []),
+            ].filter(
+                ([, value, expected]) =>
+                    expected === undefined || Math.abs(value - expected) > MARK_TOLERANCE
+            );
+            for (const [mark, value, expected] of drifted)
+                problems.push(
+                    `${name}.${mark}: constants say ${expected}, baked clip gives ${round(value)}`
+                );
+        }
+        if (problems.length > 0)
+            throw new Error(`PARRY_CLIP_MARKS is out of date:\n  ${problems.join("\n  ")}`);
+        console.log("PARRY_CLIP_MARKS match the baked clips");
     }
 
     private verifyCatalogue(names: Set<string>): void {
@@ -187,7 +268,7 @@ export class ClipAudition extends PipelineCommand {
         const jobPath = path.join(outDirectory, "job.json");
         fs.writeFileSync(
             jobPath,
-            JSON.stringify({ target: path.resolve(CLIP_LIBRARY.target), jobs })
+            JSON.stringify({ target: path.resolve(CLIP_LIBRARY.target), jobs, game: GAME_FIT })
         );
         const lines = new Blender().runScript(
             PIPELINE_CONFIG.blender.script,
@@ -210,9 +291,9 @@ export class ClipAudition extends PipelineCommand {
             const job = jobsByOutput.get(name);
             if (!job) throw new Error(`no manifest job outputs ${name}`);
             if (ordered.includes(job)) return;
-            if (isAuthoredJob(job))
-                for (const key of job.keys)
-                    if (!key.pose.library) visit(key.pose.clip, [...chain, name]);
+            if (isAuthoredJob(job) || isBeatJob(job))
+                for (const pose of authoredPoses(job))
+                    if (!pose.library) visit(pose.clip, [...chain, name]);
             ordered.push(job);
         };
         visit(clipName, []);

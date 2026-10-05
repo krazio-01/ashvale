@@ -1,6 +1,6 @@
 import type { Object3D } from "three";
 
-type Handedness = "right" | "left";
+export type Handedness = "right" | "left";
 
 export interface IHandRig {
     hand: Object3D;

@@ -111,6 +111,16 @@ export abstract class Weapon<Spec extends IWeaponSpec = IWeaponSpec> {
 
     abstract sampleStrike(segment: IStrikeSegment): boolean;
 
+    bladeSegment(pommel: Vector3, tip: Vector3): void {
+        this.model.updateWorldMatrix(true, false);
+        pommel.set(0, 0, 0);
+        pommel[this.lengthAxis] = this.pommelCoordinate;
+        this.model.localToWorld(pommel);
+        tip.set(0, 0, 0);
+        tip[this.lengthAxis] = this.tipCoordinate;
+        this.model.localToWorld(tip);
+    }
+
     update(_deltaSeconds: number, _isStriking: boolean): void {}
 
     dispose(): void {
