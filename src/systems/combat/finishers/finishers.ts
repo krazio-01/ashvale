@@ -69,15 +69,6 @@ export const FINISHERS: readonly IFinisherDefinition[] = [
         killAt: 0.45,
     },
     {
-        id: "counter-slash",
-        kind: "counter",
-        attackerClip: CLIP.swordCounter,
-        pairedVictimClip: null,
-        distance: metres(1.1),
-        ...FACING_VICTIM,
-        killAt: 0.4,
-    },
-    {
         id: "backstab",
         kind: "backstab",
         attackerClip: CLIP.finisherBackstab,
