@@ -19,7 +19,13 @@ export interface IPrepareTuning {
     debrisTinyFaces: number;
     propMinPiece: number;
     propPartReach: number;
-    physicsPartReach: number;
+    propPieceMajority: number;
+    propTouchDistance: number;
+    propAxisMargin: number;
+    propAxisExtension: number;
+    propGrowShare: number;
+    garmentPieceMajority: number;
+    garmentMinIsland: number;
     propSmoothIterations: number;
     thinTo: number;
     thicknessRayStart: number;
@@ -93,6 +99,7 @@ export interface IJointsTuning {
 
 export interface IPhysicsTuning {
     fadeRows: number;
+    seamFadeDistance: number;
     nodeSigmaCells: number;
     minCell: number;
     colliderSectors: number;
@@ -108,7 +115,8 @@ export interface IPhysicsTuning {
     };
     minBodyVertices: number;
     minPointsForCapsule: number;
-    pinInsideTolerance: number;
+    latticeTop: number;
+    garmentFadeDistance: number;
 }
 
 export interface IRigTuning {
@@ -130,6 +138,8 @@ export interface IRigTuning {
     clothSheetThickness: number;
     limbHeatDominance: number;
     limbCoreShare: number;
+    garmentArmShare: number;
+    drapeBlendDistance: number;
 }
 
 export interface IWeightsTuning {
@@ -141,6 +151,8 @@ export interface IWeightsTuning {
     minEdgeLength: number;
     regionDominance: number;
     stretchPercentile: number;
+    garmentLiftLimit: number;
+    garmentLiftReach: number;
 }
 
 export interface IPreviewTuning {
@@ -177,7 +189,13 @@ const BASE_TUNING: IPipelineTuning = {
         debrisTinyFaces: 12,
         propMinPiece: 200,
         propPartReach: 0.01,
-        physicsPartReach: 0.05,
+        propPieceMajority: 0.5,
+        propTouchDistance: 0.005,
+        propAxisMargin: 1.5,
+        propAxisExtension: 0.25,
+        propGrowShare: 0.9,
+        garmentPieceMajority: 0.5,
+        garmentMinIsland: 2000,
         propSmoothIterations: 3,
         thinTo: 0.03,
         thicknessRayStart: 0.002,
@@ -244,6 +262,7 @@ const BASE_TUNING: IPipelineTuning = {
     },
     physics: {
         fadeRows: 1.0,
+        seamFadeDistance: 0.08,
         nodeSigmaCells: 0.6,
         minCell: 0.01,
         colliderSectors: 16,
@@ -253,7 +272,8 @@ const BASE_TUNING: IPipelineTuning = {
         colliderMaxRadius: { torso: 0.3, upperArm: 0.12, lowerArm: 0.1, thigh: 0.2, calf: 0.15 },
         minBodyVertices: 40,
         minPointsForCapsule: 20,
-        pinInsideTolerance: 0.015,
+        latticeTop: 0.5,
+        garmentFadeDistance: 0.2,
     },
     rig: {
         heatTransferNeighbours: 3,
@@ -274,6 +294,8 @@ const BASE_TUNING: IPipelineTuning = {
         clothSheetThickness: 0.008,
         limbHeatDominance: 0.5,
         limbCoreShare: 0.6,
+        garmentArmShare: 0.35,
+        drapeBlendDistance: 0.08,
     },
     weights: {
         crotchHalfWidth: 0.13,
@@ -284,6 +306,8 @@ const BASE_TUNING: IPipelineTuning = {
         minEdgeLength: 0.004,
         regionDominance: 0.6,
         stretchPercentile: 99.5,
+        garmentLiftLimit: 0.03,
+        garmentLiftReach: 0.02,
     },
     preview: { boneTubeRadius: 0.007 },
     detection: {
@@ -302,6 +326,11 @@ const ROLE_TUNING: Record<CharacterRole, DeepPartial<IPipelineTuning>> = {
 };
 
 const SHARE_PATHS = [
+    "prepare.propGrowShare",
+    "prepare.propPieceMajority",
+    "prepare.garmentPieceMajority",
+    "rig.garmentArmShare",
+    "physics.latticeTop",
     "prepare.debrisFaceFraction",
     "prepare.debrisPropShare",
     "rig.clothBodyShare",
@@ -353,6 +382,7 @@ const WHOLE_NUMBER_PATHS = [
     "prepare.debrisTinyFaces",
     "prepare.propMinPiece",
     "prepare.propSmoothIterations",
+    "prepare.garmentMinIsland",
     "unwrap.padding",
     "unwrap.iterations",
     "weights.smoothingIterations",
@@ -362,9 +392,18 @@ const WHOLE_NUMBER_PATHS = [
 ] as const;
 
 const POSITIVE_PATHS = [
+    "prepare.propTouchDistance",
+    "prepare.propAxisMargin",
+    "prepare.propAxisExtension",
+    "physics.seamFadeDistance",
     "detection.clothCellSize",
     "detection.minClothArea",
     "physics.minCell",
+    "rig.drapeBlendDistance",
+    "physics.garmentFadeDistance",
+    "weights.garmentLiftLimit",
+    "weights.garmentLiftReach",
+    "prepare.garmentMinIsland",
 ] as const;
 
 const valueAt = (tuning: IPipelineTuning, path: string): number =>

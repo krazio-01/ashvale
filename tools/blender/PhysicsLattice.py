@@ -32,7 +32,11 @@ def build_sheet(points, columns, rows, settings):
                 nodes[row * columns + column] = points[int(np.argmin(distance))]
             else:
                 nodes[row * columns + column] = (kernel[:, None] * points).sum(0) / kernel.sum()
-    return {"nodes": nodes, "u": u, "v": v, "u_min": u_min, "u_max": u_max, "v_max": v_max}
+    return {"nodes": nodes, "u": u, "v": v, "u_min": u_min, "u_max": u_max, "v_max": v_max, "centre": centre, "across": across, "top": float(points[:, 2].max())}
+
+
+def project_onto_sheet(grid, points):
+    return {**grid, "u": (points - grid["centre"]) @ grid["across"], "v": grid["top"] - points[:, 2]}
 
 
 def sheet_weights(grid, points, columns, rows, settings):
@@ -86,26 +90,27 @@ def measure_capsule_radius(points, start, end, reach, settings):
     return max(float(np.median(radii)) * physics.colliderShrink, minimum_radius)
 
 
-def ignored_collider_bones(pins, colliders, settings):
-    tolerance = settings.length(settings.section("physics").pinInsideTolerance)
-    ignored = []
-    for collider in colliders:
-        start, end = np.array(collider["start"]), np.array(collider["end"])
-        axis = end - start
-        along = np.clip(((pins - start) @ axis) / max(float(axis @ axis), 1e-12), 0.0, 1.0)
-        distance = np.linalg.norm(pins - (start + np.outer(along, axis)), axis=1)
-        if (distance - collider["radius"]).min() < -tolerance:
-            ignored.append(collider["bone"])
-    return ignored
-
-
-def merge_lattice_weights(lattice_bones, vertex_attach, vertex_cloth, lattice_nodes, lattice_weights, lattice_blend, used, columns, shares):
-    new_used = np.unique(np.concatenate([used, lattice_bones, vertex_attach[vertex_cloth]]))
+def merge_lattice_weights(lattice_bones, vertex_cloth, lattice_nodes, lattice_weights, lattice_blend, seam_source, used, columns, shares):
+    new_used = np.unique(np.concatenate([used, lattice_bones]))
     position = {int(bone): index for index, bone in enumerate(new_used)}
-    merged_columns = np.array([position[int(bone)] for bone in used])[columns]
+    remapped = np.array([position[int(bone)] for bone in used])[columns]
+    merged_columns = remapped.copy()
     merged_shares = shares.copy()
+    width = columns.shape[1]
     for node in np.flatnonzero(vertex_cloth):
         blend = lattice_blend[node]
-        merged_columns[node] = [position[int(vertex_attach[node])]] + [position[int(lattice_bones[index])] for index in lattice_nodes[node]]
-        merged_shares[node] = [1.0 - blend, *(blend * lattice_weights[node])]
+        source = seam_source[node]
+        influences = {}
+        donor = source if source >= 0 else node
+        rigid = zip(remapped[donor], shares[donor])
+        for column, share in rigid:
+            influences[int(column)] = influences.get(int(column), 0.0) + (1.0 - blend) * share
+        for index, weight in zip(lattice_nodes[node], lattice_weights[node]):
+            column = position[int(lattice_bones[index])]
+            influences[column] = influences.get(column, 0.0) + blend * weight
+        strongest = sorted(influences.items(), key=lambda item: -item[1])[:width]
+        strongest += [(strongest[0][0], 0.0)] * (width - len(strongest))
+        total = sum(share for _, share in strongest)
+        merged_columns[node] = [column for column, _ in strongest]
+        merged_shares[node] = [share / total for _, share in strongest]
     return new_used, merged_columns, merged_shares
