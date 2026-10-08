@@ -1,3 +1,5 @@
+import type { Quaternion, Vector3 } from "three";
+
 export type PhysicsBodyKind = "sheet";
 
 export type PhysicsDetail = "full" | "reduced" | "frozen";
@@ -8,14 +10,21 @@ export interface IVector3 {
     z: number;
 }
 
-export interface IPhysicsFeel {
-    stiffness: number;
-    bendStiffness: number;
+export interface IClothFeel {
     damping: number;
+    stretchCompliance: number;
+    bendCompliance: number;
     gravityScale: number;
     windExposure: number;
-    tetherSlack: number;
-    contactFriction: number;
+    tetherScale: number;
+    leashMax: number;
+    leashCurve: number;
+    backstopRadius: number;
+    backstopOffset: number;
+    collisionThickness: number;
+    deflectionMargin: number;
+    deflectionSoftness: number;
+    friction: number;
     impulseScale: number;
 }
 
@@ -26,9 +35,14 @@ export interface IPhysicsBodyDefinition {
     columns: number;
     rows: number;
     nodeBones: string[];
-    restOffsets: number[];
-    ignoredColliders?: string[];
-    feel?: Partial<IPhysicsFeel>;
+    restPositions: number[];
+    restNormals: number[];
+    pinned: boolean[];
+    nearestPin: number[];
+    geodesicDistance: number[];
+    skinBones: string[];
+    skinWeights: number[];
+    feel?: Partial<IClothFeel>;
 }
 
 export interface IPhysicsCollider {
@@ -39,7 +53,8 @@ export interface IPhysicsCollider {
 }
 
 export interface IPhysicsDefinition {
-    version: 1;
+    version: 3;
+    referenceBone: string;
     bodies: IPhysicsBodyDefinition[];
     colliders: IPhysicsCollider[];
 }
@@ -47,13 +62,15 @@ export interface IPhysicsDefinition {
 export interface IPhysicsBinding {
     prepareFrame(): void;
     unitScale(bodyIndex: number): number;
-    anchorWorld(bodyIndex: number, nodeIndex: number, out: IVector3): void;
-    colliderWorld(colliderIndex: number, outStart: IVector3, outEnd: IVector3): number;
+    referenceWorld(outPosition: Vector3, outRotation: Quaternion): void;
+    homeWorld(bodyIndex: number, nodeIndex: number, outPosition: Vector3, outNormal: Vector3): void;
+    colliderWorld(colliderIndex: number, outStart: Vector3, outEnd: Vector3): number;
     writeNode(
         bodyIndex: number,
         nodeIndex: number,
-        position: IVector3,
-        down: IVector3,
-        across: IVector3
+        position: Vector3,
+        down: Vector3,
+        across: Vector3
     ): void;
+    writeAnimatedNode(bodyIndex: number, nodeIndex: number): void;
 }
