@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { SKELETONS, type ISkeletonDescriptor, type SkeletonName } from "@/constants/characters";
-import type { IPhysicsFeel, PhysicsBodyKind } from "@/types/physics";
-import { PIPELINE_CONFIG } from "../pipeline";
+import type { IClothFeel } from "@/types/physics";
+import { PIPELINE_CONFIG, assertExists } from "../pipeline";
 import {
     assertTuning,
     REFERENCE_HEIGHT_METRES,
@@ -67,13 +67,12 @@ export interface IRigidProp {
 
 export interface IBodyOverride {
     exclude?: true;
-    kind?: PhysicsBodyKind;
     attachBone?: SkeletonBone;
     segmentedParts?: readonly number[];
     clothSeed?: CharacterVector;
     columns?: number;
     rows?: number;
-    feel?: Partial<IPhysicsFeel>;
+    feel?: Partial<IClothFeel>;
 }
 
 export interface ICharacterReferences {
@@ -144,7 +143,7 @@ const CHARACTER_RECIPES: readonly ICharacterRecipe[] = [
         },
         props: [{ segmentedParts: [7, 9, 57] }, { segmentedParts: [32] }, { segmentedParts: [22] }],
         overrides: {
-            cloth_cloak: { segmentedParts: [0], attachBone: "spine_03", columns: 5, rows: 9 },
+            cloth_cloak: { segmentedParts: [0], attachBone: "spine_03" },
         },
         joints: {
             sourceSha256: "ee6890aa599ed206f7869d63a7a2c5f4fbfdd2fbda9b511374f2540ff1c2d3db",
@@ -197,13 +196,10 @@ export class AssetManifest {
     static assertCharacterReady(recipe: IResolvedCharacterRecipe): void {
         if (!PASCAL_CASE.test(recipe.name))
             throw new Error(`character name ${recipe.name} must be PascalCase letters and digits`);
-        if (!fs.existsSync(recipe.source))
-            throw new Error(`${recipe.name}: source model not found: ${recipe.source}`);
-        if (!fs.existsSync(recipe.skeleton))
-            throw new Error(`${recipe.name}: skeleton not found: ${recipe.skeleton}`);
+        assertExists(recipe.source, `${recipe.name}: source model not found: ${recipe.source}`);
+        assertExists(recipe.skeleton, `${recipe.name}: skeleton not found: ${recipe.skeleton}`);
         for (const reference of [recipe.references.riggedModel, recipe.references.segmentedModel])
-            if (!fs.existsSync(reference))
-                throw new Error(`${recipe.name}: reference model not found: ${reference}`);
+            assertExists(reference, `${recipe.name}: reference model not found: ${reference}`);
         AssetManifest.assertBonesExist(recipe);
         assertTuning(recipe.name, recipe.tuning);
         AssetManifest.assertAlbedoGrade(recipe);
@@ -279,6 +275,10 @@ export class AssetManifest {
             if (override.segmentedParts?.length && override.clothSeed)
                 throw new Error(
                     `${recipe.name}: override ${name} has both segmentedParts and clothSeed`
+                );
+            if (override.segmentedParts?.length && (override.columns || override.rows))
+                throw new Error(
+                    `${recipe.name}: override ${name} is a garment; its lattice is sized by physics.nodeSpacing, not columns/rows`
                 );
             if (override.clothSeed && !override.clothSeed.every(Number.isFinite))
                 throw new Error(`${recipe.name}: override ${name} has a non-finite clothSeed`);

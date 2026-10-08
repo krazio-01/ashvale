@@ -10,176 +10,15 @@ export type DeepPartial<T> = {
           : T[Key];
 };
 
-export interface IPrepareTuning {
-    torsoBand: readonly [number, number];
-    torsoHalfWidth: number;
-    spineDepth: number;
-    debrisFaceFraction: number;
-    debrisPropShare: number;
-    debrisTinyFaces: number;
-    propMinPiece: number;
-    propPartReach: number;
-    propPieceMajority: number;
-    propTouchDistance: number;
-    propAxisMargin: number;
-    propAxisExtension: number;
-    propGrowShare: number;
-    garmentPieceMajority: number;
-    garmentMinIsland: number;
-    propSmoothIterations: number;
-    thinTo: number;
-    thicknessRayStart: number;
-    thicknessLimit: number;
-    clothSeedReach: number;
-}
+type Widened<T> = T extends number
+    ? number
+    : T extends readonly unknown[]
+      ? { readonly [Key in keyof T]: Widened<T[Key]> }
+      : { [Key in keyof T]: Widened<T[Key]> };
 
-export interface IUnwrapTuning {
-    padding: number;
-    iterations: number;
-}
+export type IPipelineTuning = Widened<typeof BASE_TUNING>;
 
-export interface IBakeTuning {
-    samples: number;
-    cageExtrusion: number;
-    rayDistance: number;
-    marginPixels: number;
-    roughness: number;
-    minNormalLength: number;
-    normalDonorCount: number;
-}
-
-export interface IJointsTuning {
-    skinMinSaturation: number;
-    skinMinRed: number;
-    bodyMinThickness: number;
-    legSlack: number;
-    torsoBandHalfHeight: number;
-    handCentringIterations: number;
-    armAxisPathIndex: number;
-    handBand: readonly [number, number];
-    handMinOffset: number;
-    handRadius: number;
-    minHandVertices: number;
-    footBandTop: number;
-    minFootVertices: number;
-    footSplitIterations: number;
-    footGrowTop: number;
-    footGrowRadius: number;
-    heelSearchTop: number;
-    heelBand: number;
-    ankleAboveHeel: number;
-    ankleAlongFoot: number;
-    toeToBall: number;
-    ankleSliceRadius: number;
-    sliceStep: number;
-    sliceHalf: number;
-    armTrackRadius: number;
-    armTorsoClearance: number;
-    minSlicePoints: number;
-    shoulderTrackMargin: number;
-    upperArmBelowShoulder: number;
-    upperArmOutsideTorso: readonly [number, number];
-    headHalfWidth: number;
-    headRadius: number;
-    headTopShare: number;
-    bodyExtentPercentiles: readonly [number, number];
-    widthPercentiles: readonly [number, number];
-    centringIterations: number;
-    headTopSlice: number;
-    spineCurveDegree: number;
-    mirrorSearch: number;
-    mirrorStep: number;
-    mirrorSlice: number;
-    mirrorDistanceCap: number;
-    mirrorHalfWidth: { torso: number; neck: number; head: number };
-    wristEdgeShare: number;
-    handEndShare: number;
-    knuckleAlongHand: number;
-}
-
-export interface IPhysicsTuning {
-    fadeRows: number;
-    seamFadeDistance: number;
-    nodeSigmaCells: number;
-    minCell: number;
-    colliderSectors: number;
-    colliderAlong: readonly [number, number];
-    colliderMinRadius: number;
-    colliderShrink: number;
-    colliderMaxRadius: {
-        torso: number;
-        upperArm: number;
-        lowerArm: number;
-        thigh: number;
-        calf: number;
-    };
-    minBodyVertices: number;
-    minPointsForCapsule: number;
-    latticeTop: number;
-    garmentFadeDistance: number;
-}
-
-export interface IRigTuning {
-    heatTransferNeighbours: number;
-    heatProxyVoxel: number;
-    thinFrom: number;
-    clothCore: readonly [number, number];
-    clothBodyShare: number;
-    dampedLimbFactor: number;
-    thighShare: number;
-    thighRamp: number;
-    thighSideBlend: number;
-    headZoneBelow: readonly [number, number];
-    headZoneRadius: readonly [number, number];
-    handZoneAlong: readonly [number, number];
-    handZoneRadius: readonly [number, number];
-    fingersPastKnuckles: number;
-    rigidZoneSnap: number;
-    clothSheetThickness: number;
-    limbHeatDominance: number;
-    limbCoreShare: number;
-    garmentArmShare: number;
-    drapeBlendDistance: number;
-}
-
-export interface IWeightsTuning {
-    crotchHalfWidth: number;
-    crotchBelowHip: number;
-    crotchAboveHip: number;
-    smoothingIterations: number;
-    maxInfluences: number;
-    minEdgeLength: number;
-    regionDominance: number;
-    stretchPercentile: number;
-    garmentLiftLimit: number;
-    garmentLiftReach: number;
-}
-
-export interface IPreviewTuning {
-    boneTubeRadius: number;
-}
-
-export interface IDetectionTuning {
-    minClothArea: number;
-    minClothFaces: number;
-    maxPhysicsBodies: number;
-    clothCellSize: number;
-    sideDeadZone: number;
-}
-
-export interface IPipelineTuning {
-    prepare: IPrepareTuning;
-    unwrap: IUnwrapTuning;
-    bake: IBakeTuning;
-    joints: IJointsTuning;
-    physics: IPhysicsTuning;
-    rig: IRigTuning;
-    weights: IWeightsTuning;
-    preview: IPreviewTuning;
-    detection: IDetectionTuning;
-}
-
-const BASE_TUNING: IPipelineTuning = {
+const BASE_TUNING = {
     prepare: {
         torsoBand: [0.95, 1.25],
         torsoHalfWidth: 0.14,
@@ -269,11 +108,19 @@ const BASE_TUNING: IPipelineTuning = {
         colliderAlong: [0.1, 0.9],
         colliderMinRadius: 0.02,
         colliderShrink: 0.9,
-        colliderMaxRadius: { torso: 0.3, upperArm: 0.12, lowerArm: 0.1, thigh: 0.2, calf: 0.15 },
+        colliderClearance: 0.015,
+        colliderSectorPercentile: { torso: 50, upperArm: 50, lowerArm: 50, thigh: 75, calf: 75 },
+        colliderMaxRadius: { torso: 0.3, upperArm: 0.12, lowerArm: 0.1, thigh: 0.22, calf: 0.2 },
         minBodyVertices: 40,
         minPointsForCapsule: 20,
         latticeTop: 0.5,
         garmentFadeDistance: 0.2,
+        nodeSpacing: 0.08,
+        minRowVertices: 20,
+        homeBlendDepth: 0.6,
+        latticeMinBlend: 0.01,
+        minWrapFacing: 0.3,
+        uncoveredBlend: 0.5,
     },
     rig: {
         heatTransferNeighbours: 3,
@@ -308,6 +155,8 @@ const BASE_TUNING: IPipelineTuning = {
         stretchPercentile: 99.5,
         garmentLiftLimit: 0.03,
         garmentLiftReach: 0.02,
+        latticeStretchRatio: 1.1,
+        drivenBlend: 0.001,
     },
     preview: { boneTubeRadius: 0.007 },
     detection: {
@@ -317,7 +166,7 @@ const BASE_TUNING: IPipelineTuning = {
         clothCellSize: 0.15,
         sideDeadZone: 0.05,
     },
-};
+} as const;
 
 const ROLE_TUNING: Record<CharacterRole, DeepPartial<IPipelineTuning>> = {
     player: {},
@@ -331,6 +180,10 @@ const SHARE_PATHS = [
     "prepare.garmentPieceMajority",
     "rig.garmentArmShare",
     "physics.latticeTop",
+    "physics.latticeMinBlend",
+    "physics.minWrapFacing",
+    "physics.uncoveredBlend",
+    "weights.drivenBlend",
     "prepare.debrisFaceFraction",
     "prepare.debrisPropShare",
     "rig.clothBodyShare",
@@ -376,35 +229,80 @@ const numbersIn = (value: unknown, path: string): [string, number][] => {
 export const resolveTuning = (
     role: CharacterRole,
     overrides: DeepPartial<IPipelineTuning> | undefined
-): IPipelineTuning => mergeDeep(mergeDeep(BASE_TUNING, ROLE_TUNING[role]), overrides);
+): IPipelineTuning =>
+    mergeDeep(mergeDeep<IPipelineTuning>(BASE_TUNING, ROLE_TUNING[role]), overrides);
 
-const WHOLE_NUMBER_PATHS = [
-    "prepare.debrisTinyFaces",
-    "prepare.propMinPiece",
-    "prepare.propSmoothIterations",
-    "prepare.garmentMinIsland",
-    "unwrap.padding",
-    "unwrap.iterations",
-    "weights.smoothingIterations",
-    "weights.maxInfluences",
-    "detection.minClothFaces",
-    "detection.maxPhysicsBodies",
-] as const;
+const SECTOR_PERCENTILE_PATHS = Object.keys(BASE_TUNING.physics.colliderSectorPercentile).map(
+    (group) => `physics.colliderSectorPercentile.${group}`
+);
 
-const POSITIVE_PATHS = [
-    "prepare.propTouchDistance",
-    "prepare.propAxisMargin",
-    "prepare.propAxisExtension",
-    "physics.seamFadeDistance",
-    "detection.clothCellSize",
-    "detection.minClothArea",
-    "physics.minCell",
-    "rig.drapeBlendDistance",
-    "physics.garmentFadeDistance",
-    "weights.garmentLiftLimit",
-    "weights.garmentLiftReach",
-    "prepare.garmentMinIsland",
-] as const;
+interface ITuningRule {
+    paths: readonly string[];
+    isValid: (value: number) => boolean;
+    requirement: (value: number) => string;
+}
+
+const TUNING_RULES: readonly ITuningRule[] = [
+    {
+        paths: [
+            "prepare.debrisTinyFaces",
+            "prepare.propMinPiece",
+            "prepare.propSmoothIterations",
+            "prepare.garmentMinIsland",
+            "unwrap.padding",
+            "unwrap.iterations",
+            "weights.smoothingIterations",
+            "weights.maxInfluences",
+            "detection.minClothFaces",
+            "detection.maxPhysicsBodies",
+            "physics.minRowVertices",
+        ],
+        isValid: (value) => Number.isInteger(value) && value >= 0,
+        requirement: () => "must be a whole number of at least 0",
+    },
+    {
+        paths: [
+            "prepare.propTouchDistance",
+            "prepare.propAxisMargin",
+            "prepare.propAxisExtension",
+            "physics.seamFadeDistance",
+            "detection.clothCellSize",
+            "detection.minClothArea",
+            "physics.minCell",
+            "rig.drapeBlendDistance",
+            "physics.garmentFadeDistance",
+            "weights.garmentLiftLimit",
+            "weights.garmentLiftReach",
+            "prepare.garmentMinIsland",
+            "physics.nodeSpacing",
+            "physics.colliderClearance",
+            "physics.minRowVertices",
+            "physics.homeBlendDepth",
+            "physics.minWrapFacing",
+            "physics.uncoveredBlend",
+            ...SECTOR_PERCENTILE_PATHS,
+            "weights.latticeStretchRatio",
+            "weights.drivenBlend",
+        ],
+        isValid: (value) => value > 0,
+        requirement: () => "must be above 0",
+    },
+    {
+        paths: ["detection.minClothFaces"],
+        isValid: (value) => value >= 3,
+        requirement: () => "must be at least 3",
+    },
+    {
+        paths: SECTOR_PERCENTILE_PATHS,
+        isValid: (value) => value <= 100,
+        requirement: () => "must be at most 100",
+    },
+    {
+        paths: SHARE_PATHS,
+        isValid: (value) => value >= 0 && value <= 1,
+        requirement: (value) => `${value} must be between 0 and 1`,
+    },
+];
 
 const valueAt = (tuning: IPipelineTuning, path: string): number =>
     path
@@ -415,17 +313,9 @@ export const assertTuning = (name: string, tuning: IPipelineTuning): void => {
     for (const [path, value] of numbersIn(tuning, ""))
         if (!Number.isFinite(value))
             throw new Error(`${name}: tuning ${path} is not a finite number`);
-    for (const path of WHOLE_NUMBER_PATHS)
-        if (!Number.isInteger(valueAt(tuning, path)) || valueAt(tuning, path) < 0)
-            throw new Error(`${name}: tuning ${path} must be a whole number of at least 0`);
-    for (const path of POSITIVE_PATHS)
-        if (!(valueAt(tuning, path) > 0))
-            throw new Error(`${name}: tuning ${path} must be above 0`);
-    if (tuning.detection.minClothFaces < 3)
-        throw new Error(`${name}: tuning detection.minClothFaces must be at least 3`);
-    for (const path of SHARE_PATHS) {
-        const value = valueAt(tuning, path);
-        if (value < 0 || value > 1)
-            throw new Error(`${name}: tuning ${path} ${value} must be between 0 and 1`);
-    }
+    for (const { paths, isValid, requirement } of TUNING_RULES)
+        for (const path of paths) {
+            const value = valueAt(tuning, path);
+            if (!isValid(value)) throw new Error(`${name}: tuning ${path} ${requirement(value)}`);
+        }
 };
