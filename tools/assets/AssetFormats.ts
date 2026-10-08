@@ -2,16 +2,74 @@ import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import { NodeIO } from "@gltf-transform/core";
+import {
+    EXTMeshoptCompression,
+    KHRMeshQuantization,
+    KHRTextureBasisu,
+} from "@gltf-transform/extensions";
+import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
+import { readJsonFile } from "../pipeline";
 
 export const TEXTURE_ROLE = { base: "base", normal: "normal", strip: "strip" } as const;
 
-export type TextureRole = (typeof TEXTURE_ROLE)[keyof typeof TEXTURE_ROLE];
-
 const ROLE_PRIORITY: Record<TextureRole, number> = { strip: 0, normal: 1, base: 2 };
+const BASISU_EXTENSION = "KHR_texture_basisu";
+const IMAGE_HEAD_BYTES = 65536;
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const KTX2_IDENTIFIER = Buffer.from([
+    0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
+export const COOKED_EXTENSIONS = [KHRTextureBasisu, KHRMeshQuantization, EXTMeshoptCompression];
+const ENCODE_ATTEMPT_LIMIT = 3;
+const BLOCK_SIZE = 4;
+
+const NORMAL_ENCODE_ARGS = [
+    "--format",
+    "R8G8B8A8_UNORM",
+    "--assign-tf",
+    "linear",
+    "--encode",
+    "uastc",
+    "--uastc-quality",
+    "2",
+    "--zstd",
+    "18",
+];
+
+const BASE_ENCODE_ARGS = [
+    "--format",
+    "R8G8B8A8_SRGB",
+    "--assign-tf",
+    "srgb",
+    "--encode",
+    "basis-lz",
+    "--clevel",
+    "2",
+    "--qlevel",
+    "200",
+];
+
+const execFileAsync = promisify(execFile);
+
+export const createGltfIo = async (
+    extensions: Parameters<NodeIO["registerExtensions"]>[0],
+    withEncoder = false
+): Promise<NodeIO> => {
+    await Promise.all([MeshoptDecoder.ready, withEncoder && MeshoptEncoder.ready]);
+    return new NodeIO().registerExtensions(extensions).registerDependencies({
+        "meshopt.decoder": MeshoptDecoder,
+        ...(withEncoder && { "meshopt.encoder": MeshoptEncoder }),
+    });
+};
+
+export type TextureRole = (typeof TEXTURE_ROLE)[keyof typeof TEXTURE_ROLE];
 
 interface ITextureReference {
     index: number;
 }
+
+type TextureHolder = Partial<Record<string, ITextureReference>>;
 
 interface IGltfMaterial {
     pbrMetallicRoughness?: {
@@ -28,6 +86,25 @@ interface IBasisuTexture {
     extensions: { KHR_texture_basisu: { source: number } };
 }
 
+const TEXTURE_SLOTS: readonly { owner?: "pbrMetallicRoughness"; key: string; role: TextureRole }[] =
+    [
+        { owner: "pbrMetallicRoughness", key: "baseColorTexture", role: TEXTURE_ROLE.base },
+        { key: "normalTexture", role: TEXTURE_ROLE.normal },
+        { key: "emissiveTexture", role: TEXTURE_ROLE.base },
+        {
+            owner: "pbrMetallicRoughness",
+            key: "metallicRoughnessTexture",
+            role: TEXTURE_ROLE.strip,
+        },
+        { key: "occlusionTexture", role: TEXTURE_ROLE.strip },
+    ];
+
+export const textureSlotsOf = (material: IGltfMaterial) =>
+    TEXTURE_SLOTS.map(({ owner, key, role }) => {
+        const holder = (owner ? material[owner] : material) as TextureHolder | undefined;
+        return { holder, key, role, reference: holder?.[key] };
+    });
+
 export interface IGltfJson {
     images?: { uri?: string; mimeType?: string; extensions?: unknown }[];
     textures?: { source?: number; sampler?: number; extensions?: unknown }[];
@@ -35,6 +112,11 @@ export interface IGltfJson {
     buffers?: { uri?: string }[];
     extensionsUsed?: string[];
     extensionsRequired?: string[];
+}
+
+interface IImageDimensions {
+    width: number;
+    height: number;
 }
 
 export class TextureRoleMap {
@@ -76,10 +158,7 @@ export class GltfDocument {
     }
 
     static read(filePath: string): GltfDocument {
-        return new GltfDocument(
-            filePath,
-            JSON.parse(fs.readFileSync(filePath, "utf8")) as IGltfJson
-        );
+        return new GltfDocument(filePath, readJsonFile<IGltfJson>(filePath));
     }
 
     get directory(): string {
@@ -87,225 +166,157 @@ export class GltfDocument {
     }
 
     recordTextureRoles(roles: TextureRoleMap): void {
-        const images = (this.json.images ?? []).map((image) =>
-            image.uri ? path.join(this.directory, decodeURIComponent(image.uri)) : undefined
-        );
+        const images = (this.json.images ?? []).map((image) => this.imagePath(image.uri));
         const imagePathForTexture = (index: number): string | undefined =>
             images[(this.json.textures ?? [])[index]?.source ?? -1];
 
         for (const material of this.json.materials ?? []) {
-            const pbr = material.pbrMetallicRoughness ?? {};
-            if (pbr.baseColorTexture)
-                roles.record(imagePathForTexture(pbr.baseColorTexture.index), TEXTURE_ROLE.base);
-            if (material.emissiveTexture)
-                roles.record(
-                    imagePathForTexture(material.emissiveTexture.index),
-                    TEXTURE_ROLE.base
-                );
-            if (material.normalTexture)
-                roles.record(
-                    imagePathForTexture(material.normalTexture.index),
-                    TEXTURE_ROLE.normal
-                );
-            if (pbr.metallicRoughnessTexture)
-                roles.record(
-                    imagePathForTexture(pbr.metallicRoughnessTexture.index),
-                    TEXTURE_ROLE.strip
-                );
-            if (material.occlusionTexture)
-                roles.record(
-                    imagePathForTexture(material.occlusionTexture.index),
-                    TEXTURE_ROLE.strip
-                );
+            for (const { reference, role } of textureSlotsOf(material))
+                if (reference) roles.record(imagePathForTexture(reference.index), role);
         }
     }
 
     rewriteForKtx2(roles: TextureRoleMap): void {
-        const document = this.json;
-
-        for (const material of document.materials ?? []) {
-            delete material.occlusionTexture;
-            if (material.pbrMetallicRoughness)
-                delete material.pbrMetallicRoughness.metallicRoughnessTexture;
-        }
-
-        const newImageIndexByOldIndex = new Map<number, number>();
-        const newImages: { uri: string; mimeType: string }[] = [];
-        for (const [index, image] of (document.images ?? []).entries()) {
-            if (!image.uri) continue;
-            const role = roles.roleOf(path.join(this.directory, decodeURIComponent(image.uri)));
-            if (role !== TEXTURE_ROLE.base && role !== TEXTURE_ROLE.normal) continue;
-
-            newImageIndexByOldIndex.set(index, newImages.length);
-            newImages.push({
-                uri: image.uri.replace(/\.(png|jpe?g)$/i, ".ktx2"),
-                mimeType: "image/ktx2",
-            });
-        }
-
-        const newTextureIndexByOldIndex = new Map<number, number>();
-        const newTextures: IBasisuTexture[] = [];
-        for (const [index, texture] of (document.textures ?? []).entries()) {
-            const source = newImageIndexByOldIndex.get(texture.source ?? -1);
-            if (source === undefined) continue;
-
-            newTextureIndexByOldIndex.set(index, newTextures.length);
-            const basisuTexture: IBasisuTexture = {
-                extensions: { KHR_texture_basisu: { source } },
-            };
-            if (texture.sampler !== undefined) basisuTexture.sampler = texture.sampler;
-            newTextures.push(basisuTexture);
-        }
-
-        const remapTextureReference = (
-            owner: Record<string, unknown> | undefined,
-            key: string
-        ): void => {
-            const reference = owner?.[key] as ITextureReference | undefined;
-            if (!owner || !reference) return;
-            const index = newTextureIndexByOldIndex.get(reference.index);
-            if (index === undefined) delete owner[key];
-            else reference.index = index;
-        };
-
-        for (const material of document.materials ?? []) {
-            remapTextureReference(
-                material.pbrMetallicRoughness as Record<string, unknown> | undefined,
-                "baseColorTexture"
-            );
-            remapTextureReference(material as unknown as Record<string, unknown>, "normalTexture");
-            remapTextureReference(
-                material as unknown as Record<string, unknown>,
-                "emissiveTexture"
-            );
-        }
-
-        if (newImages.length > 0) document.images = newImages;
-        else delete document.images;
-
-        if (newTextures.length > 0) document.textures = newTextures;
-        else delete document.textures;
-
-        if (newImages.length > 0) {
-            const declareBasisuExtension = (list: string[] | undefined): string[] => [
-                ...new Set([...(list ?? []), "KHR_texture_basisu"]),
-            ];
-            document.extensionsUsed = declareBasisuExtension(document.extensionsUsed);
-            document.extensionsRequired = declareBasisuExtension(document.extensionsRequired);
-        }
+        this.dropStrippedTextureSlots();
+        const imageIndexMap = this.rebuildImages(roles);
+        const textureIndexMap = this.rebuildTextures(imageIndexMap);
+        this.remapMaterialTextures(textureIndexMap);
+        if (imageIndexMap.size > 0) this.declareBasisuExtension();
     }
 
     writeTo(outputPath: string): void {
         fs.mkdirSync(path.dirname(outputPath), { recursive: true });
         fs.writeFileSync(outputPath, JSON.stringify(this.json));
     }
-}
 
-const execFileAsync = promisify(execFile);
+    private imagePath(uri: string | undefined): string | undefined {
+        return uri ? path.join(this.directory, decodeURIComponent(uri)) : undefined;
+    }
 
-interface IImageDimensions {
-    width: number;
-    height: number;
-}
+    private dropStrippedTextureSlots(): void {
+        for (const material of this.json.materials ?? [])
+            for (const { holder, key, role } of textureSlotsOf(material))
+                if (role === TEXTURE_ROLE.strip) delete holder?.[key];
+    }
 
-const IMAGE_HEAD_BYTES = 65536;
-const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-const KTX2_IDENTIFIER = Buffer.from([
-    0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a,
-]);
-const ENCODE_ATTEMPT_LIMIT = 3;
+    private rebuildImages(roles: TextureRoleMap): Map<number, number> {
+        const newIndexByOldIndex = new Map<number, number>();
+        const images: { uri: string; mimeType: string }[] = [];
+        for (const [index, image] of (this.json.images ?? []).entries()) {
+            if (!image.uri) continue;
+            const role = roles.roleOf(this.imagePath(image.uri)!);
+            if (role !== TEXTURE_ROLE.base && role !== TEXTURE_ROLE.normal) continue;
 
-const NORMAL_ENCODE_ARGS = [
-    "--format",
-    "R8G8B8A8_UNORM",
-    "--assign-tf",
-    "linear",
-    "--encode",
-    "uastc",
-    "--uastc-quality",
-    "2",
-    "--zstd",
-    "18",
-];
+            newIndexByOldIndex.set(index, images.length);
+            images.push({
+                uri: image.uri.replace(/\.(png|jpe?g)$/i, ".ktx2"),
+                mimeType: "image/ktx2",
+            });
+        }
+        if (images.length > 0) this.json.images = images;
+        else delete this.json.images;
+        return newIndexByOldIndex;
+    }
 
-const BASE_ENCODE_ARGS = [
-    "--format",
-    "R8G8B8A8_SRGB",
-    "--assign-tf",
-    "srgb",
-    "--encode",
-    "basis-lz",
-    "--clevel",
-    "2",
-    "--qlevel",
-    "200",
-];
+    private rebuildTextures(imageIndexMap: Map<number, number>): Map<number, number> {
+        const newIndexByOldIndex = new Map<number, number>();
+        const textures: IBasisuTexture[] = [];
+        for (const [index, texture] of (this.json.textures ?? []).entries()) {
+            const source = imageIndexMap.get(texture.source ?? -1);
+            if (source === undefined) continue;
 
-function readHead(file: string, size: number): Buffer {
-    const descriptor = fs.openSync(file, "r");
-    try {
-        const head = Buffer.alloc(size);
-        const bytesRead = fs.readSync(descriptor, head, 0, size, 0);
-        return head.subarray(0, bytesRead);
-    } finally {
-        fs.closeSync(descriptor);
+            newIndexByOldIndex.set(index, textures.length);
+            const basisuTexture: IBasisuTexture = {
+                extensions: { KHR_texture_basisu: { source } },
+            };
+            if (texture.sampler !== undefined) basisuTexture.sampler = texture.sampler;
+            textures.push(basisuTexture);
+        }
+        if (textures.length > 0) this.json.textures = textures;
+        else delete this.json.textures;
+        return newIndexByOldIndex;
+    }
+
+    private remapMaterialTextures(textureIndexMap: Map<number, number>): void {
+        for (const material of this.json.materials ?? [])
+            for (const { holder, key, role, reference } of textureSlotsOf(material)) {
+                if (!holder || !reference || role === TEXTURE_ROLE.strip) continue;
+                const index = textureIndexMap.get(reference.index);
+                if (index === undefined) delete holder[key];
+                else reference.index = index;
+            }
+    }
+
+    private declareBasisuExtension(): void {
+        const declare = (list: string[] | undefined): string[] => [
+            ...new Set([...(list ?? []), BASISU_EXTENSION]),
+        ];
+        this.json.extensionsUsed = declare(this.json.extensionsUsed);
+        this.json.extensionsRequired = declare(this.json.extensionsRequired);
     }
 }
 
-function scanImageDimensions(buffer: Buffer): IImageDimensions | undefined {
-    try {
-        if (buffer.subarray(0, 8).equals(PNG_SIGNATURE))
-            return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
-
-        let offset = 2;
-        while (offset < buffer.length) {
-            if (buffer[offset] !== 0xff) {
-                offset += 1;
-                continue;
-            }
-
-            while (buffer[offset + 1] === 0xff) offset += 1;
-
-            const marker = buffer[offset + 1];
-            const isStartOfFrame =
-                marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
-            if (isStartOfFrame)
-                return {
-                    height: buffer.readUInt16BE(offset + 5),
-                    width: buffer.readUInt16BE(offset + 7),
-                };
-
-            offset += 2 + buffer.readUInt16BE(offset + 2);
+class ImageFile {
+    static readHead(file: string, size: number): Buffer {
+        const descriptor = fs.openSync(file, "r");
+        try {
+            const head = Buffer.alloc(size);
+            const bytesRead = fs.readSync(descriptor, head, 0, size, 0);
+            return head.subarray(0, bytesRead);
+        } finally {
+            fs.closeSync(descriptor);
         }
-    } catch {
+    }
+
+    static readDimensions(file: string): IImageDimensions {
+        const dimensions =
+            ImageFile.scanDimensions(ImageFile.readHead(file, IMAGE_HEAD_BYTES)) ??
+            ImageFile.scanDimensions(fs.readFileSync(file));
+        if (!dimensions) throw new Error(`could not read image dimensions: ${file}`);
+        return dimensions;
+    }
+
+    private static scanDimensions(buffer: Buffer): IImageDimensions | undefined {
+        try {
+            if (buffer.subarray(0, 8).equals(PNG_SIGNATURE))
+                return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+
+            let offset = 2;
+            while (offset < buffer.length) {
+                if (buffer[offset] !== 0xff) {
+                    offset += 1;
+                    continue;
+                }
+
+                while (buffer[offset + 1] === 0xff) offset += 1;
+
+                const marker = buffer[offset + 1];
+                const isStartOfFrame =
+                    marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+                if (isStartOfFrame)
+                    return {
+                        height: buffer.readUInt16BE(offset + 5),
+                        width: buffer.readUInt16BE(offset + 7),
+                    };
+
+                offset += 2 + buffer.readUInt16BE(offset + 2);
+            }
+        } catch {
+            return undefined;
+        }
+
         return undefined;
     }
-
-    return undefined;
-}
-
-function readImageDimensions(file: string): IImageDimensions {
-    const dimensions =
-        scanImageDimensions(readHead(file, IMAGE_HEAD_BYTES)) ??
-        scanImageDimensions(fs.readFileSync(file));
-    if (!dimensions) throw new Error(`could not read image dimensions: ${file}`);
-    return dimensions;
 }
 
 export class TextureEncoder {
-    private readonly maxTextureSize: number;
-
-    constructor(maxTextureSize: number) {
-        this.maxTextureSize = maxTextureSize;
-    }
-
     static assertInstalled(): void {
         execFileSync("ktx", ["--version"], { stdio: "ignore" });
     }
 
     static isValidKtx2(file: string): boolean {
         try {
-            return readHead(file, KTX2_IDENTIFIER.length).equals(KTX2_IDENTIFIER);
+            return ImageFile.readHead(file, KTX2_IDENTIFIER.length).equals(KTX2_IDENTIFIER);
         } catch {
             return false;
         }
@@ -319,9 +330,14 @@ export class TextureEncoder {
             ?.trim();
     }
 
-    async encode(sourceFile: string, role: TextureRole, outputFile: string): Promise<void> {
+    static async encode(
+        sourceFile: string,
+        role: TextureRole,
+        outputFile: string,
+        maxTextureSize: number
+    ): Promise<void> {
         fs.mkdirSync(path.dirname(outputFile), { recursive: true });
-        const { width, height } = this.fitDimensions(sourceFile);
+        const { width, height } = TextureEncoder.fitDimensions(sourceFile, maxTextureSize);
         const args = [
             "create",
             "--generate-mipmap",
@@ -342,11 +358,11 @@ export class TextureEncoder {
         }
     }
 
-    private fitDimensions(file: string): IImageDimensions {
-        const { width, height } = readImageDimensions(file);
-        const scale = Math.min(1, this.maxTextureSize / Math.max(width, height));
+    private static fitDimensions(file: string, maxTextureSize: number): IImageDimensions {
+        const { width, height } = ImageFile.readDimensions(file);
+        const scale = Math.min(1, maxTextureSize / Math.max(width, height));
         const snapToBlockMultiple = (value: number): number =>
-            Math.max(4, Math.floor((value * scale) / 4) * 4);
+            Math.max(BLOCK_SIZE, Math.floor((value * scale) / BLOCK_SIZE) * BLOCK_SIZE);
         return { width: snapToBlockMultiple(width), height: snapToBlockMultiple(height) };
     }
 }
