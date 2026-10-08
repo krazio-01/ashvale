@@ -13,7 +13,6 @@ export const PLAYER = {
     walkSpeed: PLAYER_HEIGHT * STRIDE.walk,
     sprintSpeed: PLAYER_HEIGHT * 5,
     jumpForce: 11,
-    maxHealth: 100,
     unarmedDamage: 5,
     strafeSpeed: PLAYER_HEIGHT * STRIDE.strafe,
     crouchSpeed: PLAYER_HEIGHT * 1.0,
@@ -22,8 +21,6 @@ export const PLAYER = {
     turnSmoothing: 15,
     groundAcceleration: 34,
     airAcceleration: 14,
-    movingSpeedThreshold: PLAYER_HEIGHT * 0.12,
-    airborneGraceSeconds: 0.12,
     spawnPosition: vec3(0, 2, 6),
     colliderOffset: 0.02,
     maxSlopeClimbAngle: (45 * Math.PI) / 180,
@@ -41,6 +38,10 @@ export const DODGE = {
     targetTravelMetres: 0.9,
     leftClipTravelMetres: 0.28,
     rightClipTravelMetres: 0.31,
+};
+
+export const ATTACK = {
+    paceScale: 0.75,
 };
 
 export const STAMINA = {

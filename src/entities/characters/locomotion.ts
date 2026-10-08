@@ -22,46 +22,44 @@ const STRAFE_DIRECTIONS: readonly IDirectionalClip[] = [
     { clip: CLIP.strafeForwardLeft, angle: -EIGHTH_TURN },
 ];
 
-export const PLAYER_FREE_LOCOMOTION: IFreeLocomotion = {
-    kind: "free",
-    idle: CLIP.idle,
-    idleVariation: {
-        clips: PLAYER_RELAXED_FIDGETS,
-        afterSeconds: IDLE_VARIATION.relaxedDelaySeconds,
-    },
-    gaits: [
+function freeLocomotion(
+    idle: string,
+    gaits: IFreeLocomotion["gaits"],
+    idleVariation?: IFreeLocomotion["idleVariation"]
+): IFreeLocomotion {
+    return { kind: "free", idle, ...(idleVariation && { idleVariation }), gaits };
+}
+
+function strafeLocomotion(speed: number): IStrafeLocomotion {
+    return { kind: "strafe", idle: CLIP.combatIdle, speed, directions: STRAFE_DIRECTIONS };
+}
+
+export const PLAYER_FREE_LOCOMOTION = freeLocomotion(
+    CLIP.idle,
+    [
         { clip: CLIP.walk, speed: PLAYER.walkSpeed },
         { clip: CLIP.sprint, speed: PLAYER.sprintSpeed },
     ],
-};
+    {
+        clips: PLAYER_RELAXED_FIDGETS,
+        afterSeconds: IDLE_VARIATION.relaxedDelaySeconds,
+        weaponGazeClips: [CLIP.idleFidgetSwordInspect],
+    }
+);
 
-export const PLAYER_CROUCH_LOCOMOTION: IFreeLocomotion = {
-    kind: "free",
-    idle: CLIP.crouchIdle,
-    gaits: [{ clip: CLIP.crouchWalk, speed: PLAYER.crouchSpeed }],
-};
+export const PLAYER_CROUCH_LOCOMOTION = freeLocomotion(CLIP.crouchIdle, [
+    { clip: CLIP.crouchWalk, speed: PLAYER.crouchSpeed },
+]);
 
-export const PLAYER_STRAFE_LOCOMOTION: IStrafeLocomotion = {
-    kind: "strafe",
-    idle: CLIP.combatIdle,
-    speed: PLAYER.strafeSpeed,
-    directions: STRAFE_DIRECTIONS,
-};
+export const PLAYER_STRAFE_LOCOMOTION = strafeLocomotion(PLAYER.strafeSpeed);
 
 export function enemyRelaxedLocomotion(height: number, idleDelaySeconds: number): IFreeLocomotion {
-    return {
-        kind: "free",
-        idle: CLIP.idle,
-        idleVariation: { clips: ENEMY_RELAXED_FIDGETS, afterSeconds: idleDelaySeconds },
-        gaits: [{ clip: CLIP.walk, speed: height * STRIDE.walk }],
-    };
+    return freeLocomotion(CLIP.idle, [{ clip: CLIP.walk, speed: height * STRIDE.walk }], {
+        clips: ENEMY_RELAXED_FIDGETS,
+        afterSeconds: idleDelaySeconds,
+    });
 }
 
 export function enemyCombatLocomotion(height: number): IStrafeLocomotion {
-    return {
-        kind: "strafe",
-        idle: CLIP.combatIdle,
-        speed: height * STRIDE.strafe,
-        directions: STRAFE_DIRECTIONS,
-    };
+    return strafeLocomotion(height * STRIDE.strafe);
 }
