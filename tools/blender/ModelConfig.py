@@ -27,10 +27,6 @@ class SkeletonDescriptor:
             raise KeyError(f"skeleton descriptor has no bone role {key}") from None
 
     @property
-    def bones(self):
-        return self._section("bones")
-
-    @property
     def pelvis(self):
         return self._bone("pelvis")
 
@@ -57,10 +53,6 @@ class SkeletonDescriptor:
     @property
     def spine(self):
         return tuple(self._bone("spine"))
-
-    @property
-    def suffixes(self):
-        return tuple(self._section("sides")[side] for side in self.SIDES)
 
     def suffix(self, side):
         return self._section("sides")[side]
@@ -156,10 +148,6 @@ class SkeletonDescriptor:
                 return self.arm(side)[-1]
         raise KeyError(f"skeleton descriptor has no side matching bone {name}")
 
-    @property
-    def measured_joints(self):
-        return tuple(self._section("measuredJoints"))
-
 
 class Proportions:
     def __init__(self, height, reference_height):
@@ -227,3 +215,7 @@ class ModelSettings:
 
 def detected_bodies(work):
     return json.loads((Path(work) / "detection.json").read_text())
+
+
+def write_detection(work, detection):
+    (Path(work) / "detection.json").write_text(json.dumps(detection, indent=2))
