@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
             ],
         },
         {
-            source: "/models/characters/CombatClips.glb",
+            source: "/models/characters/:path*",
             headers: [
                 {
                     key: "Cache-Control",
