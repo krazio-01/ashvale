@@ -13,6 +13,10 @@ def normalised(vector):
     return vector / max(float(np.linalg.norm(vector)), 1e-12)
 
 
+def principal_axes(points):
+    return np.linalg.svd(points - points.mean(axis=0), full_matrices=False)[2]
+
+
 def to_blender(points):
     return np.asarray(points) @ BLENDER_TO_GLTF
 
