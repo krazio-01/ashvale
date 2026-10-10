@@ -32,6 +32,10 @@ export class IntentQueue {
         this.entries.splice(index, 1);
     }
 
+    removeBefore(index: number): void {
+        this.entries.splice(0, index);
+    }
+
     removeThrough(index: number): void {
         this.entries.splice(0, index + 1);
     }
@@ -40,10 +44,10 @@ export class IntentQueue {
         this.entries.length = 0;
     }
 
-    tick(realDeltaSeconds: number): void {
+    tick(realDeltaSeconds: number, frozen: ReadonlySet<IntentKind> | null): void {
         for (let index = this.entries.length - 1; index >= 0; index -= 1) {
             const entry = this.entries[index];
-            if (!entry) continue;
+            if (!entry || frozen?.has(entry.intent)) continue;
 
             entry.ageSeconds += realDeltaSeconds;
             if (entry.ageSeconds > this.lifetimeSeconds) this.entries.splice(index, 1);

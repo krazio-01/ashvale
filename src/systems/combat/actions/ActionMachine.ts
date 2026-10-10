@@ -2,6 +2,7 @@ import { IntentQueue } from "@/systems/combat/actions/IntentQueue";
 import {
     allowsCancel,
     firstStrikeAt,
+    hasCrossed,
     isWithin,
     secondsSinceStart,
 } from "@/systems/combat/actions/MoveTimeline";
@@ -13,7 +14,9 @@ import type {
     IntentKind,
     MoveTag,
     ReactionTier,
+    Stance,
 } from "@/types/combat";
+import type { WeaponMount } from "@/types/weapons";
 
 type MachineState = "locomotion" | "move" | "reaction" | "staggered" | "paired" | "dead";
 
@@ -26,6 +29,7 @@ export interface IMachineInput {
     hasDirectionalInput: boolean;
     dodgeSide: DodgeSide | null;
     isGrounded: boolean;
+    stance: Stance;
     spendStamina: (cost: number) => boolean;
 }
 
@@ -48,6 +52,7 @@ export interface IMachineOutput {
     isParrying: boolean;
     isArmored: boolean;
     chargeLevel: number;
+    mountTarget: WeaponMount | null;
 }
 
 const TAG_FOR_INTENT: Record<IntentKind, MoveTag> = {
@@ -58,7 +63,10 @@ const TAG_FOR_INTENT: Record<IntentKind, MoveTag> = {
     shoot: "shoot",
     slide: "dodge",
     jump: "jump",
+    draw: "stance",
 };
+
+const WEAPON_INTENTS: ReadonlySet<IntentKind> = new Set(["light", "heavy", "parry"]);
 
 function meetsGround(move: IMoveDefinition, isGrounded: boolean): boolean {
     const requirement = move.requires ?? "grounded";
@@ -74,6 +82,7 @@ function validateMoveSet(moveSet: IMoveSet): void {
         ...Object.values(moveSet.airEntry),
         moveSet.air?.airborne,
         moveSet.air?.land,
+        ...Object.values(moveSet.stanceEntry ?? {}),
     ];
     for (const move of Object.values(moveSet.moves))
         references.push(
@@ -107,6 +116,7 @@ export class ActionMachine {
         isParrying: false,
         isArmored: false,
         chargeLevel: 0,
+        mountTarget: null,
     };
 
     private readonly intents = new IntentQueue(
@@ -130,6 +140,7 @@ export class ActionMachine {
     private pendingReaction: ReactionTier | null = null;
     private pendingStagger = false;
     private pendingLocomotion = false;
+    private pendingMount: WeaponMount | null = null;
 
     constructor(moveSet: IMoveSet, clipSeconds: (clip: string) => number) {
         this.moveSet = moveSet;
@@ -269,7 +280,10 @@ export class ActionMachine {
     }
 
     tick(input: IMachineInput): IMachineOutput {
-        this.intents.tick(input.realDeltaSeconds);
+        this.intents.tick(
+            input.realDeltaSeconds,
+            this.currentMove?.tags.includes("stance") ? WEAPON_INTENTS : null
+        );
 
         if (this.currentState === "reaction" || this.currentState === "staggered")
             this.tickTimedState(input.deltaSeconds);
@@ -321,6 +335,8 @@ export class ActionMachine {
         }
 
         this.time = move.loop ? next % 1 : Math.min(1, next);
+        if (hasCrossed(move.mountAt?.fraction, this.previousTime, this.time))
+            this.pendingMount = move.mountAt?.target ?? null;
     }
 
     private land(isSteering: boolean): void {
@@ -347,8 +363,9 @@ export class ActionMachine {
                 continue;
             }
 
-            if (!this.permits(TAG_FOR_INTENT[intent]) || !meetsGround(target, input.isGrounded))
-                continue;
+            const isStanceMove = target.tags.includes("stance");
+            const tag = isStanceMove ? "stance" : TAG_FOR_INTENT[intent];
+            if (!this.permits(tag) || !meetsGround(target, input.isGrounded)) continue;
 
             if (!input.spendStamina(target.staminaCost)) {
                 intents.removeAt(index);
@@ -356,7 +373,8 @@ export class ActionMachine {
                 continue;
             }
 
-            intents.removeThrough(index);
+            if (isStanceMove && intent !== "draw") intents.removeBefore(index);
+            else intents.removeThrough(index);
             this.beginMove(target);
             return;
         }
@@ -385,6 +403,23 @@ export class ActionMachine {
 
     private resolveIntent(intent: IntentKind, input: IMachineInput): IMoveDefinition | null {
         const move = this.currentMove;
+        const stanceEntry = this.moveSet.stanceEntry;
+        if (stanceEntry) {
+            const mountTarget = this.currentState === "move" ? move?.mountAt?.target : undefined;
+            const stanceAfter: Stance = mountTarget
+                ? mountTarget === "hand"
+                    ? "drawn"
+                    : "sheathed"
+                : input.stance;
+            const stanceId =
+                intent === "draw"
+                    ? stanceEntry[stanceAfter]
+                    : WEAPON_INTENTS.has(intent) && stanceAfter === "sheathed"
+                      ? stanceEntry.sheathed
+                      : undefined;
+            if (stanceId) return this.moveSet.moves[stanceId] ?? null;
+            if (intent === "draw") return null;
+        }
 
         const nextId = this.currentState === "move" ? move?.next?.[intent] : undefined;
         if (nextId) return this.moveSet.moves[nextId] ?? null;
@@ -474,6 +509,8 @@ export class ActionMachine {
             move?.parrySeconds !== undefined && output.elapsedSeconds <= move.parrySeconds;
         output.isArmored = isWithin(move?.armor, output.time);
         output.chargeLevel = this.charge;
+        output.mountTarget = this.pendingMount;
+        this.pendingMount = null;
 
         return output;
     }
