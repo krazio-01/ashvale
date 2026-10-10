@@ -1,30 +1,35 @@
 import fs from "node:fs";
 import path from "node:path";
-import { NodeIO, getBounds } from "@gltf-transform/core";
-import {
-    EXTMeshoptCompression,
-    KHRMeshQuantization,
-    KHRTextureBasisu,
-} from "@gltf-transform/extensions";
+import { getBounds } from "@gltf-transform/core";
 import { meshopt } from "@gltf-transform/functions";
-import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
+import { MeshoptEncoder } from "meshoptimizer";
 import {
     FileTree,
     PIPELINE_CONFIG,
     PipelineCommand,
+    assertExists,
+    describeError,
     formatMegabytes,
+    isWithin,
     toMegabytes,
 } from "../pipeline";
 import { ASSET_CATALOGUE } from "./AssetCategories";
-import { GltfDocument, TextureEncoder, TextureRoleMap } from "./AssetFormats";
+import { Findings } from "./AssetValidation";
+import {
+    COOKED_EXTENSIONS,
+    GltfDocument,
+    TextureEncoder,
+    TEXTURE_ROLE,
+    TextureRoleMap,
+    createGltfIo,
+    textureSlotsOf,
+} from "./AssetFormats";
 
 export class AssetCooker extends PipelineCommand {
     readonly name = "cook";
     readonly usage = "";
     readonly summary =
         "Encode textures to KTX2, rewrite glTF and meshopt geometry into public/models";
-
-    private readonly encoder = new TextureEncoder(PIPELINE_CONFIG.maxTextureSize);
 
     async run(): Promise<void> {
         const { sourceRoot, outputRoot } = PIPELINE_CONFIG;
@@ -47,11 +52,11 @@ export class AssetCooker extends PipelineCommand {
     }
 
     private scanSource(sourceRoot: string, outputRoot: string): FileTree {
-        if (!fs.existsSync(sourceRoot)) throw new Error(`source not found: ${sourceRoot}`);
+        assertExists(sourceRoot, `source not found: ${sourceRoot}`);
 
         const sourcePath = path.resolve(sourceRoot);
         const outputPath = path.resolve(outputRoot);
-        if (sourcePath === outputPath || sourcePath.startsWith(outputPath + path.sep))
+        if (isWithin(outputPath, sourcePath))
             throw new Error(`output would delete the source: ${outputPath} contains ${sourcePath}`);
 
         const source = FileTree.scan(sourceRoot);
@@ -79,7 +84,14 @@ export class AssetCooker extends PipelineCommand {
             const outputFile = source
                 .mirrorPath(sourceFile, PIPELINE_CONFIG.outputRoot)
                 .replace(/\.(png|jpe?g)$/i, ".ktx2");
-            await this.encoder.encode(sourceFile, role, outputFile);
+            await TextureEncoder.encode(
+                sourceFile,
+                role,
+                outputFile,
+                ASSET_CATALOGUE.ownerOfSourceFile(sourceFile).maxTextureSizeFor(
+                    source.relativePath(sourceFile)
+                )
+            );
 
             encoded += 1;
             if (encoded % 10 === 0) console.log(`  encoded ${encoded}/${texturesToEncode.length}`);
@@ -107,13 +119,7 @@ export class AssetCooker extends PipelineCommand {
     }
 
     private async compressGeometry(): Promise<void> {
-        await Promise.all([MeshoptEncoder.ready, MeshoptDecoder.ready]);
-        const io = new NodeIO()
-            .registerExtensions([KHRTextureBasisu, KHRMeshQuantization, EXTMeshoptCompression])
-            .registerDependencies({
-                "meshopt.decoder": MeshoptDecoder,
-                "meshopt.encoder": MeshoptEncoder,
-            });
+        const io = await createGltfIo(COOKED_EXTENSIONS, true);
 
         const output = FileTree.scan(PIPELINE_CONFIG.outputRoot);
         const compressible = output
@@ -175,11 +181,11 @@ export class TranscoderInstaller extends PipelineCommand {
 
         for (const file of files) {
             const sourcePath = path.join(sourceRoot, file);
-            if (!fs.existsSync(sourcePath))
-                throw new Error(
-                    `basis transcoder missing at ${sourcePath} — is three installed? ` +
-                        `KTX2 textures cannot decode without it.`
-                );
+            assertExists(
+                sourcePath,
+                `basis transcoder missing at ${sourcePath} — is three installed? ` +
+                    `KTX2 textures cannot decode without it.`
+            );
             fs.copyFileSync(sourcePath, path.join(outputRoot, file));
         }
 
@@ -187,18 +193,15 @@ export class TranscoderInstaller extends PipelineCommand {
     }
 }
 
-const describeError = (error: unknown): string =>
-    error instanceof Error ? error.message : String(error);
-
 export class AssetVerifier extends PipelineCommand {
     readonly name = "verify";
     readonly usage = "";
     readonly summary = "Check cooked output: bindings, budgets, normal encoding, geometry drift";
 
-    private failures: string[] = [];
+    private failures = new Findings();
 
     async run(): Promise<void> {
-        this.failures = [];
+        this.failures = new Findings();
         const output = FileTree.scan(PIPELINE_CONFIG.outputRoot);
 
         this.checkTextureBindings(output);
@@ -252,15 +255,14 @@ export class AssetVerifier extends PipelineCommand {
             }
 
             for (const material of json.materials ?? []) {
-                const indices = [
-                    material.pbrMetallicRoughness?.baseColorTexture?.index,
-                    material.normalTexture?.index,
-                    material.emissiveTexture?.index,
-                ];
-                for (const index of indices)
-                    if (index !== undefined && (index < 0 || index >= textures.length))
+                for (const { reference, role } of textureSlotsOf(material))
+                    if (
+                        reference &&
+                        role !== TEXTURE_ROLE.strip &&
+                        (reference.index < 0 || reference.index >= textures.length)
+                    )
                         this.failures.push(
-                            `${gltfPath}: material references out-of-range texture index ${index}`
+                            `${gltfPath}: material references out-of-range texture index ${reference.index}`
                         );
             }
         }
@@ -316,8 +318,10 @@ export class AssetVerifier extends PipelineCommand {
         console.log(
             `  ${label}: ${megabytes.toFixed(1)} / ${budget} MB (${isWithinBudget ? "ok" : "OVER BUDGET"})`
         );
-        if (!isWithinBudget)
-            this.failures.push(`${label}: ${megabytes.toFixed(1)} MB exceeds ${budget} MB budget`);
+        this.failures.failIf(
+            !isWithinBudget,
+            `${label}: ${megabytes.toFixed(1)} MB exceeds ${budget} MB budget`
+        );
     }
 
     private checkNormalMapEncoding(output: FileTree): void {
@@ -343,10 +347,7 @@ export class AssetVerifier extends PipelineCommand {
             return;
         }
 
-        await MeshoptDecoder.ready;
-        const io = new NodeIO()
-            .registerExtensions([KHRTextureBasisu, KHRMeshQuantization, EXTMeshoptCompression])
-            .registerDependencies({ "meshopt.decoder": MeshoptDecoder });
+        const io = await createGltfIo(COOKED_EXTENSIONS);
 
         let compared = 0;
         for (const cookedPath of output.withExtensions(".gltf", ".glb")) {

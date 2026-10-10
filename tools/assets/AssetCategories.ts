@@ -14,6 +14,7 @@ import {
 import { ASSET_PIPELINES } from "./AssetBuilds";
 import { createGltfIo } from "./AssetFormats";
 import { AssetManifest } from "./AssetManifest";
+import { resolveTuning } from "./PipelineTuning";
 
 export interface IAssetCategoryOptions {
     name: string;
@@ -171,14 +172,34 @@ export class CharacterCategory extends AssetCategory {
 }
 
 export class WeaponCategory extends AssetCategory {
+    private static readonly TRIANGLES_FLAG = "--triangles";
+
     override get importUsage(): string {
-        return "<pack.blend|pack.fbx> [objectName=OutputName ...] (no renames: list meshes)";
+        return (
+            "<pack.blend|pack.fbx> [objectName=OutputName ...] (no renames: list meshes) " +
+            "| <model.glb|model.gltf> <objectName|*>=OutputName [--triangles N] " +
+            "(* joins every mesh; aligned to +Y, decimated)"
+        );
     }
 
     override async importSource(args: readonly string[]): Promise<void> {
-        const [packFile, ...renames] = args;
+        const flagIndex = args.indexOf(WeaponCategory.TRIANGLES_FLAG);
+        const positional = args.filter(
+            (_, index) => flagIndex < 0 || (index !== flagIndex && index !== flagIndex + 1)
+        );
+        const [packFile, ...renames] = positional;
         if (!packFile) throw this.usageError();
         assertExists(packFile, `weapon pack not found: ${packFile}`);
+
+        const isSingleModel = /\.(glb|gltf)$/i.test(packFile);
+        const triangleBudget =
+            flagIndex >= 0
+                ? Number(args[flagIndex + 1])
+                : isSingleModel
+                  ? resolveTuning("player", undefined).weapons.triangles
+                  : undefined;
+        if (triangleBudget !== undefined && !(Number.isInteger(triangleBudget) && triangleBudget > 0))
+            throw new Error(`${WeaponCategory.TRIANGLES_FLAG} needs a whole number above 0`);
 
         fs.mkdirSync(this.sourceDirectory, { recursive: true });
         new Blender().runScript(
@@ -187,6 +208,7 @@ export class WeaponCategory extends AssetCategory {
                 "split-weapons",
                 path.resolve(packFile),
                 path.resolve(this.sourceDirectory),
+                ...(triangleBudget === undefined ? [] : [WeaponCategory.TRIANGLES_FLAG, String(triangleBudget)]),
                 ...renames,
             ],
             ["MESH", "EXPORTED"]
@@ -237,7 +259,7 @@ export const ASSET_CATALOGUE = new AssetCatalogue([
         compressesGeometry: false,
         fileBudgetsMegabytes: { "CombatClips.glb": 6 },
     }),
-    new WeaponCategory({ name: "weapons", budgetMegabytes: 4 }),
+    new WeaponCategory({ name: "weapons", budgetMegabytes: 6 }),
     new EnvironmentCategory({ name: "woodland", budgetMegabytes: 10 }),
     new EnvironmentCategory({ name: "medieval-village", budgetMegabytes: 8 }),
     new EnvironmentCategory({ name: "highlands", budgetMegabytes: 6 }),
