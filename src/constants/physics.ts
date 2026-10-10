@@ -5,6 +5,7 @@ export const PHYSICS = {
     dataKey: "physics",
     dataVersion: 3,
     boneNamePrefix: "phys_",
+    capsuleSlots: { carriedWeapon: 0 },
     epsilon: { geometry: 1e-12, motion: 1e-9 },
     step: {
         substepsPerFrame: 12,

@@ -140,6 +140,7 @@ export class ParticleSolver {
     private readonly colliderTo: Float64Array;
     private readonly colliderNow: Float64Array;
     private readonly colliderBound: Float64Array;
+    private readonly colliderEnabled: Uint8Array;
     private readonly candidates: Uint8Array;
     private readonly candidateCount: Uint8Array;
     private readonly colliderCapacity: number;
@@ -171,6 +172,7 @@ export class ParticleSolver {
         this.colliderTo = new Float64Array(colliders * COLLIDER_STRIDE);
         this.colliderNow = new Float64Array(colliders * COLLIDER_STRIDE);
         this.colliderBound = new Float64Array(colliders * BOUND_STRIDE);
+        this.colliderEnabled = new Uint8Array(colliders);
         this.candidates = new Uint8Array(particles * colliders);
         this.candidateCount = new Uint8Array(particles);
         this.colliderCapacity = colliders;
@@ -228,6 +230,18 @@ export class ParticleSolver {
         this.colliderTo[offset + 5] = end.z;
         this.colliderTo[offset + 6] = radius;
         this.colliderCount = Math.max(this.colliderCount, index + 1);
+        if (this.colliderEnabled[index]) return;
+        this.colliderEnabled[index] = 1;
+        for (let field = 0; field < COLLIDER_STRIDE; field++)
+            this.colliderFrom[offset + field] = this.colliderNow[offset + field] =
+                this.colliderTo[offset + field];
+        this.wake();
+    }
+
+    disableCollider(index: number): void {
+        if (!this.colliderEnabled[index]) return;
+        this.colliderEnabled[index] = 0;
+        this.wake();
     }
 
     place(index: number, position: IVector3): void {
@@ -333,6 +347,7 @@ export class ParticleSolver {
             if (ParticleSolver.travelSquared(this.homeFrom, this.homeTo, offset) >= limitSquared)
                 return true;
         for (let collider = 0; collider < this.colliderCount; collider++) {
+            if (!this.colliderEnabled[collider]) continue;
             const offset = collider * COLLIDER_STRIDE;
             if (
                 ParticleSolver.travelSquared(this.colliderFrom, this.colliderTo, offset) >=
@@ -367,6 +382,7 @@ export class ParticleSolver {
         let y = centres[offset + 1];
         let z = centres[offset + 2];
         for (let collider = 0; collider < this.colliderCount; collider++) {
+            if (!this.colliderEnabled[collider]) continue;
             const start = collider * COLLIDER_STRIDE;
             const surface = colliders[start + 6] + feel.collisionThickness + feel.deflectionMargin;
             const reach = surface + softness;
@@ -438,6 +454,7 @@ export class ParticleSolver {
 
     private boundColliders(): void {
         for (let collider = 0; collider < this.colliderCount; collider++) {
+            if (!this.colliderEnabled[collider]) continue;
             const from = collider * COLLIDER_STRIDE;
             const bound = collider * BOUND_STRIDE;
             let reach = 0;
@@ -484,6 +501,7 @@ export class ParticleSolver {
                                     (this.position[offset + 2] - motion.originZ) ** 2
                             );
                 for (let collider = 0; collider < this.colliderCount; collider++) {
+                    if (!this.colliderEnabled[collider]) continue;
                     const bound = collider * BOUND_STRIDE;
                     const reach = this.colliderBound[bound + 3] + margin;
                     const dx = this.position[offset] - this.colliderBound[bound];
@@ -883,6 +901,7 @@ export class ParticleSolver {
             Math.hypot(this.velocity[offset], this.velocity[offset + 1], this.velocity[offset + 2])
         );
         for (let collider = 0; collider < this.colliderCount; collider++) {
+            if (!this.colliderEnabled[collider]) continue;
             const start = collider * COLLIDER_STRIDE;
             const depth =
                 this.colliderNow[start + 6] +

@@ -4,6 +4,10 @@ export type PhysicsBodyKind = "sheet";
 
 export type PhysicsDetail = "full" | "reduced" | "frozen";
 
+export interface ICapsuleSource {
+    worldCapsule(start: Vector3, end: Vector3): number | null;
+}
+
 export interface IVector3 {
     x: number;
     y: number;
