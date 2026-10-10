@@ -22,6 +22,7 @@ interface IGarmentMeasurements {
     detachedNodes: number;
     maxDrapeArmShare: number;
     liftMm: number;
+    liftSamples: number;
     latticeNodes: number;
     nodeSpacingMm: number;
     uncoveredVertices: number;
@@ -267,7 +268,7 @@ export class CharacterValidator extends BuildValidator<
         const liftLimitMm = weights.garmentLiftLimit * 1000 * heightFactor(build.recipe);
         console.log(
             `  garment rim ${garment.rimVertices}, mantle ${garment.mantleVertices}, drape ${garment.drapeVertices}, ` +
-                `detached ${garment.detachedNodes}, drape arm share ${garment.maxDrapeArmShare}, lift ${garment.liftMm} mm`
+                `detached ${garment.detachedNodes}, drape arm share ${garment.maxDrapeArmShare}, lift ${garment.liftMm} mm (${garment.liftSamples} drape nodes measured)`
         );
         const failures = new Findings();
         failures.failIf(

@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { SKELETONS, type ISkeletonDescriptor, type SkeletonName } from "@/constants/characters";
 import type { IClothFeel } from "@/types/physics";
@@ -117,19 +116,18 @@ export interface IResolvedCharacterRecipe {
     joints: IConfirmedJoints | null;
 }
 
-const expandHome = (file: string): string =>
-    file.startsWith("~/") ? path.join(os.homedir(), file.slice(2)) : file;
+const fromGameAssets = (file: string): string => path.join(PIPELINE_CONFIG.gameAssetsRoot, file);
 
 const CHARACTER_RECIPES: readonly ICharacterRecipe[] = [
     {
         name: "Player",
         role: "player",
-        source: "~/Downloads/assets/Charaters/models/tripo_texture_character.glb",
+        source: "Charaters/models/player/carachter_texture.glb",
         skeleton: "ual",
         fit: { facingYawDegrees: -90, heightMetres: 1.78 },
         references: {
-            riggedModel: "~/Downloads/assets/Charaters/models/tripo_rig_character.glb",
-            segmentedModel: "~/Downloads/assets/Charaters/models/tripo_mesh_character.glb",
+            riggedModel: "Charaters/models/player/character_rig.glb",
+            segmentedModel: "Charaters/models/player/character_meshed.glb",
             jointsFromRiggedModel: [
                 "upperarm_l",
                 "lowerarm_l",
@@ -141,36 +139,37 @@ const CHARACTER_RECIPES: readonly ICharacterRecipe[] = [
                 "middle_01_r",
             ],
         },
-        props: [{ segmentedParts: [7, 9, 57] }, { segmentedParts: [32] }, { segmentedParts: [22] }],
+        tuning: { physics: { latticeTop: 0.1 } },
+        props: [{ segmentedParts: [34, 40, 55, 57] }],
         overrides: {
-            cloth_cloak: { segmentedParts: [0], attachBone: "spine_03" },
+            cloth_cloak: { segmentedParts: [0, 8, 12], attachBone: "spine_03" },
         },
         joints: {
-            sourceSha256: "ee6890aa599ed206f7869d63a7a2c5f4fbfdd2fbda9b511374f2540ff1c2d3db",
+            sourceSha256: "9ecfc326cd5bf7d06bacd1e45ca622b7de3055bdaed7f17746be6204a69d67aa",
             positions: {
-                pelvis: [-0.0267, 0.0983, 0.8652],
-                spine_01: [-0.0254, 0.0863, 0.9955],
-                spine_02: [-0.0244, 0.086, 1.1153],
-                spine_03: [-0.0237, 0.0984, 1.2527],
-                neck_01: [-0.0233, 0.1321, 1.4209],
-                Head: [-0.0233, 0.1171, 1.4999],
-                head_top: [-0.0218, 0.086, 1.7657],
-                upperarm_l: [0.1578, 0.1541, 1.4553],
-                lowerarm_l: [0.2688, 0.1264, 1.1846],
-                hand_l: [0.3713, 0.0507, 0.9857],
-                middle_01_l: [0.4294, 0.0191, 0.8654],
-                upperarm_r: [-0.2031, 0.1541, 1.4553],
-                lowerarm_r: [-0.3141, 0.1264, 1.1846],
-                hand_r: [-0.4208, 0.0527, 0.9741],
-                middle_01_r: [-0.4747, 0.0199, 0.8788],
-                thigh_l: [0.0599, 0.0983, 0.8802],
-                calf_l: [0.0949, 0.0523, 0.4888],
-                foot_l: [0.1518, 0.1206, 0.0737],
-                ball_l: [0.1313, -0.001, 0.0148],
-                thigh_r: [-0.1134, 0.0983, 0.8802],
-                calf_r: [-0.1498, 0.0485, 0.4894],
-                foot_r: [-0.1963, 0.1229, 0.0741],
-                ball_r: [-0.1888, -0.0007, 0.0148],
+                pelvis: [-0.0099, 0.0296, 0.8931],
+                spine_01: [-0.0091, 0.0165, 1.0233],
+                spine_02: [-0.0084, 0.0157, 1.1431],
+                spine_03: [-0.0077, 0.028, 1.2806],
+                neck_01: [-0.0069, 0.039, 1.4487],
+                Head: [-0.0066, 0.029, 1.5277],
+                head_top: [-0.0043, 0.0112, 1.7684],
+                upperarm_l: [0.1717, 0.0808, 1.4388],
+                lowerarm_l: [0.2745, 0.0602, 1.1921],
+                hand_l: [0.3784, -0.0159, 0.9908],
+                middle_01_l: [0.4327, -0.0475, 0.8822],
+                upperarm_r: [-0.1847, 0.0808, 1.4388],
+                lowerarm_r: [-0.2874, 0.0602, 1.1921],
+                hand_r: [-0.4112, -0.0195, 0.9901],
+                middle_01_r: [-0.4506, -0.0471, 0.8849],
+                thigh_l: [0.0767, 0.0296, 0.908],
+                calf_l: [0.1152, -0.0124, 0.5168],
+                foot_l: [0.1599, 0.0615, 0.1015],
+                ball_l: [0.1558, -0.0621, 0.0148],
+                thigh_r: [-0.0965, 0.0296, 0.908],
+                calf_r: [-0.1343, -0.0105, 0.5165],
+                foot_r: [-0.1765, 0.0687, 0.1019],
+                ball_r: [-0.1742, -0.062, 0.0148],
             },
         },
     },
@@ -212,7 +211,7 @@ export class AssetManifest {
         return {
             name: recipe.name,
             role: recipe.role,
-            source: expandHome(recipe.source),
+            source: fromGameAssets(recipe.source),
             skeleton: SKELETON[recipe.skeleton].file,
             skeletonDescriptor: SKELETONS[recipe.skeleton],
             clipLibraries: SKELETON[recipe.skeleton].clipLibraries,
@@ -226,8 +225,8 @@ export class AssetManifest {
             props: recipe.props ?? [],
             overrides: recipe.overrides ?? {},
             references: {
-                riggedModel: expandHome(recipe.references.riggedModel),
-                segmentedModel: expandHome(recipe.references.segmentedModel),
+                riggedModel: fromGameAssets(recipe.references.riggedModel),
+                segmentedModel: fromGameAssets(recipe.references.segmentedModel),
                 jointsFromRiggedModel: recipe.references.jointsFromRiggedModel,
             },
             jointNames: SKELETONS[recipe.skeleton].measuredJoints,

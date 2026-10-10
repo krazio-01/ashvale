@@ -42,6 +42,7 @@ const BASE_TUNING = {
         clothSeedReach: 0.03,
     },
     unwrap: { padding: 6, iterations: 2 },
+    weapons: { triangles: 15000 },
     bake: {
         samples: 8,
         cageExtrusion: 0.02,
@@ -155,6 +156,8 @@ const BASE_TUNING = {
         stretchPercentile: 99.5,
         garmentLiftLimit: 0.03,
         garmentLiftReach: 0.02,
+        liftSupportExclusion: 0.005,
+        minLiftSamples: 10,
         latticeStretchRatio: 1.1,
         drivenBlend: 0.001,
     },
@@ -244,6 +247,11 @@ interface ITuningRule {
 
 const TUNING_RULES: readonly ITuningRule[] = [
     {
+        paths: ["weapons.triangles"],
+        isValid: (value) => Number.isInteger(value) && value > 0,
+        requirement: () => "must be a whole number above 0",
+    },
+    {
         paths: [
             "prepare.debrisTinyFaces",
             "prepare.propMinPiece",
@@ -256,6 +264,7 @@ const TUNING_RULES: readonly ITuningRule[] = [
             "detection.minClothFaces",
             "detection.maxPhysicsBodies",
             "physics.minRowVertices",
+            "weights.minLiftSamples",
         ],
         isValid: (value) => Number.isInteger(value) && value >= 0,
         requirement: () => "must be a whole number of at least 0",
@@ -273,6 +282,7 @@ const TUNING_RULES: readonly ITuningRule[] = [
             "physics.garmentFadeDistance",
             "weights.garmentLiftLimit",
             "weights.garmentLiftReach",
+            "weights.liftSupportExclusion",
             "prepare.garmentMinIsland",
             "physics.nodeSpacing",
             "physics.colliderClearance",
