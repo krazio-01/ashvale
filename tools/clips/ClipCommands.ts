@@ -4,11 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { NodeIO, type Document } from "@gltf-transform/core";
+import { Box3, Euler, Matrix4, Quaternion, Vector3 } from "three";
 import { EXTMeshoptCompression } from "@gltf-transform/extensions";
 import { dedup, prune, resample } from "@gltf-transform/functions";
 import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
 import { CLIP } from "@/constants/characters";
-import { PARRY_CLIP_MARKS } from "@/constants/combat";
+import { PLAYER, PLAYER_STARTING_WEAPON } from "@/constants/player";
+import { axisVector, degrees, measureBladeAxes } from "@/lib/helpers";
+import { CLIP_MARKS } from "@/constants/combat";
 import type { IClipMarks } from "@/constants/combat";
 import { ASSET_CATALOGUE } from "../assets/AssetCategories";
 import {
@@ -23,6 +26,7 @@ import {
     CLIP_LIBRARY,
     CLIPS_PROVIDED_BY_CHARACTER_MODEL,
     GAME_FIT,
+    OUTPUT_FPS,
     authoredPoses,
     isAuthoredJob,
     isBeatJob,
@@ -32,7 +36,6 @@ import {
     type SourceRig,
 } from "./combatClipManifest";
 
-const OUTPUT_FPS = 30;
 const TRANSLATION_NODES = new Set(["root", "pelvis"]);
 const RESAMPLE_TOLERANCE = 1e-4;
 const BAKE_LOG_PREFIXES = ["BAKED", "GROUND", "CHECK", "EXPORTED"];
@@ -46,6 +49,12 @@ const MARK_TOLERANCE = 0.002;
 const MAX_MARK_DRIFT_FRAMES = 2;
 const SAME_ROTATION_DEGREES = 0.01;
 const SAME_TRANSLATION_CENTIMETRES = 0.01;
+
+interface ICarryAnchor {
+    bone: string;
+    hilt: number[];
+    blade: number[];
+}
 
 interface IBakedClipMarks extends IClipMarks {
     seconds: number;
@@ -66,12 +75,61 @@ async function createClipIo(): Promise<NodeIO> {
     });
 }
 
+async function carryAnchor(io: NodeIO): Promise<ICarryAnchor> {
+    const carry = PLAYER_STARTING_WEAPON.carry;
+    if (!carry) throw new Error("the player weapon has no carry mount");
+    const weaponRoot = (await io.read(path.join("assets-src", PLAYER_STARTING_WEAPON.modelPath))).getRoot();
+    const bounds = new Box3();
+    for (const node of weaponRoot.listNodes()) {
+        const matrix = new Matrix4().fromArray(node.getWorldMatrix());
+        for (const primitive of node.getMesh()?.listPrimitives() ?? []) {
+            const positions = primitive.getAttribute("POSITION");
+            if (!positions) continue;
+            bounds.union(
+                new Box3(
+                    new Vector3(...positions.getMin([0, 0, 0])),
+                    new Vector3(...positions.getMax([0, 0, 0]))
+                ).applyMatrix4(matrix)
+            );
+        }
+    }
+    const { lengthAxis, bladeSign } = measureBladeAxes(bounds);
+    const characterRoot = (await io.read(CLIP_LIBRARY.target)).getRoot();
+    const bone = characterRoot.listNodes().find((node) => node.getName() === carry.bone);
+    if (!bone) throw new Error(`${CLIP_LIBRARY.target} has no ${carry.bone} bone`);
+    const boneFrame = new Quaternion().setFromRotationMatrix(new Matrix4().fromArray(bone.getWorldMatrix()));
+    const carryRotation = new Quaternion().setFromEuler(
+        new Euler(...(carry.rotationDegrees.map(degrees) as [number, number, number]))
+    );
+    return {
+        bone: carry.bone,
+        hilt: new Vector3(...carry.position).divideScalar(PLAYER.height).applyQuaternion(boneFrame).toArray(),
+        blade: axisVector(lengthAxis, bladeSign, new Vector3()).applyQuaternion(carryRotation).applyQuaternion(boneFrame).toArray(),
+    };
+}
+
+async function gameFit(io: NodeIO): Promise<typeof GAME_FIT & { carry: ICarryAnchor }> {
+    return { ...GAME_FIT, carry: await carryAnchor(io) };
+}
+
 export class ClipCooker extends PipelineCommand {
     readonly name = "cook-clips";
-    readonly usage = "";
-    readonly summary = "Bake every manifest clip in Blender into CombatClips.glb (source + public)";
+    readonly usage = "[--only <ClipName,ClipName> --out <file.glb>]";
+    readonly summary =
+        "Bake every manifest clip in Blender into CombatClips.glb (source + public); --only bakes a subset to --out without publishing";
 
-    async run(): Promise<void> {
+    async run(args: readonly string[]): Promise<void> {
+        const { values } = parseArgs({
+            args: [...args],
+            options: { only: { type: "string" }, out: { type: "string" } },
+        });
+        if (Boolean(values.only) !== Boolean(values.out))
+            throw new Error(`--only and --out go together; usage: ${this.usage}`);
+        const only = values.only?.split(",");
+        const jobs = only ? CLIP_JOBS.filter((job) => only.includes(job.output)) : CLIP_JOBS;
+        if (only && jobs.length !== only.length)
+            throw new Error(`--only names clips with no manifest job: ${only.join(", ")}`);
+
         const io = await createClipIo();
         const workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "combat-clips-"));
         try {
@@ -83,8 +141,8 @@ export class ClipCooker extends PipelineCommand {
                 jobsPath,
                 JSON.stringify({
                     target: path.resolve(CLIP_LIBRARY.target),
-                    jobs: CLIP_JOBS,
-                    game: GAME_FIT,
+                    jobs,
+                    game: await gameFit(io),
                 })
             );
             new Blender().runScript(
@@ -93,6 +151,13 @@ export class ClipCooker extends PipelineCommand {
                 BAKE_LOG_PREFIXES
             );
             await this.stripChannels(io, rawPath, stagedPath);
+            if (values.out) {
+                fs.mkdirSync(path.dirname(path.resolve(values.out)), { recursive: true });
+                fs.copyFileSync(stagedPath, path.resolve(values.out));
+                fs.copyFileSync(marksPath, `${path.resolve(values.out)}.marks.json`);
+                console.log(`subset of ${jobs.length} clips written to ${values.out}, nothing published`);
+                return;
+            }
 
             const animations = (await io.read(stagedPath)).getRoot().listAnimations();
             const names = new Set(animations.map((animation) => animation.getName()));
@@ -164,11 +229,11 @@ export class ClipCooker extends PipelineCommand {
                 grip: clip.grip && { from: normalise(clip.grip.from), to: normalise(clip.grip.to) },
             };
             const isEmpty = Object.keys(baked01.marks).length === 0 && !baked01.grip;
-            const known = PARRY_CLIP_MARKS[name];
+            const known = CLIP_MARKS[name];
             if (!known) {
                 if (!isEmpty)
                     problems.push(
-                        `${name}: missing from PARRY_CLIP_MARKS, baked ${JSON.stringify(baked01, roundMark)}`
+                        `${name}: missing from CLIP_MARKS, baked ${JSON.stringify(baked01, roundMark)}`
                     );
                 continue;
             }
@@ -192,8 +257,8 @@ export class ClipCooker extends PipelineCommand {
                 );
         }
         if (problems.length > 0)
-            throw new Error(`PARRY_CLIP_MARKS is out of date:\n  ${problems.join("\n  ")}`);
-        console.log("PARRY_CLIP_MARKS match the baked clips");
+            throw new Error(`CLIP_MARKS is out of date:\n  ${problems.join("\n  ")}`);
+        console.log("CLIP_MARKS match the baked clips");
     }
 
     private verifyCatalogue(names: Set<string>): void {
@@ -268,7 +333,11 @@ export class ClipAudition extends PipelineCommand {
         const jobPath = path.join(outDirectory, "job.json");
         fs.writeFileSync(
             jobPath,
-            JSON.stringify({ target: path.resolve(CLIP_LIBRARY.target), jobs, game: GAME_FIT })
+            JSON.stringify({
+                target: path.resolve(CLIP_LIBRARY.target),
+                jobs,
+                game: await gameFit(await createClipIo()),
+            })
         );
         const lines = new Blender().runScript(
             PIPELINE_CONFIG.blender.script,
