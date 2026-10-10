@@ -1,5 +1,5 @@
 import { CLIP } from "@/constants/characters";
-import { PARRY_CLIP_MARKS } from "@/constants/combat";
+import { CLIP_MARKS } from "@/constants/combat";
 import type { IClipMarks } from "@/constants/combat";
 import type { HitShape, IMoveDefinition, IReactionClips, ParriedReactions } from "@/types/combat";
 
@@ -17,8 +17,8 @@ export const uniformParried = (clip: string): ParriedReactions => ({
 });
 
 function marksOf(clip: string): IClipMarks {
-    const marks = PARRY_CLIP_MARKS[clip];
-    if (!marks) throw new Error(`no clip marks for "${clip}" in PARRY_CLIP_MARKS`);
+    const marks = CLIP_MARKS[clip];
+    if (!marks) throw new Error(`no clip marks for "${clip}" in CLIP_MARKS`);
     return marks;
 }
 

@@ -32,6 +32,7 @@ const EVERYTHING: readonly MoveTag[] = [
     "shoot",
     "movement",
     "jump",
+    "stance",
 ];
 const SWORD_WARP = { maxDistance: metres(5), strikeDistance: metres(0.45) };
 const SLIDE_GLIDE: IMomentum = { deceleration: PLAYER.height, poseReach: PLAYER.slidePoseReach };
@@ -64,6 +65,27 @@ export const PARRY_DEFLECT_MOVES: Record<
         ),
     ])
 ) as Record<ParryTier, Record<SwingDirection, string>>;
+
+const STANCE_MOVES = {
+    draw: { clip: CLIP.swordDraw, target: "hand" },
+    sheathe: { clip: CLIP.swordSheathe, target: "carry" },
+} as const;
+
+function stanceMove(direction: keyof typeof STANCE_MOVES): IMoveDefinition {
+    const { clip, target } = STANCE_MOVES[direction];
+    const fraction = clipMark(clip, "mount");
+    return move({
+        id: `sword_${direction}`,
+        clip,
+        tags: ["stance"],
+        mountAt: { fraction, target },
+        cancels: [
+            { from: 0, to: fraction, into: ["dodge"] },
+            { from: fraction, to: 1, into: EVERYTHING },
+        ],
+        yieldsToMovement: true,
+    });
+}
 
 function guardMove(id: string, clip: string, fadeSeconds: number): IMoveDefinition {
     return move({
@@ -125,7 +147,7 @@ function comboCancels(chain: number, defensive: number, movement: number): ICanc
     return [
         { from: chain, to: 1, into: ["light", "heavy", "shoot"] },
         { from: defensive, to: 1, into: ["dodge", "parry", "jump"] },
-        { from: movement, to: 1, into: ["movement"] },
+        { from: movement, to: 1, into: ["movement", "stance"] },
     ];
 }
 
@@ -409,7 +431,11 @@ export const PLAYER_MOVES: IMoveSet = {
                 durationSeconds: LAND_SECONDS,
                 fadeSeconds: 0.05,
                 cancels: [
-                    { from: 0, to: 1, into: ["light", "heavy", "dodge", "parry", "shoot", "jump"] },
+                    {
+                        from: 0,
+                        to: 1,
+                        into: ["light", "heavy", "dodge", "parry", "shoot", "jump", "stance"],
+                    },
                     { from: 0.25, to: 1, into: ["movement"] },
                 ],
                 yieldsToMovement: true,
@@ -441,6 +467,8 @@ export const PLAYER_MOVES: IMoveSet = {
                 ],
                 cancels: comboCancels(0.73, 0.63, 0.94),
             }),
+            stanceMove("draw"),
+            stanceMove("sheathe"),
             guardMove("parry", CLIP.parryGuard, PARRY.guardFadeSeconds),
             guardMove("parry_reguard", CLIP.parryReguard, PARRY.reguardFadeSeconds),
             ...PARRY_TIERS.flatMap((tier) =>
@@ -461,6 +489,7 @@ export const PLAYER_MOVES: IMoveSet = {
     sideDodgeEntry: { left: "dodge_left", right: "dodge_right" },
     airEntry: { light: "air_slash" },
     air: { airborne: "airborne", land: "land" },
+    stanceEntry: { sheathed: "sword_draw", drawn: "sword_sheathe" },
     reactions: {
         flinch: [CLIP.reactFlinch, CLIP.reactHitHead],
         knockback: [CLIP.reactCombatDamage],
