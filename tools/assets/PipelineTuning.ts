@@ -43,6 +43,7 @@ const BASE_TUNING = {
     },
     unwrap: { padding: 6, iterations: 2 },
     weapons: { triangles: 15000 },
+    material: { roughness: 0.85, normalScale: 0.3 },
     bake: {
         samples: 8,
         cageExtrusion: 0.02,

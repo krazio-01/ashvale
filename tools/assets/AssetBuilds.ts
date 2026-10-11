@@ -22,7 +22,6 @@ import { CharacterValidator, VALIDATION_LIMITS, type BuildValidator } from "./As
 
 const STAGE_ECHO_PREFIXES = ["STAGE", "CHECK", "WARN"];
 const WORKSPACE_FOLDERS = ["validation", "out", "arrays", "preview"];
-const MATERIAL_ROUGHNESS = 0.85;
 const IDENTITY_TOLERANCE = 1e-6;
 const METRES_TO_MILLIMETRES = 1000;
 
@@ -397,8 +396,9 @@ class GraftStage extends BuildStage<IResolvedCharacterRecipe> {
             .createMaterial(build.name)
             .setBaseColorTexture(texture("baseColor", "baseColor.png"))
             .setNormalTexture(texture("normal", "normal.png"))
+            .setNormalScale(build.recipe.tuning.material.normalScale)
             .setMetallicFactor(0)
-            .setRoughnessFactor(MATERIAL_ROUGHNESS)
+            .setRoughnessFactor(build.recipe.tuning.material.roughness)
             .setDoubleSided(true);
         const primitive = document.createPrimitive().setMaterial(material);
         for (const [semantic, type, file, kind] of PRIMITIVE_ATTRIBUTES)
