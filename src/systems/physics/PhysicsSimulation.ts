@@ -69,6 +69,7 @@ export class PhysicsSimulation {
     private previousDetail: PhysicsDetail = "full";
     private hasReference = false;
     private clock = 0;
+    private calmSeconds = 0;
 
     constructor(definition: IPhysicsDefinition, binding: IPhysicsBinding) {
         if (definition.version !== PHYSICS.dataVersion)
@@ -114,9 +115,12 @@ export class PhysicsSimulation {
         }
         this.updateColliders();
         this.binding.referenceWorld(this.nextPosition, this.nextRotation);
-        if (!this.hasReference || wasFrozen || this.isTeleport(seconds)) this.restart();
+        if (!this.hasReference || this.isTeleport(seconds)) this.restart(wasFrozen);
         else this.carryReference(seconds);
         this.rememberReference();
+        const { calmSeconds, dampingScale } = PHYSICS.restart;
+        this.solver.dampingScale = 1 + (dampingScale - 1) * (this.calmSeconds / calmSeconds);
+        this.calmSeconds = Math.max(0, this.calmSeconds - seconds);
         this.clock += seconds;
         this.updateWind();
         this.environment.floorY = frame.floorY;
@@ -133,10 +137,11 @@ export class PhysicsSimulation {
     reset(): void {
         this.binding.prepareFrame();
         this.binding.referenceWorld(this.nextPosition, this.nextRotation);
-        this.restart();
+        this.restart(false);
     }
 
-    private restart(): void {
+    private restart(isCalmed: boolean): void {
+        this.calmSeconds = isCalmed ? PHYSICS.restart.calmSeconds : 0;
         for (const body of this.bodies) body.resetToRest(this.solver, this.binding);
         this.updateColliders();
         this.solver.snapFrame();

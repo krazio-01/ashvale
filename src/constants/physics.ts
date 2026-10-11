@@ -26,12 +26,13 @@ export const PHYSICS = {
     reference: {
         linearInertia: 0.6,
         angularInertia: 0.6,
-        flingScale: 1,
+        flingScale: 0.8,
         maxLinearSpeed: metres(8),
         maxAngularSpeed: degrees(540),
         teleportDistance: metres(1.5),
         teleportAngle: degrees(90),
     },
+    restart: { holdSeconds: 0.18, calmSeconds: 1.5, dampingScale: 10 },
     environment: {
         gravity: metres(9.81),
         wind: {
@@ -50,7 +51,7 @@ export const PHYSICS = {
         gravityScale: 1,
         windExposure: 1,
         tetherScale: 1.03,
-        leashMax: metres(1.3),
+        leashMax: metres(1),
         leashCurve: 1,
         backstopRadius: metres(0.3),
         backstopOffset: metres(0.01),
