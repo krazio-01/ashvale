@@ -75,6 +75,7 @@ const COLLIDER_STRIDE = 7;
 const BOUND_STRIDE = 4;
 const DEGENERATE = PHYSICS.epsilon.geometry;
 const LINK_KINDS: readonly LinkKind[] = ["stretch", "bend"];
+const MAX_COLLIDERS = 255;
 const COMPLIANCE_KEY = { stretch: "stretchCompliance", bend: "bendCompliance" } as const;
 
 function createLinkSet(capacity: number): ILinkSet {
@@ -102,6 +103,7 @@ const EMPTY_METRICS: Readonly<ISolverMetrics> = {
 export class ParticleSolver {
     readonly metrics: ISolverMetrics = { ...EMPTY_METRICS };
     measuring = false;
+    dampingScale = 1;
     particleCount = 0;
     private tetherCount = 0;
     private colliderCount = 0;
@@ -147,6 +149,8 @@ export class ParticleSolver {
 
     constructor(capacity: ISolverCapacity) {
         const { particles, stretchLinks, bendLinks, tethers, colliders } = capacity;
+        if (colliders > MAX_COLLIDERS)
+            throw new Error(`solver supports ${MAX_COLLIDERS} colliders, asked for ${colliders}`);
         this.links = { stretch: createLinkSet(stretchLinks), bend: createLinkSet(bendLinks) };
         this.position = new Float64Array(particles * 3);
         this.predicted = new Float64Array(particles * 3);
@@ -431,7 +435,9 @@ export class ParticleSolver {
 
     private beginFrame(seconds: number, stepSeconds: number, carrying: boolean): void {
         for (let body = 0; body < this.feels.length; body++) {
-            this.dampingDecay[body] = Math.exp(-this.feels[body].damping * stepSeconds);
+            this.dampingDecay[body] = Math.exp(
+                -this.feels[body].damping * this.dampingScale * stepSeconds
+            );
             this.frictionKeep[body] = Math.exp(-this.feels[body].friction * stepSeconds);
         }
         for (let particle = 0; particle < this.particleCount; particle++) {
