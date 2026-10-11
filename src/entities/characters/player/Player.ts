@@ -1,6 +1,8 @@
 import { Vector3 } from "three";
 import type { Camera, Vector3Tuple } from "three";
 import type { IMotorSpec } from "@/systems/combat/core/CharacterMotor";
+import { PHYSICS } from "@/constants/physics";
+import type { ICapsuleSource } from "@/types/physics";
 import { CombatCharacter } from "@/entities/characters/CombatCharacter";
 import {
     finisherKindFor,
@@ -14,6 +16,7 @@ import { PairedAnimationDirector } from "@/systems/combat/finishers/PairedAnimat
 import {
     PLAYER_CROUCH_LOCOMOTION,
     PLAYER_FREE_LOCOMOTION,
+    PLAYER_SHEATHED_FREE_LOCOMOTION,
     PLAYER_STRAFE_LOCOMOTION,
 } from "@/entities/characters/locomotion";
 import {
@@ -62,7 +65,7 @@ import type {
 } from "@/types/combat";
 import type { IWorldContext } from "@/types/world";
 
-export class Player extends CombatCharacter {
+export class Player extends CombatCharacter implements ICapsuleSource {
     private readonly controller = new PlayerController();
     private readonly followCamera: PlayerCamera;
     private readonly finishers: PairedAnimationDirector;
@@ -105,6 +108,7 @@ export class Player extends CombatCharacter {
             moveSet: PLAYER_MOVES,
             freeLocomotion: PLAYER_FREE_LOCOMOTION,
             strafeLocomotion: PLAYER_STRAFE_LOCOMOTION,
+            sheathedLocomotion: PLAYER_SHEATHED_FREE_LOCOMOTION,
             victimRig: "humanoid",
             turnSmoothing: PLAYER.turnSmoothing,
             modelYawOffset: CHARACTER.modelYawOffset,
@@ -119,6 +123,7 @@ export class Player extends CombatCharacter {
         this.spawnPoint.fromArray(spawnPosition);
         this.spawnYaw = spawnYaw;
         this.equipWeapon(PLAYER_STARTING_WEAPON);
+        this.procedural.attachCapsule(PHYSICS.capsuleSlots.carriedWeapon, this);
         this.followCamera = new PlayerCamera(
             camera,
             context.physicsWorld,
@@ -138,6 +143,10 @@ export class Player extends CombatCharacter {
 
     get stealthVisibility(): number {
         return this.isCrouching ? SIGHT.crouchedVisibility : 1;
+    }
+
+    worldCapsule(start: Vector3, end: Vector3): number | null {
+        return this.weapon?.mounted === "carry" ? this.weapon.worldCapsule(start, end) : null;
     }
 
     update(deltaSeconds: number, interpolationAlpha: number): void {
@@ -275,6 +284,7 @@ export class Player extends CombatCharacter {
         this.motor.enableCollision();
         this.placeAt(this.spawnPoint, this.spawnYaw);
         this.animator.returnToLocomotion(COMBAT_TIMING.locomotionReturnFade);
+        this.freezePhysics(PHYSICS.restart.holdSeconds);
         this.publishVitals();
         store.getState().hud.setPlayerAlive(true);
     }
@@ -429,6 +439,8 @@ export class Player extends CombatCharacter {
     private issueCombatIntents(commands: IPlayerCommands): void {
         if (this.motor.isGrounded && this.finisherTrigger.isRequested && this.tryFinisher()) return;
 
+        if (commands.draw) this.machine.queue("draw");
+
         if (commands.light) {
             if (this.motor.isGrounded && this.finisherTrigger.inStreak && this.tryFinisher())
                 return;
@@ -551,7 +563,13 @@ export class Player extends CombatCharacter {
     private tryFinisher(): boolean {
         const victim = this.promptVictim;
         const kind = this.promptKind;
-        return victim !== null && kind !== null && this.startFinisher(victim, kind);
+        if (victim === null || kind === null) return false;
+        if (this.stance === "sheathed") {
+            if (this.finisherTrigger.isRequested) this.finisherTrigger.reset();
+            if (!this.machine.activeMove?.tags.includes("stance")) this.machine.queue("draw");
+            return false;
+        }
+        return this.startFinisher(victim, kind);
     }
 
     private startFinisher(victim: CombatCharacter, kind: FinisherKind): boolean {
