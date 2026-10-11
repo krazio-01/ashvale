@@ -24,6 +24,7 @@ export class IntentQueue {
     }
 
     push(intent: IntentKind): void {
+        if (intent === "draw" && this.entries.some((entry) => entry.intent === "draw")) return;
         if (this.entries.length >= this.capacity) this.entries.shift();
         this.entries.push({ intent, ageSeconds: 0 });
     }
