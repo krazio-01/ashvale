@@ -1,5 +1,6 @@
 import { AnimationMixer, LinearInterpolant, Matrix3, Matrix4, Vector3 } from "three";
 import type { AnimationAction, AnimationClip, Interpolant, KeyframeTrack, Object3D } from "three";
+import { BoneMath } from "@/lib/boneMath";
 import { angleDelta, clamp, lerp, smoothstep } from "@/lib/helpers";
 
 interface IGaitClip {
@@ -15,6 +16,7 @@ export interface IDirectionalClip {
 interface IIdleVariation {
     clips: readonly string[];
     afterSeconds: number;
+    weaponGazeClips?: readonly string[];
 }
 
 export interface IFreeLocomotion {
@@ -63,7 +65,6 @@ const MOVING_EPSILON = 0.05;
 const WEIGHT_EPSILON = 1e-4;
 const LOCOMOTION_SWAP_SECONDS = 0.2;
 const IDLE_VARIANT_FADE_SECONDS = 0.5;
-const UP = new Vector3(0, 1, 0);
 
 const scratchRootStart = new Vector3();
 const scratchRootEnd = new Vector3();
@@ -205,7 +206,7 @@ export class CharacterAnimator {
         scratchRootEnd.set(end[0] ?? 0, end[1] ?? 0, end[2] ?? 0);
 
         out.subVectors(scratchRootEnd, scratchRootStart).applyMatrix3(this.rootToBody);
-        return out.applyAxisAngle(UP, yaw);
+        return out.applyAxisAngle(BoneMath.UP, yaw);
     }
 
     update(deltaSeconds: number, interpolationAlpha = 1): void {
@@ -371,6 +372,16 @@ export class CharacterAnimator {
                 ? this.syncedPhase * duration
                 : (action.time + step) % duration;
         }
+    }
+
+    get gazesAtWeapon(): boolean {
+        const gazeClips = this.locomotion?.idleVariation?.weaponGazeClips;
+        return (
+            !!gazeClips &&
+            !!this.idleVariant &&
+            this.idleVariantBlend > 0 &&
+            gazeClips.includes(this.idleVariant.getClip().name)
+        );
     }
 
     private advanceIdleVariation(definition: LocomotionDefinition, step: number): void {

@@ -12,6 +12,7 @@ export interface IPlayerCommands {
     dodge: boolean;
     parry: boolean;
     finisher: boolean;
+    draw: boolean;
     toggleLock: boolean;
     cycleLock: number;
 }
@@ -29,6 +30,7 @@ export class PlayerController {
         dodge: false,
         parry: false,
         finisher: false,
+        draw: false,
         toggleLock: false,
         cycleLock: 0,
     };
@@ -50,6 +52,7 @@ export class PlayerController {
         commands.heavyHeld = input.isHeld("heavy");
         commands.parry = input.consumePress("parry");
         commands.finisher = input.consumePress("finisher");
+        commands.draw = input.consumePress("draw");
         commands.toggleLock = input.consumePress("lock");
         commands.cycleLock = input.consumeWheel();
 
