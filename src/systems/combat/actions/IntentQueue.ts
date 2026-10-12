@@ -24,12 +24,17 @@ export class IntentQueue {
     }
 
     push(intent: IntentKind): void {
+        if (intent === "draw" && this.entries.some((entry) => entry.intent === "draw")) return;
         if (this.entries.length >= this.capacity) this.entries.shift();
         this.entries.push({ intent, ageSeconds: 0 });
     }
 
     removeAt(index: number): void {
         this.entries.splice(index, 1);
+    }
+
+    removeBefore(index: number): void {
+        this.entries.splice(0, index);
     }
 
     removeThrough(index: number): void {
@@ -40,10 +45,10 @@ export class IntentQueue {
         this.entries.length = 0;
     }
 
-    tick(realDeltaSeconds: number): void {
+    tick(realDeltaSeconds: number, frozen: ReadonlySet<IntentKind> | null): void {
         for (let index = this.entries.length - 1; index >= 0; index -= 1) {
             const entry = this.entries[index];
-            if (!entry) continue;
+            if (!entry || frozen?.has(entry.intent)) continue;
 
             entry.ageSeconds += realDeltaSeconds;
             if (entry.ageSeconds > this.lifetimeSeconds) this.entries.splice(index, 1);

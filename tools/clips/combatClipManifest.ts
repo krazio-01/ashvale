@@ -70,16 +70,24 @@ export interface IHandIntent {
     edge?: CharacterVector;
 }
 
+export interface ICarriedHand {
+    pull: number;
+    edge?: CharacterVector;
+}
+
 export interface IStance {
     base: IPoseReference;
     pelvis?: CharacterVector;
     pelvisTurn?: CharacterVector;
     chest?: CharacterVector;
     head?: CharacterVector;
+    shoulder?: CharacterVector;
     feet?: { left?: CharacterVector; right?: CharacterVector };
-    hand?: IHandIntent;
+    hand?: IHandIntent | ICarriedHand;
     elbow?: CharacterVector;
-    offHand?: CharacterVector | "grip";
+    feetFrom?: IPoseReference;
+    offHandElbow?: CharacterVector;
+    offHand?: CharacterVector | "grip" | IPoseReference;
     gripHold?: number;
 }
 
@@ -99,6 +107,7 @@ export interface IBeatClipJob<Stance extends string = string> {
     stances: Readonly<Record<Stance, IStance>>;
     start: Stance;
     beats: IBeat<Stance>[];
+    reversed?: true;
     fingers?: IPoseReference;
     grounding?: "auto" | "none";
     startMatches?: IPoseReference;
@@ -116,11 +125,17 @@ export const isAuthoredJob = (job: ClipJob): job is IAuthoredClipJob => "keys" i
 
 export const isBeatJob = (job: ClipJob): job is IBeatClipJob => "beats" in job;
 
+const stancePoseReferences = (stance: IStance): IPoseReference[] => [
+    ...(stance.feetFrom ? [stance.feetFrom] : []),
+    ...(typeof stance.offHand === "object" && "clip" in stance.offHand ? [stance.offHand] : []),
+];
+
 export const authoredPoses = (job: IAuthoredClipJob | IBeatClipJob): IPoseReference[] => [
     ...("keys" in job
         ? job.keys.map((key) => key.pose)
         : [job.start, ...job.beats.map((beat) => beat.pose)].map((name) => job.stances[name].base)),
     ...(job.fingers ? [job.fingers] : []),
+    ...("stances" in job ? Object.values<IStance>(job.stances).flatMap(stancePoseReferences) : []),
     ...("startMatches" in job && job.startMatches ? [job.startMatches] : []),
     ...("endMatches" in job && job.endMatches ? [job.endMatches] : []),
     ...("keys" in job ? [...(job.plants ?? []), ...(job.grips ?? [])] : []).flatMap((contact) =>
@@ -133,7 +148,14 @@ export const CLIP_LIBRARY = {
     output: "assets-src/models/characters/CombatClips.glb",
 };
 
+export const CLIP_TUNING = {
+    headRadiusHips: 0.12,
+    headClearanceMetres: 0.1,
+    gripGapMetres: 0.05,
+};
+
 export const GAME_FIT = {
+    tuning: CLIP_TUNING,
     grip: GRIP,
     bladeToCharacterHeight: PLAYER_STARTING_WEAPON.worldLength / PLAYER.height,
 };
@@ -151,6 +173,7 @@ export const CLIPS_PROVIDED_BY_CHARACTER_MODEL: readonly string[] = [
 
 const UAL1 = path.resolve(CLIP_LIBRARY.target);
 const UAL2 = path.resolve("assets-src/models/characters/UAL2_Standard.glb");
+export const OUTPUT_FPS = 30;
 const WHOLE_TAKE: [number, number] = [0, 0];
 
 const takesIn =
@@ -519,7 +542,14 @@ const IDLE_POSE = libraryPose(UAL1, "Idle_Loop", 0);
 const COUNTER_KILL_START_POSE = bakedPose(CLIP.finisherKickdownAttacker, 1);
 const TWO_HANDED_GRIP = sourcePose(TWO_HANDED_GRIP_POSE_JOB, 1);
 
+const IDLE_BODY = {
+    base: IDLE_POSE,
+    feetFrom: IDLE_POSE,
+    offHand: IDLE_POSE,
+    offHandElbow: [-0.5, -0.5, -1],
+} satisfies Partial<IStance>;
 const GUARD_ELBOW: CharacterVector = [0.9, -0.7, -0.2];
+const BLADE_RAISED_SHOULDER: CharacterVector = [5, -15, 0];
 
 const PLAYER_POSES = {
     idle: { base: IDLE_POSE },
@@ -588,6 +618,56 @@ const PLAYER_POSES = {
         head: [6, 0, 0],
     },
     counterStart: { base: COUNTER_KILL_START_POSE },
+    idleFeet: IDLE_BODY,
+    raisedHand: {
+        ...IDLE_BODY,
+        shoulder: [2, -6, 0],
+        hand: { position: [0.63, -0.24, 1.42], blade: [-0.78, 0.4, -0.48], edge: [0.69, 0.45, 0.56] },
+        elbow: [-0.86, -0.51, 0.08],
+    },
+    carriedHilt: {
+        ...IDLE_BODY,
+        shoulder: [1, -16, -7],
+        head: [-5, -5, 2],
+        hand: { pull: 0, edge: [-0.88, -0.09, 0.46] },
+        elbow: [-0.32, -0.95, 0.02],
+    },
+    pulledHilt: {
+        ...IDLE_BODY,
+        shoulder: [1, -20, -6],
+        head: [-2, -6, -2],
+        hand: { pull: 0.08, edge: [-0.62, 0.72, 0.32] },
+        elbow: [-0.33, -0.94, -0.09],
+    },
+    liftedBlade: {
+        ...IDLE_BODY,
+        shoulder: BLADE_RAISED_SHOULDER,
+        hand: { position: [0.41, -0.26, 1.97], blade: [0.12, 0.18, -0.98], edge: [0.74, 0.54, -0.4] },
+        elbow: [-0.52, -0.83, -0.21],
+    },
+    bladeOut: {
+        ...IDLE_BODY,
+        shoulder: BLADE_RAISED_SHOULDER,
+        hand: { position: [0.44, -0.05, 1.92], blade: [0.89, 0.44, 0.08], edge: [-0.1, 0.54, 0.84] },
+        elbow: [-0.21, -0.54, 0.82],
+    },
+    bladeRising: {
+        ...IDLE_BODY,
+        shoulder: BLADE_RAISED_SHOULDER,
+        hand: { position: [0.44, -0.09, 1.99], blade: [0.77, 0.13, 0.62], edge: [-0.72, -0.48, 0.49] },
+        elbow: [-0.31, -0.9, 0.32],
+    },
+    bladeUp: {
+        ...IDLE_BODY,
+        shoulder: BLADE_RAISED_SHOULDER,
+        hand: { position: [0.37, -0.15, 2.05], blade: [0.22, 0.45, 0.87], edge: [0.11, -0.85, -0.51] },
+        elbow: [-0.52, -0.82, -0.24],
+    },
+    bladeForward: {
+        ...IDLE_BODY,
+        hand: { position: [0.56, 0.12, 1.75], blade: [-0.48, 0.87, 0.08], edge: [0.83, -0.52, -0.21] },
+        elbow: [-0.12, -0.98, -0.15],
+    },
 } satisfies Record<string, IStance>;
 
 const PLAYER_STANCES = {
@@ -758,7 +838,28 @@ const reactGuardBroken = (side: ParrySide): IBeatClipJob =>
         KICKDOWN_VICTIM_START_POSE
     );
 
+const DRAW = {
+    start: "idleFeet",
+    beats: [
+        { pose: "raisedHand", seconds: 0.2, feel: "ease" },
+        { pose: "carriedHilt", seconds: 0.15, feel: "ease" },
+        { pose: "carriedHilt", seconds: 0.05, feel: "movingHold" },
+        { pose: "pulledHilt", seconds: 0.12, feel: "ease", mark: "mount" },
+        { pose: "liftedBlade", seconds: 0.15, feel: "ease" },
+        { pose: "bladeOut", seconds: 0.08, feel: "ease" },
+        { pose: "bladeRising", seconds: 0.09, feel: "ease" },
+        { pose: "bladeUp", seconds: 0.12, feel: "ease" },
+        { pose: "bladeForward", seconds: 0.2, feel: "ease" },
+        { pose: "idleFeet", seconds: 0.23, feel: "ease" },
+    ],
+} satisfies { start: PlayerStance; beats: IBeat<PlayerStance>[] };
+
 const BEAT_CLIP_JOBS: IBeatClipJob[] = [
+    playerBeats(CLIP.swordDraw, DRAW.start, DRAW.beats, IDLE_POSE, IDLE_POSE),
+    {
+        ...playerBeats(CLIP.swordSheathe, DRAW.start, DRAW.beats, IDLE_POSE, IDLE_POSE),
+        reversed: true,
+    },
     playerBeats(
         CLIP.parryGuard,
         "idle",

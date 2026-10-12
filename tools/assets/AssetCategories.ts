@@ -1,9 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
-import { NodeIO, type Document } from "@gltf-transform/core";
+import type { Document, NodeIO } from "@gltf-transform/core";
 import { KHRMaterialsEmissiveStrength } from "@gltf-transform/extensions";
 import { prune } from "@gltf-transform/functions";
-import { Blender, PIPELINE_CONFIG, PipelineCommand, formatMegabytes } from "../pipeline";
+import {
+    Blender,
+    PIPELINE_CONFIG,
+    PipelineCommand,
+    assertExists,
+    formatMegabytes,
+    isWithin,
+} from "../pipeline";
+import { ASSET_PIPELINES } from "./AssetBuilds";
+import { createGltfIo } from "./AssetFormats";
+import { AssetManifest } from "./AssetManifest";
+import { resolveTuning } from "./PipelineTuning";
 
 export interface IAssetCategoryOptions {
     name: string;
@@ -41,6 +52,10 @@ export abstract class AssetCategory {
         return this.fileBudgetsMegabytes[relativePath];
     }
 
+    maxTextureSizeFor(_relativePath: string): number {
+        return PIPELINE_CONFIG.maxTextureSize;
+    }
+
     importSource(_args: readonly string[]): Promise<void> {
         throw new Error(
             `${this.name} has no importer: drop glTF-ready files into ${this.sourceDirectory}`
@@ -55,17 +70,44 @@ export abstract class AssetCategory {
 export class EnvironmentCategory extends AssetCategory {}
 
 export class CharacterCategory extends AssetCategory {
+    override maxTextureSizeFor(relativePath: string): number {
+        return (
+            AssetManifest.findCharacterOwningFile(path.basename(relativePath))?.textureSize ??
+            super.maxTextureSizeFor(relativePath)
+        );
+    }
+
     override get importUsage(): string {
-        return "<staging-directory with one <Name>.glb per creature>";
+        return (
+            "<character name from tools/assets/AssetManifest.ts> [--from <stage>] [--until <stage>] " +
+            "| <staging-directory with one <Name>.glb per creature>"
+        );
     }
 
     override async importSource(args: readonly string[]): Promise<void> {
-        const [stagingDirectory] = args;
-        if (!stagingDirectory) throw this.usageError();
+        const [target, ...flags] = args;
+        if (!target) throw this.usageError();
+        const recipe = AssetManifest.findCharacter(target);
+        if (!recipe) {
+            if (!fs.existsSync(target) || !fs.statSync(target).isDirectory())
+                throw new Error(
+                    `${target} is neither a character in tools/assets/AssetManifest.ts ` +
+                        `(known: ${AssetManifest.characterNames.join(", ")}) nor a staging directory`
+                );
+            return this.importStaging(target);
+        }
 
+        AssetManifest.assertCharacterReady(recipe);
+        const pipeline = ASSET_PIPELINES.character;
+        const build = pipeline.createBuild(recipe);
+        const completed = await pipeline.run(build, flags);
+        if (completed) await this.importStaging(build.file("out"));
+    }
+
+    private async importStaging(stagingDirectory: string): Promise<void> {
         const staging = path.resolve(stagingDirectory);
         const sourceRoot = path.resolve(PIPELINE_CONFIG.sourceRoot);
-        if (staging === sourceRoot || staging.startsWith(sourceRoot + path.sep))
+        if (isWithin(sourceRoot, staging))
             throw new Error(
                 `staging directory ${staging} is inside ${sourceRoot}; ` +
                     `importing there would convert the committed character files`
@@ -78,7 +120,7 @@ export class CharacterCategory extends AssetCategory {
         if (creatureFiles.length === 0) throw new Error(`no .glb files in ${staging}`);
 
         fs.mkdirSync(this.sourceDirectory, { recursive: true });
-        const io = new NodeIO().registerExtensions([KHRMaterialsEmissiveStrength]);
+        const io = await createGltfIo([KHRMaterialsEmissiveStrength]);
         for (const file of creatureFiles) await this.importCreature(io, path.join(staging, file));
         this.reportSourceSizes();
     }
@@ -130,14 +172,34 @@ export class CharacterCategory extends AssetCategory {
 }
 
 export class WeaponCategory extends AssetCategory {
+    private static readonly TRIANGLES_FLAG = "--triangles";
+
     override get importUsage(): string {
-        return "<pack.blend|pack.fbx> [objectName=OutputName ...] (no renames: list meshes)";
+        return (
+            "<pack.blend|pack.fbx> [objectName=OutputName ...] (no renames: list meshes) " +
+            "| <model.glb|model.gltf> <objectName|*>=OutputName [--triangles N] " +
+            "(* joins every mesh; aligned to +Y, decimated)"
+        );
     }
 
     override async importSource(args: readonly string[]): Promise<void> {
-        const [packFile, ...renames] = args;
+        const flagIndex = args.indexOf(WeaponCategory.TRIANGLES_FLAG);
+        const positional = args.filter(
+            (_, index) => flagIndex < 0 || (index !== flagIndex && index !== flagIndex + 1)
+        );
+        const [packFile, ...renames] = positional;
         if (!packFile) throw this.usageError();
-        if (!fs.existsSync(packFile)) throw new Error(`weapon pack not found: ${packFile}`);
+        assertExists(packFile, `weapon pack not found: ${packFile}`);
+
+        const isSingleModel = /\.(glb|gltf)$/i.test(packFile);
+        const triangleBudget =
+            flagIndex >= 0
+                ? Number(args[flagIndex + 1])
+                : isSingleModel
+                  ? resolveTuning("player", undefined).weapons.triangles
+                  : undefined;
+        if (triangleBudget !== undefined && !(Number.isInteger(triangleBudget) && triangleBudget > 0))
+            throw new Error(`${WeaponCategory.TRIANGLES_FLAG} needs a whole number above 0`);
 
         fs.mkdirSync(this.sourceDirectory, { recursive: true });
         new Blender().runScript(
@@ -146,6 +208,7 @@ export class WeaponCategory extends AssetCategory {
                 "split-weapons",
                 path.resolve(packFile),
                 path.resolve(this.sourceDirectory),
+                ...(triangleBudget === undefined ? [] : [WeaponCategory.TRIANGLES_FLAG, String(triangleBudget)]),
                 ...renames,
             ],
             ["MESH", "EXPORTED"]
@@ -196,7 +259,7 @@ export const ASSET_CATALOGUE = new AssetCatalogue([
         compressesGeometry: false,
         fileBudgetsMegabytes: { "CombatClips.glb": 6 },
     }),
-    new WeaponCategory({ name: "weapons", budgetMegabytes: 4 }),
+    new WeaponCategory({ name: "weapons", budgetMegabytes: 6 }),
     new EnvironmentCategory({ name: "woodland", budgetMegabytes: 10 }),
     new EnvironmentCategory({ name: "medieval-village", budgetMegabytes: 8 }),
     new EnvironmentCategory({ name: "highlands", budgetMegabytes: 6 }),

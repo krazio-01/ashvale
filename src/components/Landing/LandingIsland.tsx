@@ -84,8 +84,11 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
         let loadedModel: ISkinnedModel | null = null;
 
         const loadCharacter = async () => {
-            const gltf = await loader.loadAsync(CHARACTER.modelPath);
-            const model = prepareSkinnedModel(gltf, [], materialLibrary);
+            const [gltf, clipLibraries] = await Promise.all([
+                loader.loadAsync(CHARACTER.modelPath),
+                Promise.all(CHARACTER.clipLibraryPaths.map((path) => loader.loadAsync(path))),
+            ]);
+            const model = prepareSkinnedModel(gltf, clipLibraries, materialLibrary);
             if (isCancelled) {
                 disposeSkinnedModel(model);
                 return;

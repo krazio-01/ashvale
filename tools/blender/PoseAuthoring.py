@@ -7,6 +7,7 @@ from typing import NamedTuple
 import bpy
 from mathutils import Matrix, Quaternion, Vector
 
+from Geometry import BLENDER_TO_GLTF
 from Rig import (
     FINGERS,
     OUTPUT_FPS,
@@ -33,6 +34,7 @@ KEY_SPACING_TOLERANCE = 1e-6
 FK_TOLERANCE = 1e-4
 
 SWORD_HAND = "hand_r"
+SWORD_CLAVICLE = "clavicle_r"
 OFF_HAND = "hand_l"
 SWORD_ARM = ("upperarm_r", "lowerarm_r", SWORD_HAND)
 OFF_HAND_ARM = ("upperarm_l", "lowerarm_l", OFF_HAND)
@@ -192,6 +194,10 @@ def basis(first, second):
 def edge_across_blade(edge, blade, fallback):
     perpendicular = edge - edge.project(blade)
     return perpendicular.normalized() if perpendicular.length > VECTOR_EPSILON else fallback
+
+
+def is_carried(hand):
+    return hand is not None and "pull" in hand
 
 
 def twist_about(rotation, axis):
@@ -397,17 +403,39 @@ def character_height(target):
 
 
 @dataclass(frozen=True)
+class CarryAnchor:
+    bone: str
+    hilt: Vector
+    blade: Vector
+
+    @classmethod
+    def from_config(cls, carry, target, height):
+        to_armature = target.matrix_world.to_3x3().inverted() @ Matrix(BLENDER_TO_GLTF.T.tolist())
+        bone = target.data.bones[carry["bone"]]
+        return cls(
+            bone.name,
+            bone.head_local + to_armature @ Vector(carry["hilt"]) * height,
+            (to_armature @ Vector(carry["blade"])).normalized(),
+        )
+
+
+@dataclass(frozen=True)
 class GameFit:
     knuckle_reach: float
     palm_depth: float
     blade_length: float
+    carry: CarryAnchor | None
+    tuning: dict
 
     @classmethod
     def from_config(cls, game, target):
+        height = character_height(target)
         return cls(
             knuckle_reach=game["grip"]["knuckleReach"],
             palm_depth=game["grip"]["palmDepth"],
-            blade_length=game["bladeToCharacterHeight"] * character_height(target),
+            blade_length=game["bladeToCharacterHeight"] * height,
+            carry=CarryAnchor.from_config(game["carry"], target, height) if "carry" in game else None,
+            tuning=game["tuning"],
         )
 
 
@@ -682,6 +710,7 @@ class ResolvedStance:
     pelvis_turn: Vector
     chest: Vector
     head: Vector
+    shoulder: Vector
     feet: dict
     foot_rotations: dict
     hand: Vector
@@ -694,6 +723,10 @@ class ResolvedStance:
     elbow: Vector
     grip: float
     authored: float
+    carry_weight: float
+    carry_pull: float
+    pinned_feet: float
+    off_hand_elbow: Vector
 
     def drifted(self):
         return replace(
@@ -836,36 +869,87 @@ class BeatClipBaker(AuthoredClipBaker):
         base, _ = self.key_pose({"pose": stance["base"]})
         matrices = self.skeleton.matrices(base)
         placements = stance.get("feet", {})
+        foot_source = self.reference_matrices(stance["feetFrom"]) if "feetFrom" in stance else matrices
         feet = {}
         for side in FEET:
-            resting = matrices[FEET[side][0]].translation.copy()
+            resting = foot_source[FEET[side][0]].translation.copy()
             if side in placements:
                 x, y, lift = placements[side]
                 placed = self.scaled((x, y, 0.0))
                 resting = Vector((placed.x, placed.y, resting.z + lift * self.height))
             feet[side] = resting
-        hand = stance.get("hand")
+        intent = stance.get("hand")
+        carried = is_carried(intent)
+        hand = None if carried else intent
         base_hand_rotation = matrices[SWORD_HAND].to_quaternion()
-        has_explicit_edge = hand and "edge" in hand
-        return ResolvedStance(
+        has_explicit_edge = intent is not None and "edge" in intent
+        resolved = ResolvedStance(
             base=base,
             pelvis=matrices["pelvis"].translation + self.scaled(stance.get("pelvis", (0.0, 0.0, 0.0))),
             pelvis_turn=Vector(stance.get("pelvisTurn", (0.0, 0.0, 0.0))),
             chest=Vector(stance.get("chest", (0.0, 0.0, 0.0))),
             head=Vector(stance.get("head", (0.0, 0.0, 0.0))),
+            shoulder=Vector(stance.get("shoulder", (0.0, 0.0, 0.0))),
             feet=feet,
             foot_rotations={side: matrices[FEET[side][0]].to_quaternion() for side in FEET},
             hand=self.scaled(hand["position"]) if hand else matrices[SWORD_HAND].translation.copy(),
-            edge=character_vector(hand["edge"]).normalized() if has_explicit_edge else base_hand_rotation @ self.sword_hand_frame.finger,
-            hand_ik=1.0 if hand else 0.0,
-            off_hand=self.scaled(stance["offHand"]) if isinstance(stance.get("offHand"), list) else matrices[OFF_HAND].translation.copy(),
+            edge=character_vector(intent["edge"]).normalized() if has_explicit_edge else base_hand_rotation @ self.sword_hand_frame.finger,
+            hand_ik=1.0 if hand or carried else 0.0,
+            off_hand=self.off_hand_target(stance.get("offHand"), matrices),
             off_hand_ik=1.0 if "offHand" in stance else 0.0,
             blade=character_vector(hand["blade"]).normalized() if hand else base_hand_rotation @ self.sword_hand_frame.blade,
-            auto_edge=1.0 if hand and not has_explicit_edge else 0.0,
+            auto_edge=1.0 if (carried or hand) and not has_explicit_edge else 0.0,
             elbow=character_vector(stance.get("elbow", SWORD_ELBOW)).normalized(),
             grip=stance.get("gripHold", 1.0) if stance.get("offHand") == "grip" else 0.0,
             authored=1.0 if set(stance) - {"base"} else 0.0,
+            carry_weight=1.0 if carried else 0.0,
+            carry_pull=intent["pull"] if carried else 0.0,
+            pinned_feet=1.0 if "feetFrom" in stance else 0.0,
+            off_hand_elbow=character_vector(stance.get("offHandElbow", OFF_HAND_ELBOW)).normalized(),
         )
+        if not carried:
+            return resolved
+        chest = self.skeleton.matrices(self.pose_torso(resolved, Vector(), Vector()))
+        hand, blade = self.carried_grip(chest, resolved.carry_pull, resolved.edge)
+        return replace(resolved, hand=hand, blade=blade)
+
+    def reference_matrices(self, reference):
+        return self.skeleton.matrices(self.key_pose({"pose": reference})[0])
+
+    def off_hand_target(self, intent, matrices):
+        if isinstance(intent, list):
+            return self.scaled(intent)
+        if isinstance(intent, dict):
+            return self.reference_matrices(intent)[OFF_HAND].translation.copy()
+        return matrices[OFF_HAND].translation.copy()
+
+    def carry_frame(self, matrices):
+        carry = self.fit.carry
+        if carry is None:
+            raise ValueError("a carried hand needs game.carry in the job config")
+        return matrices[carry.bone] @ self.target.data.bones[carry.bone].matrix_local.inverted()
+
+    def carried_hilt(self, matrices):
+        return self.carry_frame(matrices) @ self.fit.carry.hilt
+
+    def head_centre(self, matrices):
+        bone = self.target.data.bones["Head"]
+        tail = matrices["Head"] @ (bone.matrix_local.inverted() @ bone.tail_local)
+        return (matrices["Head"].translation + tail) / 2.0
+
+    def blade_head_clearance(self, matrices):
+        handle, blade, _ = self.blade_axis(matrices)
+        along = blade * self.fit.blade_length
+        centre = self.head_centre(matrices)
+        reach = min(1.0, max(0.0, (centre - handle).dot(along) / along.length_squared))
+        return (centre - (handle + along * reach)).length - self.fit.tuning["headRadiusHips"] * self.height
+
+    def carried_grip(self, matrices, pull, edge):
+        carry = self.fit.carry
+        moved = self.carry_frame(matrices)
+        blade = moved.to_3x3() @ carry.blade
+        hilt = moved @ (carry.hilt - carry.blade * pull * self.height)
+        return hilt - self.blade_rotation(blade, edge) @ self.sword_hand_frame.handle_offset, blade
 
     def interpolate(self, start, end, amount, arc):
         clamped = min(1.0, max(0.0, amount))
@@ -898,6 +982,7 @@ class BeatClipBaker(AuthoredClipBaker):
             pelvis_turn=mix(start.pelvis_turn, end.pelvis_turn),
             chest=mix(start.chest, end.chest),
             head=mix(start.head, end.head),
+            shoulder=mix(start.shoulder, end.shoulder),
             feet={side: self.stepped(start.feet[side], end.feet[side], amount) for side in FEET},
             foot_rotations={side: turn(start.foot_rotations[side], end.foot_rotations[side]) for side in FEET},
             hand=on_curve + chord * (amount - clamped),
@@ -910,6 +995,10 @@ class BeatClipBaker(AuthoredClipBaker):
             elbow=turn_toward(start.elbow, end.elbow, clamped),
             grip=mix_clamped(start.grip, end.grip),
             authored=mix_clamped(start.authored, end.authored),
+            carry_weight=mix_clamped(start.carry_weight, end.carry_weight),
+            carry_pull=mix_clamped(start.carry_pull, end.carry_pull),
+            pinned_feet=mix_clamped(start.pinned_feet, end.pinned_feet),
+            off_hand_elbow=turn_toward(start.off_hand_elbow, end.off_hand_elbow, clamped),
         )
 
     def stepped(self, start, end, amount):
@@ -1027,7 +1116,7 @@ class BeatClipBaker(AuthoredClipBaker):
         matrices = self.skeleton.matrices(pose)
         pose.rotations[end] = self.skeleton.local_rotation(end, held, matrices)
 
-    def build(self, stance, travel, shift, warm):
+    def pose_torso(self, stance, travel, shift):
         pose = stance.base.copy()
         pose.locations["root"] = self.root_rest_inverse @ travel
         pose.locations["pelvis"] = Vector()
@@ -1038,10 +1127,16 @@ class BeatClipBaker(AuthoredClipBaker):
         pose.rotations["pelvis"] = self.skeleton.local_rotation("pelvis", turned, matrices)
         self.turn_bones(pose, SPINE_SHARES, stance.chest)
         self.turn_bones(pose, NECK_SHARES, stance.head)
+        if stance.shoulder.length > 0.0:
+            self.turn_bones(pose, ((SWORD_CLAVICLE, 1.0),), stance.shoulder)
+        return pose
+
+    def build(self, stance, travel, shift, warm):
+        pose = self.pose_torso(stance, travel, shift)
         for side, chain in LEG_CHAINS.items():
             target = stance.feet[side] + travel
             resting = self.skeleton.matrices(pose)[chain[2]].translation
-            weight = min(1.0, (target - resting).length / LEG_IK_FULL_METRES)
+            weight = max(stance.pinned_feet, min(1.0, (target - resting).length / LEG_IK_FULL_METRES))
             if weight <= 0.0:
                 continue
             free_leg = {bone: pose.rotations[bone].copy() for bone in chain}
@@ -1060,6 +1155,10 @@ class BeatClipBaker(AuthoredClipBaker):
             for bone in SWORD_ARM[:2]:
                 pose.rotations[bone] = warm.arm_rotations[bone].copy()
         pole = turn_toward(base_pole.normalized(), stance.elbow, stance.hand_ik) if base_pole.length > VECTOR_EPSILON else stance.elbow
+        if stance.carry_weight > 0.0:
+            held_edge = turn_toward(warm.sword_edge, stance.edge, 1.0 - stance.auto_edge) if warm is not None else stance.edge
+            hand, blade = self.carried_grip(matrices, stance.carry_pull, held_edge)
+            stance = replace(stance, hand=stance.hand.lerp(hand, stance.carry_weight), blade=turn_toward(stance.blade, blade, stance.carry_weight))
         hand_target = free_hand.translation.lerp(stance.hand + travel + shift * (1.0 - stance.hand_ik), stance.hand_ik)
         self.solve_hinged(pose, SWORD_ARM, hand_target, free_hand.to_quaternion(), pole)
         matrices = self.skeleton.matrices(pose)
@@ -1098,7 +1197,7 @@ class BeatClipBaker(AuthoredClipBaker):
             for bone in OFF_HAND_ARM[:2]:
                 pose.rotations[bone] = warm.arm_rotations[bone].copy()
         base_pole = (elbow - shoulder) - (elbow - shoulder).project(wrist - shoulder)
-        default = character_vector(OFF_HAND_ELBOW).normalized()
+        default = stance.off_hand_elbow
         pole = turn_toward(base_pole.normalized(), default, stance.off_hand_ik) if base_pole.length > VECTOR_EPSILON else default
         self.solve_hinged(pose, OFF_HAND_ARM, target, free_off_hand.to_quaternion(), pole)
         lower = OFF_HAND_ARM[1]
@@ -1251,19 +1350,25 @@ class BeatClipBaker(AuthoredClipBaker):
             frames.append(pose)
             warm = self.warm_start(pose, stance, captured_release)
         pelvis_targets = [self.skeleton.matrices(pose)["pelvis"].translation.copy() for pose in frames]
-        timeline = BeatTimeline(
-            spans=spans,
-            grip_weights=[stance.grip * stance.off_hand_ik for stance in raw],
-            authored_weights=[stance.authored for stance in raw],
-        )
-        self.clip_marks[output] = self.derive_marks(output, spans, timeline.grip_weights)
+        grip_weights = [stance.grip * stance.off_hand_ik for stance in raw]
+        authored_weights = [stance.authored for stance in raw]
+        if job.get("reversed"):
+            for series in (frames, pelvis_targets, grip_weights, authored_weights):
+                series.reverse()
+            spans = [span._replace(start=time - span.end, end=time - span.start) for span in reversed(spans)]
+        timeline = BeatTimeline(spans=spans, grip_weights=grip_weights, authored_weights=authored_weights)
+        self.clip_marks[output] = self.derive_marks(output, spans, timeline.grip_weights, job.get("reversed", False))
         return self.finish(job, frames, pelvis_targets, [], timeline.grip_weights, timeline)
 
-    def derive_marks(self, output, spans, grip_weights):
+    def derive_marks(self, output, spans, grip_weights, reversed_spans):
         names = [span.beat["mark"] for span in spans if "mark" in span.beat]
         if len(names) != len(set(names)):
             raise ValueError(f"{output}: duplicate beat marks {sorted(names)}")
-        marks = {span.beat["mark"]: round(span.start * OUTPUT_FPS) / OUTPUT_FPS for span in spans if "mark" in span.beat}
+        marks = {
+            span.beat["mark"]: round((span.end if reversed_spans else span.start) * OUTPUT_FPS) / OUTPUT_FPS
+            for span in spans
+            if "mark" in span.beat
+        }
         gripped = [index for index, weight in enumerate(grip_weights) if weight >= GRIP_WINDOW_WEIGHT]
         grip = {"from": gripped[0] / OUTPUT_FPS, "to": gripped[-1] / OUTPUT_FPS} if gripped else None
         return {"seconds": (len(grip_weights) - 1) / OUTPUT_FPS, "marks": marks, "grip": grip}
@@ -1335,6 +1440,24 @@ class BeatClipBaker(AuthoredClipBaker):
                     warnings.append(f"elbow {label} {clearance * 100:.0f}cm from the spine, inside the ribs")
                 if abduction < ARM_ABDUCTION_MIN_DEGREES:
                     warnings.append(f"arm {label} pressed against the torso, {abduction:.0f}° out")
+        if self.fit.carry is not None and any(is_carried(job["stances"][name].get("hand")) for name in (job["start"], *(beat["pose"] for beat in job["beats"]))):
+            gaps = [(self.blade_axis(matrices)[0] - self.carried_hilt(matrices)).length for matrices in frame_matrices]
+            clearances = [self.blade_head_clearance(matrices) for matrices in frame_matrices]
+            gripped = [index for index, gap in enumerate(gaps) if gap <= self.fit.tuning["gripGapMetres"]]
+            mount = self.clip_marks[job["output"]]["marks"].get("mount")
+            if not gripped:
+                warnings.append(f"the hand never comes within {self.fit.tuning['gripGapMetres'] * 100:.0f}cm of the carried hilt")
+            elif mount is None:
+                warnings.append("a carrying clip needs a beat with mark mount")
+            else:
+                mount_frame = round(mount * OUTPUT_FPS)
+                if not gripped[0] <= mount_frame <= gripped[-1]:
+                    warnings.append(f"mount at {mount:.2f}s is outside the grip window {gripped[0] * step:.2f}-{gripped[-1] * step:.2f}s")
+                in_hand = range(gripped[0]) if job.get("reversed") else range(gripped[-1] + 1, len(frames))
+                worst, at = min((clearances[index], index * step) for index in in_hand) if len(in_hand) else (math.inf, 0.0)
+                print(f"CHECK {job['output']} info carry mount gap {gaps[min(mount_frame, len(gaps) - 1)] * 100:.1f}cm head clearance min {worst * 100:.1f}cm at {at:.2f}s")
+                if worst < self.fit.tuning["headClearanceMetres"]:
+                    warnings.append(f"head clearance {worst * 100:.1f}cm below {self.fit.tuning['headClearanceMetres'] * 100:.0f}cm at {at:.2f}s")
         flexion = self.references.flexion_axes()
         worst_hinge = {}
         worst_twist = {}
@@ -1376,15 +1499,15 @@ class BeatClipBaker(AuthoredClipBaker):
         for span in timeline.spans:
             if span.beat["feel"] in ("ease", "hold"):
                 smooth.update(range(int(round(span.start / step)) + 2, int(round(span.end / step)) - 1))
-        jerk = max(
+        jerk, jerk_at = max(
             (
-                (tips[index + 1] - tips[index] * 3.0 + tips[index - 1] * 3.0 - tips[index - 2]).length / step**3
+                ((tips[index + 1] - tips[index] * 3.0 + tips[index - 1] * 3.0 - tips[index - 2]).length / step**3, index * step)
                 for index in range(2, len(tips) - 1)
                 if index in smooth
             ),
-            default=0.0,
+            default=(0.0, 0.0),
         )
-        print(f"CHECK {job['output']} info blade jerk peak {jerk:.0f}")
+        print(f"CHECK {job['output']} info blade jerk peak {jerk:.0f} at {jerk_at:.2f}s")
         if jerk > BLADE_JERK_LIMIT:
             warnings.append(f"blade jerk {jerk:.0f} above {BLADE_JERK_LIMIT:.0f}")
 

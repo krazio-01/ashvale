@@ -1,11 +1,15 @@
 import type { Object3D, Vector3 } from "three";
 import type { IEnemyArchetype } from "@/constants/enemies";
+import type { WeaponMount } from "@/types/weapons";
 export type Team = "player" | "enemy";
 export type ImpactTier = "light" | "heavy" | "finisher";
 export type ReactionTier = "none" | "flinch" | "stagger" | "knockback" | "knockdown";
-export type MoveTag = "light" | "heavy" | "dodge" | "parry" | "shoot" | "movement" | "jump";
+export type MoveTag =
+    "light" | "heavy" | "dodge" | "parry" | "shoot" | "movement" | "jump" | "stance";
+export type Stance = "sheathed" | "drawn";
 export type DodgeSide = "left" | "right";
-export type IntentKind = "light" | "heavy" | "dodge" | "parry" | "shoot" | "slide" | "jump";
+export type IntentKind =
+    "light" | "heavy" | "dodge" | "parry" | "shoot" | "slide" | "jump" | "draw";
 type MoveGround = "grounded" | "airborne" | "any";
 type MoveMotion = "rootMotion" | "momentum" | "physics";
 type HitOutcomeKind =
@@ -122,6 +126,7 @@ export interface IMoveDefinition {
     launch?: number;
     projectile?: IProjectileLaunch;
     procedural?: IProceduralMove;
+    mountAt?: { fraction: number; target: WeaponMount };
 }
 
 export interface IReactionClips {
@@ -142,6 +147,7 @@ export interface IMoveSet {
     sideDodgeEntry?: Record<DodgeSide, string>;
     airEntry: Partial<Record<IntentKind, string>>;
     air?: { airborne: string; land: string };
+    stanceEntry?: Record<Stance, string>;
     reactions: IReactionClips;
 }
 

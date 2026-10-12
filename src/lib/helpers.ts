@@ -1,6 +1,6 @@
 import { SCALE } from "@/constants/world";
-import { Color } from "three";
-import type { Vector3, Vector3Tuple } from "three";
+import { Color, Vector3 } from "three";
+import type { Box3, Vector3Tuple } from "three";
 
 export const FULL_TURN = Math.PI * 2;
 export const QUARTER_TURN = Math.PI / 2;
@@ -197,4 +197,32 @@ export function tintKeepingLightness(
     );
 
     return `#${tinted.getHexString()}`;
+}
+
+export type Axis = "x" | "y" | "z";
+
+export interface IBladeAxes {
+    size: Vector3;
+    lengthAxis: Axis;
+    widthAxis: Axis;
+    thicknessAxis: Axis;
+    bladeSign: 1 | -1;
+}
+
+export function axisVector(axis: Axis, sign: number, out: Vector3): Vector3 {
+    out.set(0, 0, 0);
+    out[axis] = sign;
+    return out;
+}
+
+export function measureBladeAxes(bounds: Box3): IBladeAxes {
+    const size = bounds.getSize(new Vector3());
+    const axes = ["x", "y", "z"] as const;
+    const lengthAxis = axes.reduce((longer, axis) => (size[axis] > size[longer] ? axis : longer));
+    const widthAxis = axes
+        .filter((axis) => axis !== lengthAxis)
+        .reduce((wider, axis) => (size[axis] > size[wider] ? axis : wider));
+    const thicknessAxis = axes.find((axis) => axis !== lengthAxis && axis !== widthAxis) as Axis;
+    const tipAtMaximum = Math.abs(bounds.max[lengthAxis]) >= Math.abs(bounds.min[lengthAxis]);
+    return { size, lengthAxis, widthAxis, thicknessAxis, bladeSign: tipAtMaximum ? 1 : -1 };
 }

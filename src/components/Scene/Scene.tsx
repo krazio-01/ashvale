@@ -15,6 +15,7 @@ import { CAMERA } from "@/constants/player";
 import type { ChapterResponse, RealmResponse } from "@/responses/realm/RealmResponse";
 import type { IThemeManifest } from "@/types/theme";
 import { InlineLoader } from "generative-loaders";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import PerformanceOverlay from "../PerformanceOverlay";
 import { useFrameLimit } from "@/hooks/useFrameLimit";
@@ -26,6 +27,17 @@ import { AnimationFrameLoop } from "@/components/AnimationFrameLoop/AnimationFra
 import { Hud } from "@/components/Hud/Hud";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
 import "./scene.scss";
+
+const PhysicsTuner =
+    process.env.NODE_ENV === "development"
+        ? dynamic(
+              () =>
+                  import("@/components/PhysicsTuner/PhysicsTuner").then(
+                      (module) => module.PhysicsTuner
+                  ),
+              { ssr: false }
+          )
+        : () => null;
 
 const ACTIVE_CHAPTER_INDEX = 0;
 const FIRST_SPAWN_STAGE = "Opening the realm";
@@ -226,6 +238,7 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
             </Canvas>
 
             <FrameRateMeter />
+            <PhysicsTuner />
             <AnimationFrameLoop>
                 <Hud />
             </AnimationFrameLoop>

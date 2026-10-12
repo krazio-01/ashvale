@@ -1,15 +1,23 @@
 import argparse
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
 import bpy
-from mathutils import Quaternion, Vector
+import numpy as np
+from mathutils import Matrix, Quaternion, Vector
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+if os.environ.get("ASHVALE_BLENDER_PACKAGES"):
+    sys.path.insert(0, os.environ["ASHVALE_BLENDER_PACKAGES"])
 
+from scipy.spatial import ConvexHull
+
+from Geometry import normalised, principal_axes
+from ModelBuild import add_ortho_camera, decimate, mesh_positions, ortho_pose
 from Rig import (
     CHARACTER_TO_ARMATURE,
     DIRECTION_CHILD,
@@ -45,8 +53,12 @@ REAR_CAMERA = Vector((1.8, 5.0, 2.6))
 REAR_CAMERA_FOCUS = Vector((0.0, 0.0, 1.1))
 
 
-def facing_backward(head_of, names):
-    left = horizontal(head_of(names["thigh_l"]) - head_of(names["thigh_r"]))
+def body_heads(armature, head_of, bone_of=None):
+    return {role: head_of(armature, bone_of[role] if bone_of else role) for role in BODY_BONES}
+
+
+def facing_backward(heads):
+    left = horizontal(heads["thigh_l"] - heads["thigh_r"])
     return WORLD_UP.cross(left).normalized()
 
 
@@ -56,10 +68,8 @@ def yaw_between(from_direction, to_direction):
     return Quaternion(WORLD_UP, math.atan2(source.cross(target).z, source.dot(target)))
 
 
-def leg_length(head_of, names):
-    return (head_of(names["thigh_l"]) - head_of(names["calf_l"])).length + (
-        head_of(names["calf_l"]) - head_of(names["foot_l"])
-    ).length
+def leg_length(heads):
+    return (heads["thigh_l"] - heads["calf_l"]).length + (heads["calf_l"] - heads["foot_l"]).length
 
 
 def aligning_rotation(from_primary, to_primary, from_secondary=None, to_secondary=None):
@@ -138,8 +148,8 @@ class MocapRetargeter:
             offsets = {name: Quaternion() for name in ordered}
             hip_scale = 1.0
         else:
-            target_leg = leg_length(lambda name: rest_head(self.target, name), {name: name for name in body_names})
-            hip_scale = target_leg / max(leg_length(lambda name: pose_head(source, name), body_names), 1e-6)
+            target_leg = leg_length(body_heads(self.target, rest_head))
+            hip_scale = target_leg / max(leg_length(body_heads(source, pose_head, body_names)), 1e-6)
 
         scene.frame_set(int(start))
         start_hip = frame_correction @ pose_head(source, source_of["pelvis"])
@@ -189,8 +199,8 @@ class MocapRetargeter:
         return start, end, take_start
 
     def frame_correction(self, job, source, source_of, body_names, start, end, calibration_frame):
-        target_back = facing_backward(lambda name: rest_head(self.target, name), {name: name for name in body_names})
-        source_back = facing_backward(lambda name: pose_head(source, name), body_names)
+        target_back = facing_backward(body_heads(self.target, rest_head))
+        source_back = facing_backward(body_heads(source, pose_head, body_names))
         if job.get("alignToTravel"):
             bpy.context.scene.frame_set(int(start))
             travel_start = pose_head(source, source_of["pelvis"])
@@ -350,10 +360,7 @@ def print_motion_profile(target, frame_count, blade_length):
 
 
 class AuditionRenderer:
-    VIEWS = {
-        "front": ((0.0, -6.0, 1.0), (math.pi / 2, 0.0, 0.0), 3.2),
-        "side": ((6.0, 0.0, 1.0), (math.pi / 2, 0.0, math.pi / 2), 3.2),
-    }
+    VIEWS = {view: (*ortho_pose(view, (0.0, 0.0, 1.0), 6.0), 3.2) for view in ("front", "side")}
 
     def __init__(self, target, blade_length):
         self.target = target
@@ -381,14 +388,9 @@ class AuditionRenderer:
         }
         scene = bpy.context.scene
         for label, (location, rotation, ortho_scale) in views.items():
-            camera_data = bpy.data.cameras.new(f"{label}Camera")
-            camera_data.type = "ORTHO"
-            camera_data.ortho_scale = ortho_scale
-            camera = bpy.data.objects.new(f"{label}Camera", camera_data)
-            scene.collection.objects.link(camera)
+            camera = add_ortho_camera(f"{label}Camera", ortho_scale)
             camera.location = location
             camera.rotation_euler = rotation
-            scene.camera = camera
             for frame in range(1, frame_count + 1, step):
                 scene.frame_set(frame)
                 self.place_blade()
@@ -457,10 +459,53 @@ def run_audition(jobs_path, directory, step):
     print(f"AUDITION {job['output']} frames={frame_count} sourceFps={source_fps}")
 
 
+JOIN_ALL_MESHES = "*"
+WEAPON_END_SLICE = 0.1
+
+
 def parse_rename(pair):
     if "=" not in pair:
         raise argparse.ArgumentTypeError(f"expected objectName=outputName, got {pair}")
     return tuple(pair.split("=", 1))
+
+
+TEXTURE_SOCKET_ROLES = {
+    "Base Color": "baseColor",
+    "Normal": "normal",
+    "Metallic": "orm",
+    "Roughness": "orm",
+    "Occlusion": "orm",
+}
+
+
+def texture_role(image_node):
+    pending, seen = [image_node], {image_node}
+    while pending:
+        node = pending.pop()
+        for output in node.outputs:
+            for link in output.links:
+                if link.to_node.type in ("BSDF_PRINCIPLED", "GROUP"):
+                    role = TEXTURE_SOCKET_ROLES.get(link.to_socket.name)
+                    if role:
+                        return role
+                if link.to_node not in seen:
+                    seen.add(link.to_node)
+                    pending.append(link.to_node)
+    return None
+
+
+def name_textures_by_role(target, output_name):
+    named = {}
+    for slot in target.material_slots:
+        if not slot.material or not slot.material.use_nodes:
+            continue
+        for node in slot.material.node_tree.nodes:
+            role = texture_role(node) if node.type == "TEX_IMAGE" and node.image else None
+            if role is None:
+                continue
+            if named.setdefault(role, node.image) is not node.image:
+                raise ValueError(f"{output_name}: more than one {role} texture, cannot name them by role")
+            node.image.name = f"{output_name}_{role}"
 
 
 def export_weapon(target, output_name, output_directory):
@@ -483,13 +528,66 @@ def export_weapon(target, output_name, output_directory):
     print(f"EXPORTED {target.name} -> {output_directory}/{output_name}.gltf")
 
 
-def run_split_weapons(source, output_directory, renames):
-    if source.lower().endswith(".blend"):
+def import_source(source):
+    lower = source.lower()
+    if lower.endswith(".blend"):
         bpy.ops.wm.open_mainfile(filepath=source)
     else:
         reset_scene()
-        bpy.ops.import_scene.fbx(filepath=source)
-    meshes = [obj for obj in bpy.data.objects if obj.type == "MESH"]
+        if lower.endswith((".glb", ".gltf")):
+            bpy.ops.import_scene.gltf(filepath=source)
+        else:
+            bpy.ops.import_scene.fbx(filepath=source)
+    return [obj for obj in bpy.data.objects if obj.type == "MESH"]
+
+
+def joined_meshes(meshes):
+    for mesh in meshes:
+        world_matrix = mesh.matrix_world.copy()
+        mesh.parent = None
+        mesh.matrix_world = world_matrix
+    bpy.ops.object.select_all(action="DESELECT")
+    for mesh in meshes:
+        mesh.select_set(True)
+    bpy.context.view_layer.objects.active = meshes[0]
+    if len(meshes) > 1:
+        bpy.ops.object.join()
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    return bpy.context.view_layer.objects.active
+
+
+def end_slice_area(along, across, at_top):
+    span = along.max() - along.min()
+    edge = along.max() - span * WEAPON_END_SLICE if at_top else along.min() + span * WEAPON_END_SLICE
+    selected = along >= edge if at_top else along <= edge
+    return ConvexHull(across[selected]).volume
+
+
+def align_to_length_axis(target):
+    positions = mesh_positions(target.data)
+    centred = positions - positions.mean(axis=0)
+    axes = principal_axes(positions)
+    along = centred @ axes[0]
+    across = centred @ axes[1:].T
+    tip_sign = 1.0 if end_slice_area(along, across, True) < end_slice_area(along, across, False) else -1.0
+    rotation = Vector(normalised(axes[0] * tip_sign)).rotation_difference(Vector((0.0, 0.0, 1.0)))
+    target.data.transform(rotation.to_matrix().to_4x4())
+    aligned = mesh_positions(target.data)
+    heights = aligned[:, 2]
+    origin_end = aligned[heights <= heights.min() + (heights.max() - heights.min()) * WEAPON_END_SLICE]
+    origin = np.array([origin_end[:, 0].mean(), origin_end[:, 1].mean(), heights.min()])
+    target.data.transform(Matrix.Translation(Vector(-origin)))
+
+
+def decimate_to(target, triangles):
+    target.data.calc_loop_triangles()
+    current = len(target.data.loop_triangles)
+    if current > triangles:
+        decimate(target, triangles / current)
+
+
+def run_split_weapons(source, output_directory, renames, triangles):
+    meshes = import_source(source)
     requested = dict(renames)
     if not requested:
         for mesh in meshes:
@@ -497,11 +595,18 @@ def run_split_weapons(source, output_directory, renames):
             materials = [slot.material.name for slot in mesh.material_slots if slot.material]
             print(f"MESH {mesh.name} size=({size.x:.3f},{size.y:.3f},{size.z:.3f}) materials={materials}")
         return
-    missing = [name for name in requested if bpy.data.objects.get(name) is None]
+    missing = [name for name in requested if name != JOIN_ALL_MESHES and bpy.data.objects.get(name) is None]
     if missing:
         raise ValueError(f"no objects {missing} in the weapon pack, meshes: {sorted(mesh.name for mesh in meshes)}")
     for object_name, output_name in requested.items():
-        export_weapon(bpy.data.objects[object_name], output_name, output_directory)
+        target = bpy.data.objects[object_name] if object_name != JOIN_ALL_MESHES else None
+        if target is None or triangles is not None:
+            target = joined_meshes(meshes if target is None else [target])
+        if triangles is not None:
+            align_to_length_axis(target)
+            decimate_to(target, triangles)
+            name_textures_by_role(target, output_name)
+        export_weapon(target, output_name, output_directory)
 
 
 def parse_arguments():
@@ -518,7 +623,13 @@ def parse_arguments():
     weapons_mode = modes.add_parser("split-weapons", help="omit renames to list the pack's meshes")
     weapons_mode.add_argument("source")
     weapons_mode.add_argument("output_directory")
+    weapons_mode.add_argument("--triangles", type=int)
     weapons_mode.add_argument("renames", nargs="*", type=parse_rename, metavar="objectName=outputName")
+    model_mode = modes.add_parser("model", help="run one stage of a model build")
+    model_mode.add_argument("kind")
+    model_mode.add_argument("stage")
+    model_mode.add_argument("recipe_file")
+    model_mode.add_argument("work_root")
     if "--" not in sys.argv:
         parser.error("arguments must follow the -- separator")
     return parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
@@ -529,5 +640,9 @@ if arguments.mode == "bake":
     run_bake(arguments.jobs_path, arguments.output_path, arguments.marks_path)
 elif arguments.mode == "audition":
     run_audition(arguments.jobs_path, arguments.directory, arguments.step)
+elif arguments.mode == "model":
+    from ModelStages import run_stage
+
+    run_stage(arguments.kind, arguments.stage, arguments.recipe_file, arguments.work_root)
 else:
-    run_split_weapons(arguments.source, arguments.output_directory, arguments.renames)
+    run_split_weapons(arguments.source, arguments.output_directory, arguments.renames, arguments.triangles)

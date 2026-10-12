@@ -27,11 +27,6 @@ import type { IVitalsSpec } from "@/systems/combat/core/Vitals";
 import { CharacterAnimator } from "@/entities/characters/CharacterAnimator";
 import { ProceduralRig } from "@/entities/characters/ProceduralRig";
 import type {
-    IBladeSource,
-    IProceduralFrame,
-    ProceduralDetail,
-} from "@/entities/characters/ProceduralRig";
-import type {
     IFreeLocomotion,
     IOneShotOptions,
     IStrafeLocomotion,
@@ -40,7 +35,9 @@ import type {
 import { createWeapon } from "@/entities/weapons/createWeapon";
 import type { Weapon } from "@/entities/weapons/Weapon";
 import { HAND_BONES, PROCEDURAL } from "@/constants/characters";
+import { PHYSICS } from "@/constants/physics";
 import { COMBAT_TIMING, CONTACT, FOCUS, MOVEMENT, PARRY, SLOW_MOTION } from "@/constants/combat";
+import { BoneMath } from "@/lib/boneMath";
 import { angleDelta, clamp, pickRandom, yawTowards } from "@/lib/helpers";
 import type {
     AwarenessState,
@@ -60,8 +57,10 @@ import type {
     VictimRig,
     IStrikeSegment,
     DodgeSide,
+    Stance,
 } from "@/types/combat";
-import type { Handedness, IHandRig, WeaponDefinition } from "@/types/weapons";
+import type { IBladeSource, IProceduralFrame } from "@/types/procedural";
+import type { Handedness, ICarryRig, IHandRig, WeaponDefinition } from "@/types/weapons";
 import type { ISkinnedModel, IWorldContext, IWorldEntity } from "@/types/world";
 
 interface ICombatCharacterConfig {
@@ -74,6 +73,7 @@ interface ICombatCharacterConfig {
     moveSet: IMoveSet;
     freeLocomotion: IFreeLocomotion;
     strafeLocomotion: IStrafeLocomotion | null;
+    sheathedLocomotion?: IFreeLocomotion;
     victimRig: VictimRig;
     turnSmoothing: number;
     modelYawOffset: number;
@@ -88,11 +88,13 @@ interface ICombatCharacterConfig {
 const flashMaterial = new MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
 const STILL = new Vector3();
 const MOVING_SPEED = 0.15;
+const WEAPON_GAZE_ALONG_BLADE = 0.6;
 const scratchRootMotion = new Vector3();
 const scratchDesired = new Vector3();
 const scratchLaunchOrigin = new Vector3();
 const scratchLaunchAim = new Vector3();
 const scratchPush = new Vector3();
+const scratchForward = new Vector3();
 
 const REACTION_PLAYBACK: IOneShotOptions = {
     fadeSeconds: COMBAT_TIMING.reactionFade,
@@ -132,10 +134,15 @@ export abstract class CombatCharacter
     protected readonly context: IWorldContext;
     protected readonly motor: CharacterMotor;
     protected readonly animator: CharacterAnimator;
+    private readonly gazeHilt = new Vector3();
+    private readonly gazeTip = new Vector3();
     protected readonly procedural: ProceduralRig;
+    private wasPaired = false;
+    private physicsFreezeSeconds = 0;
     private readonly proceduralFrame: IProceduralFrame = {
         deltaSeconds: 0,
         detail: "full",
+        physicsDetail: "full",
         weaponHand: "right",
         gripWeight: 0,
         grounded: false,
@@ -163,6 +170,7 @@ export abstract class CombatCharacter
     private readonly turnSmoothing: number;
     private readonly freeLocomotion: IFreeLocomotion;
     private readonly strafeLocomotion: IStrafeLocomotion | null;
+    private readonly sheathedLocomotion: IFreeLocomotion | null;
     private readonly flashesOnHit: boolean;
     private readonly reactionLockout: Partial<Record<ReactionTier, number>>;
     private readonly ignoredReactions: readonly ReactionTier[];
@@ -244,6 +252,7 @@ export abstract class CombatCharacter
         this.turnSmoothing = config.turnSmoothing;
         this.freeLocomotion = config.freeLocomotion;
         this.strafeLocomotion = config.strafeLocomotion;
+        this.sheathedLocomotion = config.sheathedLocomotion ?? null;
         this.flashesOnHit = config.flashesOnHit;
         this.reactionLockout = config.reactionLockout ?? {};
         this.ignoredReactions = config.ignoredReactions ?? [];
@@ -291,6 +300,7 @@ export abstract class CombatCharacter
             hasDirectionalInput: false,
             dodgeSide: null,
             isGrounded: true,
+            stance: "drawn",
             spendStamina: (cost) => this.vitals.trySpendStamina(cost),
         };
         this.executor = new AttackExecutor(this, config.context);
@@ -377,6 +387,10 @@ export abstract class CombatCharacter
 
     get canBeCounterKilled(): boolean {
         return false;
+    }
+
+    get stance(): Stance {
+        return this.weapon && this.weapon.mounted !== "hand" ? "sheathed" : "drawn";
     }
 
     get stealthVisibility(): number {
@@ -512,8 +526,12 @@ export abstract class CombatCharacter
             thumbBase: requireBone(boneNames.thumbBase),
         };
 
+        const carryRig: ICarryRig | undefined = definition.carry
+            ? { bone: requireBone(definition.carry.bone) }
+            : undefined;
+
         this.weapon?.dispose();
-        this.weapon = createWeapon(definition, template, handRig, this.context.sceneRoot);
+        this.weapon = createWeapon(definition, template, handRig, this.context.sceneRoot, carryRig);
     }
 
     onHitConfirmed(_defender: ICombatant, _outcome: IHitOutcome, move: IMoveDefinition): void {
@@ -634,6 +652,7 @@ export abstract class CombatCharacter
         input.realDeltaSeconds =
             fixedTimestep / Math.max(this.context.timeDilation.globalScale, 1e-3);
         input.isGrounded = this.motor.isGrounded;
+        input.stance = this.stance;
         input.heavyHeld = this.heavyHeld;
         input.isSprinting = this.isSprinting;
         input.isLockedTargetFar = this.isLockedTargetFar;
@@ -709,12 +728,31 @@ export abstract class CombatCharacter
         const frame = this.proceduralFrame;
         frame.deltaSeconds = deltaSeconds * scale;
         frame.detail =
-            this.isDead || this.machine.state === "paired" ? "none" : this.proceduralDetail();
+            this.isDead || this.machine.state === "paired"
+                ? "none"
+                : this.detailByDistance(PROCEDURAL.lod.fullMetres, PROCEDURAL.lod.impactMetres, [
+                      "full",
+                      "impact",
+                      "none",
+                  ]);
+        frame.physicsDetail = this.detailByDistance(
+            PHYSICS.lod.fullMetres,
+            PHYSICS.lod.reducedMetres,
+            ["full", "reduced", "frozen"]
+        );
+        if (this.physicsFreezeSeconds > 0) {
+            this.physicsFreezeSeconds -= deltaSeconds;
+            frame.physicsDetail = "frozen";
+        }
+        const isPaired = this.machine.state === "paired";
+        if (isPaired && !this.wasPaired) this.procedural.resetPhysics();
+        this.wasPaired = isPaired;
         frame.weaponHand = this.weaponHand();
         frame.gripWeight = this.gripWeight();
         frame.grounded = this.motor.isGrounded;
         frame.plantFeet = !this.isTranslating();
-        frame.lookTarget = this.target && !this.target.isDead ? this.target.position : null;
+        frame.lookTarget =
+            this.target && !this.target.isDead ? this.target.position : this.weaponGazePoint();
         this.procedural.update(frame);
         this.updateHurtbox(position);
         this.updateFlash(deltaSeconds);
@@ -732,6 +770,7 @@ export abstract class CombatCharacter
         this.restoreFlash();
         this.animator.dispose();
         for (const skeleton of this.skeletons) skeleton.dispose();
+        this.procedural.dispose();
         this.motor.dispose();
     }
 
@@ -739,10 +778,15 @@ export abstract class CombatCharacter
 
     protected onMoveStarted(_move: IMoveDefinition): void {}
 
+    private weaponGazePoint(): Vector3 | null {
+        if (!this.animator.gazesAtWeapon || !this.bladeSegment(this.gazeHilt, this.gazeTip))
+            return null;
+        return this.gazeHilt.lerp(this.gazeTip, WEAPON_GAZE_ALONG_BLADE);
+    }
+
     bladeSegment(hilt: Vector3, tip: Vector3): boolean {
         if (!this.weapon) return false;
-        this.weapon.bladeSegment(hilt, tip);
-        return true;
+        return this.weapon.bladeSegment(hilt, tip);
     }
 
     protected weaponHand(): Handedness {
@@ -752,8 +796,7 @@ export abstract class CombatCharacter
     protected pushDirectionAwayFrom(source: Vector3): Vector3 {
         const position = this.sceneObject.position;
         scratchPush.set(position.x - source.x, 0, position.z - source.z);
-        if (scratchPush.lengthSq() < 1e-8)
-            scratchPush.set(Math.sin(this.facingYaw), 0, Math.cos(this.facingYaw));
+        if (scratchPush.lengthSq() < 1e-8) BoneMath.forwardFromYaw(this.facingYaw, scratchPush);
         return scratchPush.normalize();
     }
 
@@ -775,10 +818,16 @@ export abstract class CombatCharacter
         return clamp(1 - outside / PROCEDURAL.grip.rampSeconds, 0, 1);
     }
 
-    private proceduralDetail(): ProceduralDetail {
-        const distance = this.sceneObject.position.distanceTo(this.context.combatRegistry.lodOrigin);
-        if (distance <= PROCEDURAL.lod.fullMetres) return "full";
-        return distance <= PROCEDURAL.lod.impactMetres ? "impact" : "none";
+    private detailByDistance<Detail extends string>(
+        fullMetres: number,
+        reducedMetres: number,
+        labels: readonly [Detail, Detail, Detail]
+    ): Detail {
+        const distance = this.sceneObject.position.distanceTo(
+            this.context.combatRegistry.lodOrigin
+        );
+        if (distance <= fullMetres) return labels[0];
+        return distance <= reducedMetres ? labels[1] : labels[2];
     }
 
     protected onDamaged(_payload: IHitPayload, _reaction: ReactionTier): void {}
@@ -796,6 +845,10 @@ export abstract class CombatCharacter
     protected onKilled(_killer: ICombatant | null): void {}
 
     protected onDeadTick(_elapsed: number, _holdSeconds: number): void {}
+
+    protected freezePhysics(seconds: number): void {
+        this.physicsFreezeSeconds = seconds;
+    }
 
     protected tickPaired(_deltaSeconds: number): void {}
 
@@ -859,6 +912,8 @@ export abstract class CombatCharacter
 
         if (output.returnedToLocomotion)
             this.animator.returnToLocomotion(COMBAT_TIMING.locomotionReturnFade);
+
+        if (output.mountTarget) this.weapon?.mount(output.mountTarget);
 
         let displacement: Vector3 | null = null;
         const move = output.move;
@@ -949,11 +1004,7 @@ export abstract class CombatCharacter
                 if (move.blockedInto) this.machine.forceMove(move.blockedInto);
             } else {
                 const glide = this.momentumSpeed * deltaSeconds;
-                displacement.set(
-                    Math.sin(this.facingYaw) * glide,
-                    0,
-                    Math.cos(this.facingYaw) * glide
-                );
+                BoneMath.forwardFromYaw(this.facingYaw, displacement, glide);
                 this.momentumSpeed = Math.max(
                     0,
                     this.momentumSpeed - (move.momentum?.deceleration ?? 0) * deltaSeconds
@@ -966,9 +1017,10 @@ export abstract class CombatCharacter
     }
 
     protected isLowObstacleAhead(reach: number): boolean {
+        BoneMath.forwardFromYaw(this.facingYaw, scratchForward);
         return this.motor.isWorldBlockedAhead(
-            Math.sin(this.facingYaw),
-            Math.cos(this.facingYaw),
+            scratchForward.x,
+            scratchForward.z,
             reach + CONTACT.lowProbeMargin,
             CONTACT.lowProbeHeightFraction
         );
@@ -976,11 +1028,7 @@ export abstract class CombatCharacter
 
     private handMomentumToMotor(): void {
         if (this.momentumSpeed <= 0) return;
-        this.motor.velocity.set(
-            Math.sin(this.facingYaw) * this.momentumSpeed,
-            0,
-            Math.cos(this.facingYaw) * this.momentumSpeed
-        );
+        BoneMath.forwardFromYaw(this.facingYaw, this.motor.velocity, this.momentumSpeed);
         this.momentumSpeed = 0;
     }
 
@@ -1052,9 +1100,13 @@ export abstract class CombatCharacter
         const sine = Math.sin(yaw);
         const forward = (velocity.x * sine + velocity.z * cosine) * scale;
         const right = (-velocity.x * cosine + velocity.z * sine) * scale;
-        const strafe = this.facesTarget && !this.isSprinting ? this.strafeLocomotion : null;
+        const unarmed = this.stance === "sheathed" ? this.sheathedLocomotion : null;
+        const strafe =
+            this.facesTarget && !this.isSprinting && !unarmed ? this.strafeLocomotion : null;
 
-        this.animator.setLocomotion(this.locomotionOverride ?? strafe ?? this.freeLocomotion);
+        this.animator.setLocomotion(
+            this.locomotionOverride ?? strafe ?? unarmed ?? this.freeLocomotion
+        );
         this.animator.setLocomotionInput(right, forward, speed);
     }
 
@@ -1065,10 +1117,7 @@ export abstract class CombatCharacter
 
         const hurtbox = this.target && !this.target.isDead ? this.target.hurtboxes[0] : undefined;
         if (hurtbox) scratchLaunchAim.addVectors(hurtbox.start, hurtbox.end).multiplyScalar(0.5);
-        else
-            scratchLaunchAim
-                .set(Math.sin(this.facingYaw), 0, Math.cos(this.facingYaw))
-                .add(scratchLaunchOrigin);
+        else BoneMath.forwardFromYaw(this.facingYaw, scratchLaunchAim).add(scratchLaunchOrigin);
 
         this.context.projectiles.launch(this, launch.kind, scratchLaunchOrigin, scratchLaunchAim);
     }

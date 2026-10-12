@@ -1,4 +1,4 @@
-import { CLIP } from "@/constants/characters";
+import { CLIP, SKELETON_BONES } from "@/constants/characters";
 import { degrees, metres } from "@/lib/helpers";
 import type {
     ImpactTier,
@@ -104,7 +104,7 @@ const PERFECT_MARKS: IClipMarks = {
     grip: { from: 0, to: 0.2 },
 };
 
-export const PARRY_CLIP_MARKS: Readonly<Record<string, IClipMarks>> = {
+export const CLIP_MARKS: Readonly<Record<string, IClipMarks>> = {
     [CLIP.parryGuard]: {
         marks: { idle: 0.65, lowering: 0.5 },
         grip: { from: 0.05, to: 0.6 },
@@ -117,6 +117,8 @@ export const PARRY_CLIP_MARKS: Readonly<Record<string, IClipMarks>> = {
     [CLIP.parryDeflectSide]: DEFLECT_MARKS,
     [CLIP.parryPerfectHigh]: PERFECT_MARKS,
     [CLIP.parryPerfectSide]: PERFECT_MARKS,
+    [CLIP.swordDraw]: { marks: { mount: 0.286 }, grip: null },
+    [CLIP.swordSheathe]: { marks: { mount: 0.714 }, grip: null },
 };
 
 export const PARRY = {
@@ -193,6 +195,24 @@ export const PROJECTILES: Record<ProjectileKind, IProjectileSpec> = {
 export const PROJECTILE_POOL = { size: 12, lifetimeSeconds: 3 };
 
 export const WEAPONS = {
+    sword: {
+        kind: "melee",
+        id: "sword",
+        modelPath: "/models/weapons/Sword.gltf",
+        gripHand: "right",
+        handleCentreFraction: 0.145,
+        gripRoll: 0,
+        worldLength: metres(1.05),
+        guardFraction: 0.18,
+        bladeRadius: metres(0.09),
+        damage: 14,
+        trailColor: "#ffe2b0",
+        carry: {
+            bone: SKELETON_BONES.chest,
+            position: [metres(-0.276), metres(0.456), metres(-0.176)],
+            rotationDegrees: [92.6, -64, -93.3],
+        },
+    },
     longsword: {
         kind: "melee",
         id: "longsword",
@@ -246,6 +266,8 @@ export const WEAPONS = {
         trailColor: "#ffb070",
     },
 } satisfies Record<string, WeaponDefinition>;
+
+export const BLADE_THICKNESS_SLICES = 16;
 
 export const GRIP = {
     knuckleReach: 0.9,
