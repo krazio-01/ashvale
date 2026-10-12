@@ -1,4 +1,6 @@
-import { metres, pair } from "@/lib/helpers";
+import { metres } from "@/lib/helpers";
+import type { ProceduralDetail } from "@/types/procedural";
+import type { Handedness } from "@/types/weapons";
 
 export const STRIDE = {
     walk: 1.25,
@@ -17,10 +19,12 @@ export const PALETTE = {
 };
 
 export const CHARACTER = {
-    modelPath: "/models/characters/UAL1_Standard.glb",
-    clipLibraryPaths: ["/models/characters/CombatClips.glb"],
+    modelPath: "/models/characters/Player.gltf",
+    clipLibraryPaths: [
+        "/models/characters/UAL1_Standard.glb",
+        "/models/characters/CombatClips.glb",
+    ],
     modelYawOffset: 0,
-    playbackRateRange: pair(0.5, 2.5),
 };
 
 export const IDLE_VARIATION = {
@@ -39,40 +43,235 @@ export const CREATURE = {
     puglinModelPath: "/models/characters/Puglin.gltf",
 };
 
-export const HAND_BONES = {
-    right: {
-        hand: "hand_r",
-        indexBase: "index_01_r",
-        middleBase: "middle_01_r",
-        ringBase: "ring_01_r",
-        pinkyBase: "pinky_01_r",
-        thumbBase: "thumb_01_r",
-    },
-    left: {
-        hand: "hand_l",
-        indexBase: "index_01_l",
-        middleBase: "middle_01_l",
-        ringBase: "ring_01_l",
-        pinkyBase: "pinky_01_l",
-        thumbBase: "thumb_01_l",
-    },
-};
+const SIDE_SUFFIXES = { left: "l", right: "r" } as const;
+const SIDE_LIST = Object.values(SIDE_SUFFIXES);
+const FINGERS = ["index", "middle", "ring", "pinky", "thumb"] as const;
+const TORSO_CHAIN_UP = ["spine_03", "spine_02", "spine_01", "pelvis"] as const;
 
-export const SKELETON_BONES = {
-    pelvis: "pelvis",
-    chest: "spine_03",
-    neck: "neck_01",
-    head: "Head",
-    clavicles: { left: "clavicle_l", right: "clavicle_r" },
-    arms: {
-        left: ["upperarm_l", "lowerarm_l", "hand_l"],
-        right: ["upperarm_r", "lowerarm_r", "hand_r"],
+const suffixed = (baseNames: readonly string[], side: string): string[] =>
+    baseNames.map((baseName) => `${baseName}_${side}`);
+const namesPerSide = (baseNames: readonly string[]): string[] =>
+    baseNames.flatMap((baseName) => SIDE_LIST.map((side) => `${baseName}_${side}`));
+const forEachSide = <Item>(build: (side: string) => readonly Item[]): Item[] =>
+    SIDE_LIST.flatMap(build);
+const chainLinks = (names: readonly string[]): [string, string][] =>
+    names.slice(1).map((name, index) => [names[index], name]);
+const limbSegments = (
+    baseNames: readonly string[],
+    radii: readonly number[],
+    side: string
+): [string, number][] => suffixed(baseNames, side).map((name, index) => [name, radii[index]]);
+
+function handBones(side: string) {
+    return {
+        hand: `hand_${side}`,
+        indexBase: `index_01_${side}`,
+        middleBase: `middle_01_${side}`,
+        ringBase: `ring_01_${side}`,
+        pinkyBase: `pinky_01_${side}`,
+        thumbBase: `thumb_01_${side}`,
+    };
+}
+
+export const HAND_BONES = { right: handBones("r"), left: handBones("l") };
+
+export type SkeletonSide = "left" | "right";
+export type ColliderGroup = "torso" | "upperArm" | "lowerArm" | "thigh" | "calf";
+export type MirrorRegion = "torso" | "neck" | "head";
+
+export interface ISkeletonDescriptor {
+    sides: Record<SkeletonSide, string>;
+    sideSigns: Record<SkeletonSide, number>;
+    bones: {
+        pelvis: string;
+        chest: string;
+        neck: string;
+        head: string;
+        headTop: string;
+        root: string;
+        spine: readonly string[];
+        clavicles: Record<SkeletonSide, string>;
+        arms: Record<SkeletonSide, readonly string[]>;
+        legs: Record<SkeletonSide, readonly string[]>;
+        feet: Record<SkeletonSide, readonly string[]>;
+        handTips: Record<SkeletonSide, string>;
+    };
+    chains: Record<string, string>;
+    limbs: Record<
+        string,
+        {
+            segments: readonly (readonly [string, number])[];
+            bones: readonly string[];
+            distal: readonly string[];
+            zone?: string;
+        }
+    >;
+    regions: Record<string, readonly string[]>;
+    rig: {
+        coreBones: readonly string[];
+        dampedBones: readonly string[];
+        torsoAnchors: readonly string[];
+    };
+    spineCurve: readonly (readonly [string, MirrorRegion])[];
+    placedJoints: readonly string[];
+    segmentTails: Record<string, string>;
+    hiddenBoneParts: readonly string[];
+    propAnchors: readonly string[];
+    colliderSegments: readonly (readonly [string, string, string, ColliderGroup])[];
+    fingerBones: readonly string[];
+    leafMarker: string;
+    previewClips: Record<"standard" | "extreme", readonly (readonly [string, number])[]>;
+    measuredJoints: readonly string[];
+}
+
+export const SKELETONS = {
+    ual: {
+        sides: SIDE_SUFFIXES,
+        sideSigns: { left: 1, right: -1 },
+        bones: {
+            pelvis: "pelvis",
+            chest: "spine_03",
+            neck: "neck_01",
+            head: "Head",
+            headTop: "head_top",
+            root: "root",
+            spine: ["spine_01", "spine_02", "spine_03"],
+            clavicles: { left: "clavicle_l", right: "clavicle_r" },
+            arms: {
+                left: ["upperarm_l", "lowerarm_l", "hand_l"],
+                right: ["upperarm_r", "lowerarm_r", "hand_r"],
+            },
+            legs: {
+                left: ["thigh_l", "calf_l", "foot_l"],
+                right: ["thigh_r", "calf_r", "foot_r"],
+            },
+            feet: { left: ["foot_l", "ball_l"], right: ["foot_r", "ball_r"] },
+            handTips: { left: "middle_01_l", right: "middle_01_r" },
+        },
+        chains: Object.fromEntries([
+            ...forEachSide((side) => chainLinks(suffixed(["thigh", "calf", "foot", "ball"], side))),
+            ...chainLinks(["spine_01", "spine_02", "spine_03", "neck_01", "Head"]),
+            ...forEachSide((side) =>
+                chainLinks(
+                    suffixed(["clavicle", "upperarm", "lowerarm", "hand", "middle_01"], side)
+                )
+            ),
+        ]),
+        limbs: Object.fromEntries([
+            ...forEachSide((side) => [
+                [
+                    `leg_${side}`,
+                    {
+                        segments: limbSegments(["thigh", "calf", "foot"], [0.15, 0.12, 0.1], side),
+                        bones: ["pelvis", ...suffixed(["thigh", "calf", "foot", "ball"], side)],
+                        distal: suffixed(["calf", "foot", "ball"], side),
+                    },
+                ],
+            ]),
+            ...forEachSide((side) => [
+                [
+                    `arm_${side}`,
+                    {
+                        segments: limbSegments(["upperarm", "lowerarm"], [0.1, 0.09], side),
+                        bones: [
+                            "spine_03",
+                            ...suffixed(["clavicle", "upperarm", "lowerarm", "hand"], side),
+                        ],
+                        distal: suffixed(["lowerarm", "hand"], side),
+                        zone: `hand_${side}`,
+                    },
+                ],
+            ]),
+        ]),
+        regions: {
+            head: ["Head", "neck_01"],
+            ...Object.fromEntries(namesPerSide(["hand"]).map((hand) => [hand, [hand]])),
+            torso: ["pelvis", "spine_01", "spine_02", "spine_03", ...namesPerSide(["clavicle"])],
+            arms: namesPerSide(["upperarm", "lowerarm"]),
+            legs: namesPerSide(["thigh", "calf"]),
+            feet: namesPerSide(["foot", "ball"]),
+        },
+        rig: {
+            coreBones: [
+                "pelvis",
+                "spine_01",
+                "spine_02",
+                "spine_03",
+                "neck_01",
+                "Head",
+                ...namesPerSide([
+                    "clavicle",
+                    "upperarm",
+                    "lowerarm",
+                    "hand",
+                    "thigh",
+                    "calf",
+                    "foot",
+                    "ball",
+                ]),
+            ],
+            dampedBones: namesPerSide(["calf", "foot", "ball", "upperarm", "lowerarm", "hand"]),
+            torsoAnchors: TORSO_CHAIN_UP,
+        },
+        spineCurve: [
+            ["pelvis", "torso"],
+            ["spine_01", "torso"],
+            ["spine_02", "torso"],
+            ["spine_03", "torso"],
+            ["neck_01", "neck"],
+            ["Head", "head"],
+        ],
+        placedJoints: ["pelvis", "thigh_l", "thigh_r", "spine_01"],
+        segmentTails: { pelvis: "spine_01", Head: "head_top" },
+        fingerBones: FINGERS,
+        leafMarker: "_leaf",
+        previewClips: {
+            standard: [
+                ["Combat_Idle", 0.5],
+                ["Walk_Loop", 0.3],
+                ["Sprint_Loop", 0.4],
+                ["Sword_Light_1", 0.45],
+                ["Sword_Heavy", 0.5],
+                ["React_Hit_Head", 0.3],
+            ],
+            extreme: [
+                ["Dodge_Roll", 0.4],
+                ["Death_Forward", 0.8],
+                ["Crouch_Fwd_Loop", 0.5],
+                ["Jump_Start", 0.6],
+                ["Sword_Heavy_Finisher", 0.5],
+                ["Slide_Hold", 0.5],
+            ],
+        },
+        hiddenBoneParts: [...FINGERS, "leaf", "phys_"],
+        propAnchors: TORSO_CHAIN_UP,
+        colliderSegments: [
+            ["spine_01", "pelvis", "spine_03", "torso"],
+            ...forEachSide((side): [string, string, string, ColliderGroup][] => [
+                [`upperarm_${side}`, `upperarm_${side}`, `lowerarm_${side}`, "upperArm"],
+                [`lowerarm_${side}`, `lowerarm_${side}`, `hand_${side}`, "lowerArm"],
+            ]),
+            ...forEachSide((side): [string, string, string, ColliderGroup][] => [
+                [`thigh_${side}`, `thigh_${side}`, `calf_${side}`, "thigh"],
+                [`calf_${side}`, `calf_${side}`, `foot_${side}`, "calf"],
+            ]),
+        ],
+        measuredJoints: [
+            "pelvis",
+            "spine_01",
+            "spine_02",
+            "spine_03",
+            "neck_01",
+            "Head",
+            "head_top",
+            ...forEachSide((side) => suffixed(["upperarm", "lowerarm", "hand", "middle_01"], side)),
+            ...forEachSide((side) => suffixed(["thigh", "calf", "foot", "ball"], side)),
+        ],
     },
-    legs: {
-        left: ["thigh_l", "calf_l", "foot_l"],
-        right: ["thigh_r", "calf_r", "foot_r"],
-    },
-} as const;
+} as const satisfies Record<string, ISkeletonDescriptor>;
+
+export type SkeletonName = keyof typeof SKELETONS;
+export const SKELETON_BONES = SKELETONS.ual.bones;
 
 export const CLIP = {
     idle: "Idle_Loop",
@@ -100,6 +299,8 @@ export const CLIP = {
     swordHeavy: "Sword_Heavy",
     swordHeavyFinisher: "Sword_Heavy_Finisher",
     swordCounter: "Sword_Counter",
+    swordDraw: "Sword_Draw",
+    swordSheathe: "Sword_Sheathe",
     dodgeRoll: "Dodge_Roll",
     dodgeBackstep: "Dodge_Backstep",
     dodgeLeft: "Dodge_Left",
@@ -287,4 +488,21 @@ export const PROCEDURAL = {
         attackerMaxCorrection: metres(0.2),
     },
     grip: { rampSeconds: 0.08 },
+};
+
+export const PROCEDURAL_DETAIL_RANK: Record<ProceduralDetail, number> = {
+    none: 0,
+    impact: 1,
+    full: 2,
+};
+
+export const OTHER_HAND: Record<Handedness, Handedness> = { left: "right", right: "left" };
+
+export const PROCEDURAL_EPSILON = {
+    turnRadians: 1e-5,
+    reach: 1e-4,
+    lookDistance: 1e-4,
+    bend: 1e-6,
+    degenerateLengthSquared: 1e-8,
+    springRestSquared: 1e-8,
 };

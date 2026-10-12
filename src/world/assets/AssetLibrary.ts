@@ -11,14 +11,13 @@ import {
     Vector3,
     VectorKeyframeTrack,
 } from "three";
-import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { BufferGeometry, KeyframeTrack, WebGLRenderer } from "three";
 import { createGltfLoader } from "@/world/assets/GltfLoaderFactory";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { IThemeManifest } from "@/types/theme";
 import type { IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
-import { CHARACTER, CREATURE, CLIP } from "@/constants/characters";
+import { CHARACTER, CREATURE, CLIP, SKELETON_BONES } from "@/constants/characters";
 const FOLIAGE_MATERIAL_PATTERN = /leaves|leaf|foliage/i;
 const USED_CLIP_NAMES = new Set<string>(Object.values(CLIP));
 
@@ -76,6 +75,10 @@ export class AssetLibrary {
         library.skinnedModelsByPath.set(CHARACTER.modelPath, preparedCharacterModel);
 
         const creatureClipLibraries = [characterModel, ...clipLibraries];
+        const mannequinHeight =
+            clipLibraries
+                .map((library) => measureHeight(library.scene))
+                .find((height) => height > 0) ?? 0;
 
         for (const [index, modelPath] of creatureModelPaths.entries()) {
             const creatureModel = creatureModels[index];
@@ -88,7 +91,7 @@ export class AssetLibrary {
                     creatureClipLibraries,
                     materialLibrary,
                     true,
-                    preparedCharacterModel.height
+                    mannequinHeight
                 )
             );
         }
@@ -129,6 +132,12 @@ async function loadPropScene(
     }
 }
 
+const asArray = <T>(value: T | T[]): T[] => (Array.isArray(value) ? value : [value]);
+
+const boundsHeight = (bounds: Box3): number => (bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y);
+
+const measureHeight = (scene: Object3D): number => boundsHeight(new Box3().setFromObject(scene));
+
 export function prepareSkinnedModel(
     gltf: GLTF,
     clipLibraries: GLTF[],
@@ -144,13 +153,23 @@ export function prepareSkinnedModel(
         object.frustumCulled = false;
     });
 
-    const bounds = new Box3().setFromObject(gltf.scene);
-    const height = bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y;
+    const height = measureHeight(gltf.scene);
     const foreignScaleFactor =
         clipsAreForeign && mannequinHeight > 0 ? height / mannequinHeight : 1;
+    const modelPelvis = gltf.scene.getObjectByName(SKELETON_BONES.pelvis);
     const mergedClips = [
         ...gltf.animations,
-        ...clipLibraries.flatMap((library) => library.animations),
+        ...clipLibraries.flatMap((library) => {
+            const libraryPelvis = library.scene.getObjectByName(SKELETON_BONES.pelvis);
+            const pelvisRatio =
+                clipsAreForeign ||
+                !modelPelvis ||
+                !libraryPelvis ||
+                libraryPelvis.position.length() < PELVIS_RATIO_EPSILON
+                    ? 1
+                    : modelPelvis.position.length() / libraryPelvis.position.length();
+            return library.animations.map((clip) => scalePelvisMotion(clip, pelvisRatio));
+        }),
     ].filter((clip) => USED_CLIP_NAMES.has(clip.name));
 
     const rootMotion = new Map<string, KeyframeTrack>();
@@ -182,10 +201,24 @@ export function prepareSkinnedModel(
 }
 
 const ROOT_POSITION_TRACK = "root.position";
+const PELVIS_POSITION_TRACK = `${SKELETON_BONES.pelvis}.position`;
+const PELVIS_RATIO_EPSILON = 1e-4;
+
+function scalePelvisMotion(clip: AnimationClip, ratio: number): AnimationClip {
+    if (Math.abs(ratio - 1) < PELVIS_RATIO_EPSILON) return clip;
+    return new AnimationClip(
+        clip.name,
+        clip.duration,
+        clip.tracks.map((track) =>
+            track.name === PELVIS_POSITION_TRACK ? scaleTrack(track, ratio) : track
+        )
+    );
+}
 
 function scaleTrack(track: KeyframeTrack, scaleFactor: number): KeyframeTrack {
-    const values = Float32Array.from(track.values, (value) => value * scaleFactor);
-    return new VectorKeyframeTrack(track.name, track.times, values);
+    const scaled = track.clone();
+    for (let index = 0; index < scaled.values.length; index++) scaled.values[index] *= scaleFactor;
+    return scaled;
 }
 
 const POSITION_VARIANCE_EPSILON = 1e-4;
@@ -304,7 +337,7 @@ export function flattenForInstancing(
 
     return {
         parts,
-        height: bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y,
+        height: boundsHeight(bounds),
         halfExtents,
         centerOffset,
     };
@@ -326,9 +359,7 @@ function expandQuantizedAttributes(geometry: BufferGeometry): void {
 }
 
 function isFoliage(source: Material | Material[]): boolean {
-    const materials = Array.isArray(source) ? source : [source];
-
-    return materials.some((material) => FOLIAGE_MATERIAL_PATTERN.test(material.name));
+    return asArray(source).some((material) => FOLIAGE_MATERIAL_PATTERN.test(material.name));
 }
 
 function applyCanopyNormals(geometry: BufferGeometry): void {
@@ -364,9 +395,7 @@ function toToonMaterial(
     source: Material | Material[],
     materialLibrary: MaterialLibrary
 ): Material | Material[] {
-    const sourceMaterials = Array.isArray(source) ? source : [source];
-
-    const toonMaterials = sourceMaterials.map((material) =>
+    const toonMaterials = asArray(source).map((material) =>
         material instanceof MeshStandardMaterial
             ? materialLibrary.getToonMaterialForSource(material)
             : material

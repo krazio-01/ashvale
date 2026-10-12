@@ -71,7 +71,7 @@ export const PLAYER_VITALS = {
     staggerSeconds: 0.6,
 };
 
-export const PLAYER_STARTING_WEAPON: WeaponDefinition = WEAPONS.longsword;
+export const PLAYER_STARTING_WEAPON: WeaponDefinition = WEAPONS.sword;
 
 export const CAMERA = {
     near: 0.1,
@@ -139,6 +139,7 @@ export const INPUT_BINDINGS = {
     parry: ["KeyQ"],
     shoot: ["KeyF"],
     finisher: ["KeyE"],
+    draw: ["KeyR"],
 };
 
 export const MOUSE_BINDINGS = {
@@ -226,6 +227,11 @@ export const CONTROL_REFERENCE: readonly IControlGroup[] = [
                 keys: [keyLabel(INPUT_BINDINGS.parry[0])],
                 action: "Parry",
                 description: "Deflect an incoming attack and open it up for a counter-kill",
+            },
+            {
+                keys: [keyLabel(INPUT_BINDINGS.draw[0])],
+                action: "Draw / sheathe",
+                description: "Draw or put away the sword; attacking draws it first",
             },
             {
                 keys: [keyLabel(INPUT_BINDINGS.finisher[0])],
