@@ -3,6 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+const GAME_ASSETS_ROOT =
+    process.env.GAME_ASSETS_ROOT ?? path.join(os.homedir(), "Documents/Personal/gameAssets");
+
 export const PIPELINE_CONFIG = {
     sourceRoot: "assets-src/models",
     outputRoot: "public/models",
@@ -15,9 +18,9 @@ export const PIPELINE_CONFIG = {
         binary: process.env.BLENDER_BIN ?? "/snap/bin/blender",
         script: "tools/blender/BlenderPipeline.py",
     },
+    gameAssetsRoot: GAME_ASSETS_ROOT,
     combatAssetsRoot:
-        process.env.COMBAT_ASSETS_ROOT ??
-        path.join(os.homedir(), "Downloads/assets/Combat/extracted"),
+        process.env.COMBAT_ASSETS_ROOT ?? path.join(GAME_ASSETS_ROOT, "combat/extracted"),
     characters: {
         workRoot: ".local/characters",
         blenderPackages: {
