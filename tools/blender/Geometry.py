@@ -60,12 +60,15 @@ def triangle_areas(positions, corners):
     return 0.5 * np.linalg.norm(np.cross(second - first, third - first), axis=1)
 
 
-def smooth_unit(values):
+def smoothstep_unit(values):
     return values * values * (3.0 - 2.0 * values)
 
 
 def smoothstep(edge0, edge1, values):
-    return smooth_unit(np.clip((values - edge0) / (edge1 - edge0), 0.0, 1.0))
+    ratio = (values - edge0) / (edge1 - edge0)
+    if type(ratio) is float:
+        return smoothstep_unit(min(1.0, max(0.0, ratio)))
+    return smoothstep_unit(np.clip(ratio, 0.0, 1.0))
 
 
 def face_edges(corners, pairs=((0, 1), (1, 2), (2, 0))):
@@ -76,7 +79,7 @@ def rounded(values, decimals):
     return [round(float(value), decimals) for value in values]
 
 
-def multi_source_distance(edges, lengths, count, sources):
+def graph_distance_to_sources(edges, lengths, count, sources):
     if not len(sources):
         return np.full(count, np.inf), np.full(count, -9999)
     graph = coo_matrix((lengths, (edges[:, 0], edges[:, 1])), shape=(count, count)).tocsr()

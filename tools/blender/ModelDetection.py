@@ -5,7 +5,7 @@ import json
 import numpy as np
 
 from Geometry import rounded, segment_distance
-from ModelConfig import detected_bodies
+from ModelConfig import read_detection
 
 BODY_FIELDS = ("attachBone", "columns", "rows", "feel", "segmentedParts", "clothSeed")
 
@@ -34,7 +34,7 @@ class BodyNamer:
         return name
 
 
-class AnchorResolver:
+class NearestBoneFinder:
     def __init__(self, descriptor, joints):
         chains, tails = descriptor.chains, descriptor.segment_tails
         self.anchors = [
@@ -52,7 +52,7 @@ class AnchorResolver:
             for bone in self.anchors
         }
 
-    def nearest_to_cloud(self, points):
+    def nearest_bone_to_points(self, points):
         distances = [float(segment_distance(points, *self.segments[bone]).mean()) for bone in self.anchors]
         return self.anchors[int(np.argmin(distances))]
 
@@ -98,7 +98,7 @@ class PropDetector(PartDetector):
 class ClothDetector(PartDetector):
     def detect(self, centres, areas, thin_face, piece, claimed):
         settings, tuning = self.settings, self.settings.section("detection")
-        minimum_area = tuning.minClothArea * settings.proportions.factor**2
+        minimum_area = tuning.minClothArea * settings.height_scale.scale**2
         cell = settings.length(tuning.clothCellSize)
         candidates, accepted = [], []
         for label in np.unique(piece[thin_face & ~claimed]):
@@ -148,17 +148,17 @@ class ClothDetector(PartDetector):
 def resolve_anchors(descriptor, joints, detection, part_points, part_ids):
     if not detection["props"] and not detection["physics"]:
         return detection
-    resolver = AnchorResolver(descriptor, joints)
+    resolver = NearestBoneFinder(descriptor, joints)
     for prop in detection["props"]:
         if prop.get("anchored") is None:
-            prop["bone"] = resolver.nearest_to_cloud(part_points[np.isin(part_ids, prop["segmentedParts"])])
+            prop["bone"] = resolver.nearest_bone_to_points(part_points[np.isin(part_ids, prop["segmentedParts"])])
     for body in detection["physics"]:
         if body.get("anchored") is None:
             body["attachBone"] = resolver.nearest_to_point(np.array(body["anchorPoint"]))
     return detection
 
 
-def detection_stamp(config):
+def detection_inputs_hash(config):
     payload = {
         "props": config["props"],
         "overrides": config["overrides"],
@@ -169,8 +169,8 @@ def detection_stamp(config):
 
 
 def assert_detection_current(config, work):
-    detection = detected_bodies(work)
-    if detection["stamp"] != detection_stamp(config):
+    detection = read_detection(work)
+    if detection["stamp"] != detection_inputs_hash(config):
         raise ValueError(
             "props, overrides or the detection and prepare tuning changed since the prepare stage: rerun from prepare"
         )

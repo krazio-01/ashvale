@@ -1,4 +1,3 @@
-import json
 import math
 
 import bpy
@@ -8,7 +7,7 @@ from scipy.spatial import cKDTree
 
 import PhysicsLattice as lattice
 from Geometry import compose, matrices_to_blender, normalised, quaternion_matrix, to_blender
-from ModelConfig import Proportions, SkeletonDescriptor
+from ModelConfig import HeightScale, SkeletonDescriptor, read_json, write_json
 
 WELD_DECIMALS = 5
 TILE = 360
@@ -57,7 +56,7 @@ class PhysicsWork:
     WEIGHTS_FILE = "physics_weights.npz"
 
     def __init__(self, work):
-        self.definition = json.loads((work / self.DEFINITION_FILE).read_text())
+        self.definition = read_json(work / self.DEFINITION_FILE)
         self.weights = dict(np.load(work / self.WEIGHTS_FILE))
 
     @classmethod
@@ -67,8 +66,8 @@ class PhysicsWork:
     @classmethod
     def save(cls, work, bodies, colliders, skinning, geometry):
         lattice_bones = [name for body in bodies for name in body["nodeBones"]]
-        (work / cls.DEFINITION_FILE).write_text(
-            json.dumps({"latticeBones": lattice_bones, "bodies": bodies, "colliders": colliders}, indent=2)
+        write_json(
+            work / cls.DEFINITION_FILE, {"latticeBones": lattice_bones, "bodies": bodies, "colliders": colliders}, indent=2
         )
         np.savez(
             work / cls.WEIGHTS_FILE,
@@ -116,7 +115,7 @@ class Skeleton:
 
     @classmethod
     def load(cls, work, descriptor):
-        data = json.loads((work / "skeleton.json").read_text())
+        data = read_json(work / "skeleton.json")
         physics = PhysicsWork.optional(work)
         if physics:
             data = Skeleton.with_lattice_bones(data, physics.definition)
@@ -269,7 +268,7 @@ class SkeletonFit:
         return float(np.linalg.norm(knee - hip) + np.linalg.norm(ankle - knee) + ankle[1])
 
 
-class ClipPoses:
+class ClipSampler:
     POSE_SAMPLES_PER_CLIP = 10
     TRACK_VARIANCE_EPSILON = 1e-4
 
@@ -320,7 +319,7 @@ class ClipPoses:
             target[row] = value
         return self.skeleton.world(translations, rotations, scales)
 
-    def all(self):
+    def sample_all(self):
         for clip, (duration, _) in self.clips.items():
             for time in np.linspace(0.0, duration, self.POSE_SAMPLES_PER_CLIP + 1):
                 yield f"{clip}:{time:.2f}", self.sample(clip, time)
@@ -336,7 +335,7 @@ class ClipPoses:
         return (math.sin((1 - amount) * angle) * start + math.sin(amount * angle) * end) / math.sin(angle)
 
 
-class ReferenceFrame:
+class ReferenceAlignment:
     REFERENCE_ICP_ITERATIONS = 30
     REFERENCE_ICP_TRIM = 0.8
     REFERENCE_ICP_SAMPLES = 150_000
@@ -544,14 +543,14 @@ class ContactSheet:
 class SkinnedPreview:
     def __init__(self, work, config):
         self.descriptor = SkeletonDescriptor.from_config(config)
-        self.proportions = Proportions.from_config(config)
+        self.height_scale = HeightScale.from_config(config)
         bpy.ops.wm.open_mainfile(filepath=str(work / "lo.blend"))
         bpy.data.objects.remove(bpy.data.objects["hi"])
         self.mesh = bpy.data.objects["lo"].data
         final = np.load(work / "final.npz")
         rig = np.load(work / "rig.npz")
         self.skeleton = Skeleton.load(work, self.descriptor)
-        self.poses = ClipPoses(self.skeleton, rig["rest_translations"])
+        self.poses = ClipSampler(self.skeleton, rig["rest_translations"])
         self.bind_inverse = np.linalg.inv(rig["bind_world"])
         self.joints = final["joints"]
         self.weights = final["weights"]
@@ -584,7 +583,7 @@ class SkinnedPreview:
         self.mesh.update()
 
     def region_centres(self):
-        descriptor, length = self.descriptor, self.proportions.length
+        descriptor, length = self.descriptor, self.height_scale.length
         left_hand, right_hand = (descriptor.arm(side)[-1] for side in descriptor.SIDES)
         return {
             "face": (self.joint(descriptor.head) + Vector((0.0, 0.0, length(0.08))), length(0.36), "front"),

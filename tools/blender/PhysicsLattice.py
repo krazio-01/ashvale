@@ -1,6 +1,6 @@
 import numpy as np
 
-from Geometry import SkinInfluences, closest_on_segment, multi_source_distance, rounded, segment_distance, smooth_unit
+from Geometry import SkinInfluences, closest_on_segment, graph_distance_to_sources, rounded, segment_distance, smoothstep_unit
 
 LATTICE_PREFIX = "phys_"
 SPACING_PERCENTILE = 95.0
@@ -14,7 +14,7 @@ def lattice_bone_name(body, column, row):
     return f"{LATTICE_PREFIX}{body}_c{column}_r{row}"
 
 
-def kernel_average(values, samples, node_coordinates, sigma):
+def gaussian_weighted_average(values, samples, node_coordinates, sigma):
     distance = (((node_coordinates[:, None, :] - samples[None, :, :]) / sigma) ** 2).sum(-1)
     kernel = np.exp(-0.5 * distance)
     total = kernel.sum(1)
@@ -65,8 +65,8 @@ def build_sheet(points, normals, columns, rows, centre, settings):
     cell_v = max(v_max / (rows - 1), settings.length(physics.minCell))
     samples = np.column_stack([(u - u_min) / cell_u, v / cell_v])
     corners = node_grid(columns, rows) * [(u_max - u_min) / (columns - 1) / cell_u, v_max / (rows - 1) / cell_v]
-    nodes = kernel_average(points, samples, corners, physics.nodeSigmaCells)
-    node_normals = outward_normals(kernel_average(normals, samples, corners, physics.nodeSigmaCells), nodes, centre)
+    nodes = gaussian_weighted_average(points, samples, corners, physics.nodeSigmaCells)
+    node_normals = outward_normals(gaussian_weighted_average(normals, samples, corners, physics.nodeSigmaCells), nodes, centre)
     return {"nodes": nodes, "normals": node_normals, "u": u, "v": v, "u_min": u_min, "u_max": u_max, "v_max": v_max}
 
 
@@ -76,7 +76,7 @@ def sheet_weights(grid, columns, rows, settings):
     row_position = grid["v"] / max(grid["v_max"], 1e-9) * (rows - 1)
     nodes, weights = grid_triangle_weights(column_position, row_position, columns, rows)
     fade = np.clip(np.clip(row_position, 0.0, rows - 1) / settings.section("physics").fadeRows, 0.0, 1.0)
-    return nodes, weights, smooth_unit(fade)
+    return nodes, weights, smoothstep_unit(fade)
 
 
 def wrapped_columns(grid, points):
@@ -150,8 +150,8 @@ def build_wrapped_sheet(points, normals, centre, top, settings):
     grid["hem"] = hem_profile(column_position, drop, grid["columns"], physics.minRowVertices)
     samples = np.column_stack(wrapped_coordinates(grid, points))
     corners = node_grid(grid["columns"], rows)
-    grid["nodes"] = kernel_average(points, samples, corners, physics.nodeSigmaCells)
-    normal_average = kernel_average(normals, samples, corners, physics.nodeSigmaCells)
+    grid["nodes"] = gaussian_weighted_average(points, samples, corners, physics.nodeSigmaCells)
+    normal_average = gaussian_weighted_average(normals, samples, corners, physics.nodeSigmaCells)
     grid["normals"] = outward_normals(normal_average, grid["nodes"], centre)
     return grid
 
@@ -182,7 +182,7 @@ def lattice_edges(columns, rows, diagonals=True):
 def geodesic_to_pins(nodes, columns, rows, pinned):
     edges = lattice_edges(columns, rows)
     lengths = np.maximum(np.linalg.norm(nodes[edges[:, 0]] - nodes[edges[:, 1]], axis=1), 1e-9)
-    return multi_source_distance(edges, lengths, len(nodes), np.flatnonzero(pinned))
+    return graph_distance_to_sources(edges, lengths, len(nodes), np.flatnonzero(pinned))
 
 
 def link_length_percentile(nodes, columns, rows, percentile):
@@ -193,7 +193,7 @@ def link_length_percentile(nodes, columns, rows, percentile):
     return float(np.percentile(lengths, percentile))
 
 
-def clear_of_colliders(nodes, normals, pinned, colliders, clearance):
+def push_out_of_colliders(nodes, normals, pinned, colliders, clearance):
     moved = nodes.copy()
     free = ~pinned
     for _ in range(CLEARANCE_PASSES):
