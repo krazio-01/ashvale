@@ -22,7 +22,7 @@ const REACTION_BY_IMPACT: Record<ImpactTier, ReactionTier> = {
 export function resolveDefense(
     defender: IDefenderSnapshot,
     parryable: boolean,
-    perilous: boolean,
+    dodgeOnly: boolean,
     perfectWindowSeconds: number
 ): DefenseResult {
     if (defender.isDead || defender.isUntouchable) return "ignored";
@@ -30,7 +30,7 @@ export function resolveDefense(
         return defender.isDodging && defender.invulnerableSeconds <= perfectWindowSeconds
             ? "perfectEvaded"
             : "evaded";
-    if (defender.isParrying && parryable && !perilous) return "parried";
+    if (defender.isParrying && parryable && !dodgeOnly) return "parried";
 
     return "connected";
 }

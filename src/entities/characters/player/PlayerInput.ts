@@ -11,40 +11,40 @@ function isPointerAction(value: string): value is PointerAction {
     return value in MOUSE_BINDINGS;
 }
 
-const KEY_ACTIONS = new Map<string, KeyAction>();
+const ACTION_BY_KEY_CODE = new Map<string, KeyAction>();
 for (const [action, codes] of Object.entries(INPUT_BINDINGS))
-    if (isKeyAction(action)) for (const code of codes) KEY_ACTIONS.set(code, action);
+    if (isKeyAction(action)) for (const code of codes) ACTION_BY_KEY_CODE.set(code, action);
 
-const POINTER_ACTIONS = new Map<number, PointerAction>();
+const ACTION_BY_MOUSE_BUTTON = new Map<number, PointerAction>();
 for (const [action, button] of Object.entries(MOUSE_BINDINGS))
-    if (isPointerAction(action)) POINTER_ACTIONS.set(button, action);
+    if (isPointerAction(action)) ACTION_BY_MOUSE_BUTTON.set(button, action);
 
 export class PlayerInput {
     private readonly heldCounts = new Map<InputAction, number>();
-    private readonly pressed = new Set<InputAction>();
+    private readonly pendingPresses = new Set<InputAction>();
     private mouseDeltaX = 0;
     private mouseDeltaY = 0;
     private wheelSteps = 0;
 
     private readonly handleKeyDown = (event: KeyboardEvent): void => {
         if (event.repeat) return;
-        const action = KEY_ACTIONS.get(event.code);
+        const action = ACTION_BY_KEY_CODE.get(event.code);
         if (action) this.press(action);
     };
 
     private readonly handleKeyUp = (event: KeyboardEvent): void => {
-        const action = KEY_ACTIONS.get(event.code);
+        const action = ACTION_BY_KEY_CODE.get(event.code);
         if (action) this.release(action);
     };
 
     private readonly handleMouseDown = (event: MouseEvent): void => {
         if (!document.pointerLockElement) return;
-        const action = POINTER_ACTIONS.get(event.button);
+        const action = ACTION_BY_MOUSE_BUTTON.get(event.button);
         if (action) this.press(action);
     };
 
     private readonly handleMouseUp = (event: MouseEvent): void => {
-        const action = POINTER_ACTIONS.get(event.button);
+        const action = ACTION_BY_MOUSE_BUTTON.get(event.button);
         if (action) this.release(action);
     };
 
@@ -65,7 +65,7 @@ export class PlayerInput {
 
     private readonly handleBlur = (): void => {
         this.heldCounts.clear();
-        this.pressed.clear();
+        this.pendingPresses.clear();
         this.mouseDeltaX = 0;
         this.mouseDeltaY = 0;
         this.wheelSteps = 0;
@@ -91,11 +91,11 @@ export class PlayerInput {
     }
 
     consumePress(action: InputAction): boolean {
-        return this.pressed.delete(action);
+        return this.pendingPresses.delete(action);
     }
 
     discardPresses(): void {
-        this.pressed.clear();
+        this.pendingPresses.clear();
         this.wheelSteps = 0;
     }
 
@@ -128,7 +128,7 @@ export class PlayerInput {
         this.heldCounts.set(action, count);
         if (count > 1) return;
 
-        this.pressed.add(action);
+        this.pendingPresses.add(action);
     }
 
     private release(action: InputAction): void {

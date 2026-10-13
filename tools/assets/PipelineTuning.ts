@@ -178,7 +178,7 @@ const ROLE_TUNING: Record<CharacterRole, DeepPartial<IPipelineTuning>> = {
     boss: {},
 };
 
-const SHARE_PATHS = [
+const UNIT_RANGE_TUNING_PATHS = [
     "prepare.propGrowShare",
     "prepare.propPieceMajority",
     "prepare.garmentPieceMajority",
@@ -309,7 +309,7 @@ const TUNING_RULES: readonly ITuningRule[] = [
         requirement: () => "must be at most 100",
     },
     {
-        paths: SHARE_PATHS,
+        paths: UNIT_RANGE_TUNING_PATHS,
         isValid: (value) => value >= 0 && value <= 1,
         requirement: (value) => `${value} must be between 0 and 1`,
     },
