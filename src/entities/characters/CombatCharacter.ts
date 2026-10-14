@@ -274,7 +274,18 @@ export abstract class CombatCharacter
         this.modelInstance.traverse((object) => {
             if (!(object instanceof Mesh)) return;
             this.meshes.push(object);
-            if (object instanceof SkinnedMesh) this.skeletons.push(object.skeleton);
+            if (!(object instanceof SkinnedMesh)) return;
+            const own = object.skeleton;
+            const shared = this.skeletons.find(
+                (skeleton) =>
+                    skeleton.bones.length === own.bones.length &&
+                    skeleton.bones.every((bone, index) => bone === own.bones[index]) &&
+                    skeleton.boneInverses.every((inverse, index) =>
+                        inverse.equals(own.boneInverses[index])
+                    )
+            );
+            if (shared) object.skeleton = shared;
+            else this.skeletons.push(own);
         });
         this.animator = new CharacterAnimator(
             this.modelInstance,
