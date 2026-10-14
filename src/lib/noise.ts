@@ -1,3 +1,4 @@
+import { MathUtils } from "three";
 import { createSeededRandom, lerp } from "@/lib/helpers";
 
 const RANDOM_TABLE_SIZE = 256;
@@ -70,11 +71,11 @@ export class FractalNoise {
     }
 
     private randomValueAtCorner(cellX: number, cellZ: number, period: number): number {
-        const wrappedX = ((cellX % period) + period) % period;
-        const wrappedZ = ((cellZ % period) + period) % period;
+        const wrappedX = MathUtils.euclideanModulo(cellX, period);
+        const wrappedZ = MathUtils.euclideanModulo(cellZ, period);
 
-        const hashX = this.randomTable[wrappedX % RANDOM_TABLE_SIZE] ?? 0;
-        const hash = this.randomTable[(hashX + wrappedZ) % RANDOM_TABLE_SIZE] ?? 0;
+        const hashX = this.randomTable[wrappedX % RANDOM_TABLE_SIZE];
+        const hash = this.randomTable[(hashX + wrappedZ) % RANDOM_TABLE_SIZE];
 
         return hash / 255;
     }
