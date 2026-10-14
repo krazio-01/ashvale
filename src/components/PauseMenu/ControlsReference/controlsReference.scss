@@ -1,11 +1,9 @@
-@use "../../../styles/variable" as *;
-
 .controls-reference {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
     padding: 1.15rem 0;
-    border-bottom: 1px solid $ink-line-strong;
+    border-bottom: 1px solid var(--ink-line-strong);
     margin-bottom: 0.5rem;
 
     .controls-group-title {
@@ -13,7 +11,7 @@
         font-weight: 600;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        color: $ink-muted;
+        color: var(--ink-muted);
         margin-bottom: 0.6rem;
     }
 
@@ -24,7 +22,7 @@
         padding: 0.55rem 0;
 
         &:not(:last-child) {
-            border-bottom: 1px solid $ink-line;
+            border-bottom: 1px solid var(--ink-line);
         }
     }
 
@@ -35,12 +33,12 @@
         min-width: 8rem;
 
         kbd {
-            font-family: $font-mono;
+            font-family: var(--font-numeric);
             font-size: 0.7rem;
-            color: $ink-text;
-            background: $ink-raised;
-            border: 1px solid $ink-line-strong;
-            border-radius: $radius-sm;
+            color: var(--ink-text);
+            background: var(--ink-raised);
+            border: 1px solid var(--ink-line-strong);
+            border-radius: var(--radius-sm);
             padding: 0.2rem 0.5rem;
         }
     }
@@ -54,13 +52,13 @@
         .control-action {
             font-size: 0.85rem;
             font-weight: 500;
-            color: $ink-text;
+            color: var(--ink-text);
         }
 
         .control-desc {
             font-size: 0.76rem;
             line-height: 1.4;
-            color: $ink-muted;
+            color: var(--ink-muted);
         }
     }
 }

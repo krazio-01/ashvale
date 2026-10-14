@@ -1,5 +1,3 @@
-@use "../styles/variable" as *;
-
 :root {
     --ink-void: #07080a;
     --ink-panel: #0d0f12;
@@ -53,9 +51,9 @@ html,
 body {
     height: 100%;
     overflow: hidden;
-    background: $ink-void;
-    color: $ink-text;
-    font-family: $font-sans;
+    background: var(--ink-void);
+    color: var(--ink-text);
+    font-family: var(--font-ui);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -66,7 +64,7 @@ canvas {
 }
 
 :focus-visible {
-    outline: 1px solid $ink-focus;
+    outline: 1px solid var(--ink-focus);
     outline-offset: 2px;
 }
 

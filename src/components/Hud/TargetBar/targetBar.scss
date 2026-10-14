@@ -1,4 +1,3 @@
-@use "../../../styles/variable" as *;
 @use "../../../styles/mixins" as *;
 
 .target-bar {
@@ -12,7 +11,7 @@
     align-items: center;
     gap: 0.4rem;
     opacity: 0;
-    transition: opacity 220ms $ease;
+    transition: opacity 220ms var(--ease);
 
     &[data-visible="true"] {
         opacity: 1;

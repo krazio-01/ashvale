@@ -1,4 +1,3 @@
-@use "../../../styles/variable" as *;
 @use "../../../styles/mixins" as *;
 
 .vital-bar {
@@ -23,7 +22,7 @@
 
     .vital-fill {
         background: var(--hud-fill);
-        transition: background 420ms $ease;
+        transition: background 420ms var(--ease);
     }
 
     .vital-details {
@@ -43,7 +42,7 @@
     }
 
     .vital-readout {
-        font-family: $font-mono;
+        font-family: var(--font-numeric);
         font-size: 0.7rem;
         font-weight: 400;
         font-variant-numeric: tabular-nums;

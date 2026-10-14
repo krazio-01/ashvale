@@ -1,12 +1,10 @@
-@use "../../styles/variable" as *;
-
 .hud {
     position: fixed;
     inset: 0;
     z-index: 90;
     pointer-events: none;
-    font-family: $font-sans;
-    transition: opacity 400ms $ease;
+    font-family: var(--font-ui);
+    transition: opacity 400ms var(--ease);
 
     &[data-dead="true"] {
         opacity: 0.45;
