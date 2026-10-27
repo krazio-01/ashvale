@@ -1,5 +1,6 @@
 "use client";
 import type { RefObject } from "react";
+import { LANDING_TEXT } from "@/constants/strings";
 
 const LandingHud = ({
     bearingLabelRef,
@@ -19,7 +20,7 @@ const LandingHud = ({
                 000°
             </span>
         </div>
-        <span className="landing-hud-hint">drag or scroll to orbit</span>
+        <span className="landing-hud-hint">{LANDING_TEXT.orbitHint}</span>
     </div>
 );
 

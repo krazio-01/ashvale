@@ -1,7 +1,7 @@
 import "server-only";
 import { env } from "@/config/env";
-import { HttpStatus } from "@/constants/strings";
-import { ErrorWrapper } from "@/lib/ResponseWrapper";
+import { HttpStatus, LOG_MESSAGES } from "@/constants/strings";
+import { HttpError } from "@/lib/ResponseWrapper";
 import { httpGet } from "@/services/HttpService";
 
 const LAST_PAGE_PATTERN = /[?&]page=(\d+)>;\s*rel="last"/;
@@ -41,7 +41,7 @@ export async function fetchTotalCommitCount(owner: string, name: string): Promis
     if (lastPageMatch) return Number(lastPageMatch[1]);
 
     if (NEXT_PAGE_PATTERN.test(linkHeader))
-        throw new ErrorWrapper("github would not report a commit total", HttpStatus.BAD_GATEWAY);
+        throw new HttpError("github would not report a commit total", HttpStatus.BAD_GATEWAY);
 
     return data.length;
 }
@@ -59,7 +59,7 @@ export async function fetchCommitAtPosition(
 
     const commit = data[0];
     if (!commit)
-        throw new ErrorWrapper(`no commit at position ${positionFromNewest}`, HttpStatus.NOT_FOUND);
+        throw new HttpError(`no commit at position ${positionFromNewest}`, HttpStatus.NOT_FOUND);
 
     return { sha: commit.sha, committedAt: new Date(commit.commit.committer.date) };
 }
@@ -162,7 +162,7 @@ export async function isCommitDescendedFrom(
 
         return true;
     } catch (error) {
-        if (!(error instanceof ErrorWrapper)) throw error;
+        if (!(error instanceof HttpError)) throw error;
         if (error.statusCode === HttpStatus.NOT_FOUND) return false;
         if (error.statusCode === HttpStatus.UNPROCESSABLE_ENTITY) return true;
 
@@ -209,7 +209,7 @@ async function fetchSubtreeOrEmpty(
     try {
         return await fetchTreeRecursively(owner, name, root.sha, `${root.path}/`);
     } catch (error) {
-        console.warn(`subtree unavailable for ${root.path}:`, error);
+        console.warn(LOG_MESSAGES.subtreeUnavailable(root.path), error);
 
         return { directoryPaths: [], filePaths: [], isTruncated: true };
     }
@@ -259,31 +259,31 @@ async function requestGithub<T>(
     return { data: response.data, headers: response.headers };
 }
 
-function buildGithubError(status: number, headers: ResponseHeaders, path: string): ErrorWrapper {
+function buildGithubError(status: number, headers: ResponseHeaders, path: string): HttpError {
     switch (status) {
         case 404:
-            return new ErrorWrapper(`github resource not found: ${path}`, HttpStatus.NOT_FOUND);
+            return new HttpError(`github resource not found: ${path}`, HttpStatus.NOT_FOUND);
         case 409:
-            return new ErrorWrapper("repository has no commits", HttpStatus.CONFLICT);
+            return new HttpError("repository has no commits", HttpStatus.CONFLICT);
         case 422:
-            return new ErrorWrapper(
+            return new HttpError(
                 `github could not process the request: ${path}`,
                 HttpStatus.UNPROCESSABLE_ENTITY
             );
         case 403:
         case 429: {
             if (headers["x-ratelimit-remaining"] !== "0")
-                return new ErrorWrapper(`github denied the request: ${path}`, HttpStatus.FORBIDDEN);
+                return new HttpError(`github denied the request: ${path}`, HttpStatus.FORBIDDEN);
 
             const resetsAt = new Date(Number(headers["x-ratelimit-reset"]) * 1000);
 
-            return new ErrorWrapper(
+            return new HttpError(
                 `github rate limit exhausted, resets at ${resetsAt.toISOString()}`,
                 HttpStatus.TOO_MANY_REQUESTS
             );
         }
         default:
-            return new ErrorWrapper(`github responded ${status}: ${path}`, HttpStatus.BAD_GATEWAY);
+            return new HttpError(`github responded ${status}: ${path}`, HttpStatus.BAD_GATEWAY);
     }
 }
 

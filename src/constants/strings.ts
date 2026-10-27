@@ -20,3 +20,29 @@ export enum HttpMethod {
     Patch = "PATCH",
     Delete = "DELETE",
 }
+
+export const APP_TEXT = {
+    title: "Ashvale",
+    description:
+        "Explore any GitHub repository as a procedurally generated realm — its structure becomes terrain, its history becomes enemies.",
+};
+
+export const LANDING_TEXT = {
+    orbitHint: "drag or scroll to orbit",
+};
+
+export const API_MESSAGES = {
+    success: "Success",
+    realmForged: "Realm forged",
+    featuredRealmsListed: "Featured realms listed",
+    somethingWentWrong: "Something went wrong",
+    unexpectedError: "An unexpected error occurred",
+};
+
+export const ERRORS = {
+    missingEnvironmentVariable: (key: string) => `Missing required environment variable: ${key}`,
+};
+
+export const LOG_MESSAGES = {
+    subtreeUnavailable: (path: string) => `subtree unavailable for ${path}:`,
+};

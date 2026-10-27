@@ -8,5 +8,4 @@ export interface IErrorResponse {
     success: false;
     message: string;
     data: null;
-    details?: unknown;
 }
