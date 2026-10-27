@@ -255,7 +255,7 @@ export class AssetCatalogue {
 export const ASSET_CATALOGUE = new AssetCatalogue([
     new CharacterCategory({
         name: "characters",
-        budgetMegabytes: 24,
+        budgetMegabytes: 32,
         compressesGeometry: false,
         fileBudgetsMegabytes: { "CombatClips.glb": 6 },
     }),
