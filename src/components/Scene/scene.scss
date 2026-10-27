@@ -1,3 +1,5 @@
+@use "../../styles/mixins" as *;
+
 .scene-canvas-container {
     position: relative;
     width: 100%;
@@ -35,18 +37,11 @@
 }
 
 .scene-status {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
     height: 100vh;
-    gap: 1rem;
+    @include status-screen;
 
     p {
-        max-width: min(90%, 800px);
-        color: var(--ink-text);
         font-size: 1.5rem;
-        text-align: center;
     }
 
     &--overlay {

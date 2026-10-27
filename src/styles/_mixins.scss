@@ -22,3 +22,21 @@
     transform-origin: left center;
     will-change: transform;
 }
+
+@mixin debug-panel-surface($background-alpha) {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(10, 8, 16, $background-alpha);
+}
+
+@mixin status-screen {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+
+    p {
+        max-width: min(90%, 800px);
+        text-align: center;
+    }
+}

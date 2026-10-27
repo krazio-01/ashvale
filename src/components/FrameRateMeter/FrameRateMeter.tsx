@@ -2,15 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useSettings } from "@/settings/SettingsStore";
 import { getRenderedFrameCount } from "@/hooks/useFrameLimit";
-import type { CSSProperties } from "react";
 import "./frameRateMeter.scss";
 
 const SAMPLE_WINDOW_MS = 500;
-const GLASS_BLUR: CSSProperties = {
-    backdropFilter: "blur(8px)",
-    WebkitBackdropFilter: "blur(8px)",
-};
-
 export const FrameRateMeter = () => {
     const { showFps } = useSettings();
     const [fps, setFps] = useState(60);
@@ -47,7 +41,7 @@ export const FrameRateMeter = () => {
     const tier = fps < 30 ? "struggling" : fps < 55 ? "steady" : "smooth";
 
     return (
-        <div className="frame-rate-meter" data-tier={tier} style={GLASS_BLUR}>
+        <div className="frame-rate-meter" data-tier={tier}>
             <span>{fps}</span>
             <span className="frame-rate-unit">FPS</span>
         </div>

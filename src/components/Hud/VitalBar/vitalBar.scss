@@ -3,6 +3,7 @@
 .vital-bar {
     .vital-frame {
         @include hud-pill-frame;
+        backdrop-filter: blur(14px) saturate(115%);
     }
 
     .vital-track {

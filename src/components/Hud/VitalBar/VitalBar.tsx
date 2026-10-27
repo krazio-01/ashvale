@@ -3,14 +3,8 @@ import { useRef } from "react";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
 import { HUD } from "@/constants/presentation";
 import { roundForStyle, vitalFraction } from "@/lib/hud";
-import type { CSSProperties } from "react";
 import type { IHudVitalDescriptor } from "@/types/hud";
 import "./vitalBar.scss";
-
-const GLASS_BLUR: CSSProperties = {
-    backdropFilter: "blur(14px) saturate(115%)",
-    WebkitBackdropFilter: "blur(14px) saturate(115%)",
-};
 
 export const VitalBar = ({ descriptor }: { descriptor: IHudVitalDescriptor }) => {
     const rootRef = useRef<HTMLDivElement>(null);
@@ -61,7 +55,7 @@ export const VitalBar = ({ descriptor }: { descriptor: IHudVitalDescriptor }) =>
 
     return (
         <div className="vital-bar" ref={rootRef}>
-            <div className="vital-frame" style={GLASS_BLUR}>
+            <div className="vital-frame">
                 <div className="vital-track">
                     <div className="vital-chase" ref={chaseRef} />
                     <div className="vital-fill" ref={fillRef} />

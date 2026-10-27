@@ -1,3 +1,5 @@
+@use "../../styles/mixins" as *;
+
 .landing-container {
     position: relative;
     width: 100%;
@@ -312,34 +314,16 @@ html.landing-character-hovered .landing-container {
     color: rgba(255, 255, 255, 0.5);
 }
 
-@keyframes landing-status-fade-in {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
-}
-
 .landing-status {
     position: absolute;
     inset: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: 1rem;
     background: var(--ink-void);
-    opacity: 0;
-    animation: landing-status-fade-in 0.85s ease forwards;
+    animation: fade-in 0.85s ease forwards;
+    @include status-screen;
 
     p {
-        max-width: min(90%, 800px);
         font-family: var(--font-numeric);
         font-size: 1.1rem;
-        color: var(--ink-text);
-        text-align: center;
     }
 }
 
@@ -347,11 +331,6 @@ html.landing-character-hovered .landing-container {
     .landing-hero,
     .landing-hud {
         animation: none;
-    }
-
-    .landing-status {
-        animation: none;
-        opacity: 1;
     }
 }
 

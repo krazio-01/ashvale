@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { CSSProperties } from "react";
 import { PHYSICS } from "@/constants/physics";
 import { degrees, metres } from "@/lib/helpers";
 import "./physicsTuner.scss";
@@ -47,11 +46,6 @@ const UNIT_SCALE: Record<SliderUnit, (value: number) => number> = {
 const EXPONENTIAL_BELOW = 0.01;
 const RECIPROCAL_TOLERANCE = 1e-12;
 const POSITIONS = 1000;
-const GLASS_BLUR: CSSProperties = {
-    backdropFilter: "blur(8px)",
-    WebkitBackdropFilter: "blur(8px)",
-};
-
 function slider(
     path: string,
     label: string,
@@ -194,11 +188,7 @@ export const PhysicsTuner = () => {
     if (!isOpen) return null;
 
     return (
-        <div
-            className="physics-tuner"
-            style={GLASS_BLUR}
-            onKeyDown={(event) => event.stopPropagation()}
-        >
+        <div className="physics-tuner" onKeyDown={(event) => event.stopPropagation()}>
             <div className="physics-tuner-header">
                 <span>Cloth physics</span>
                 <span className="physics-tuner-hint">F8</span>
