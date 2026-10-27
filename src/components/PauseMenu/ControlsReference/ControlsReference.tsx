@@ -13,9 +13,9 @@ export const ControlsReference = () => (
                                 <kbd key={index}>{key}</kbd>
                             ))}
                         </div>
-                        <div className="control-info">
-                            <span className="control-action">{entry.action}</span>
-                            <span className="control-desc">{entry.description}</span>
+                        <div className="setting-info">
+                            <span className="setting-label">{entry.action}</span>
+                            <span className="setting-desc">{entry.description}</span>
                         </div>
                     </div>
                 ))}
@@ -23,5 +23,3 @@ export const ControlsReference = () => (
         ))}
     </div>
 );
-
-export default ControlsReference;

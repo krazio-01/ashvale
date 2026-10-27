@@ -35,7 +35,6 @@
 
     .vital-label {
         font-size: 0.56rem;
-        font-weight: 400;
         letter-spacing: 0.32em;
         text-transform: uppercase;
         color: var(--hud-label);
@@ -44,7 +43,6 @@
     .vital-readout {
         font-family: var(--font-numeric);
         font-size: 0.7rem;
-        font-weight: 400;
         font-variant-numeric: tabular-nums;
         color: var(--hud-readout);
     }

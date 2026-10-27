@@ -7,6 +7,7 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
+    color: var(--hud-readout);
     transform: translateX(-50%);
     opacity: 0;
     transition: opacity 160ms var(--ease);
@@ -23,7 +24,6 @@
         border-radius: 4px;
         font-family: var(--font-numeric);
         font-size: 0.75rem;
-        color: var(--hud-readout);
         @include hud-glass-surface;
     }
 
@@ -31,6 +31,5 @@
         font-size: 0.62rem;
         letter-spacing: 0.34em;
         text-transform: uppercase;
-        color: var(--hud-readout);
     }
 }
