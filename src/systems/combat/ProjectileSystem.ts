@@ -1,7 +1,7 @@
 import { Group, Mesh, MeshBasicMaterial, SphereGeometry, Vector3 } from "three";
 import { WeaponSweep } from "@/systems/combat/hit/WeaponSweep";
-import { emitHitLanded } from "@/systems/combat/services/CombatEvents";
-import type { CombatEvents, ICombatEventMap } from "@/systems/combat/services/CombatEvents";
+import { emitHitLanded } from "@/events/CombatEvents";
+import type { CombatEvents, ICombatEventMap } from "@/events/CombatEvents";
 import { isConnected } from "@/systems/combat/hit/HitResolver";
 import type { CombatRegistry } from "@/systems/combat/CombatRegistry";
 import { PROJECTILE_POOL, PROJECTILES } from "@/constants/combat";

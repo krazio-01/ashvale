@@ -5,7 +5,7 @@ import type { Vector3 } from "three";
 import type { WebGLRenderer } from "three";
 import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import { AssetLibrary } from "@/world/assets/AssetLibrary";
-import { CombatEvents } from "@/systems/combat/services/CombatEvents";
+import { CombatEvents } from "@/events/CombatEvents";
 import { CombatRegistry } from "@/systems/combat/CombatRegistry";
 import { TimeDilation } from "@/systems/combat/TimeDilation";
 import { AttackCoordinator } from "@/systems/combat/AttackCoordinator";

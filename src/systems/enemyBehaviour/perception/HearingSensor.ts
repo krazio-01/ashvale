@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import type { CombatEvents, ICombatEventMap } from "@/systems/combat/services/CombatEvents";
+import type { CombatEvents, ICombatEventMap } from "@/events/CombatEvents";
 
 export class HearingSensor {
     readonly heardPosition = new Vector3();

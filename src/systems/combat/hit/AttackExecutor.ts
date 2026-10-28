@@ -1,7 +1,7 @@
 import { Vector3 } from "three";
 import type { IMachineOutput } from "@/systems/combat/actions/ActionMachine";
-import { emitHitLanded } from "@/systems/combat/services/CombatEvents";
-import type { ICombatEventMap } from "@/systems/combat/services/CombatEvents";
+import { emitHitLanded } from "@/events/CombatEvents";
+import type { ICombatEventMap } from "@/events/CombatEvents";
 import { isConnected } from "@/systems/combat/hit/HitResolver";
 import { WeaponSweep } from "@/systems/combat/hit/WeaponSweep";
 import { overlapsInterval } from "@/systems/combat/actions/MoveTimeline";

@@ -1,6 +1,6 @@
 import { Group } from "three";
 import type { Object3D } from "three";
-import type { CombatEvents } from "@/systems/combat/services/CombatEvents";
+import type { CombatEvents } from "@/events/CombatEvents";
 import type { ICombatant } from "@/types/combat";
 import type { IWorldContext } from "@/types/world";
 import type { IWorldEntity } from "@/types/world";

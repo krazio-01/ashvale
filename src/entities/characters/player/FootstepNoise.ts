@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import type { CombatEvents, ICombatEventMap } from "@/systems/combat/services/CombatEvents";
+import type { CombatEvents, ICombatEventMap } from "@/events/CombatEvents";
 import { NOISE } from "@/constants/enemies";
 export type FootstepGait = keyof typeof NOISE.footstepRadius;
 

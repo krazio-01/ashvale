@@ -1,6 +1,6 @@
 import { Group, Vector3 } from "three";
 import type { Camera } from "three";
-import type { CombatEvents } from "@/systems/combat/services/CombatEvents";
+import type { CombatEvents } from "@/events/CombatEvents";
 import { store } from "@/store/store";
 import { HUD } from "@/constants/presentation";
 import { metres } from "@/lib/helpers";

@@ -8,7 +8,7 @@ import {
     ShaderMaterial,
     Vector3,
 } from "three";
-import type { CombatEvents } from "@/systems/combat/services/CombatEvents";
+import type { CombatEvents } from "@/events/CombatEvents";
 import { metres } from "@/lib/helpers";
 import { HIT_SPARKS } from "@/constants/combat";
 import type { ImpactTier } from "@/types/combat";

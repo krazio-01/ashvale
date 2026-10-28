@@ -21,7 +21,7 @@ import {
     telegraphTime,
 } from "@/systems/combat/actions/MoveTimeline";
 import { attackThreatFor } from "@/systems/combat/core/AttackThreat";
-import type { ICombatEventMap } from "@/systems/combat/services/CombatEvents";
+import type { ICombatEventMap } from "@/events/CombatEvents";
 import { Vitals } from "@/systems/combat/Vitals";
 import type { IVitalsSpec } from "@/systems/combat/Vitals";
 import { CharacterAnimator } from "@/entities/characters/CharacterAnimator";

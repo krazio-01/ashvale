@@ -12,7 +12,7 @@ import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { AssetLibrary } from "@/world/assets/AssetLibrary";
 import type { AttackCoordinator } from "@/systems/combat/AttackCoordinator";
 import type { ProjectileSystem } from "@/systems/combat/ProjectileSystem";
-import type { CombatEvents } from "@/systems/combat/services/CombatEvents";
+import type { CombatEvents } from "@/events/CombatEvents";
 import type { CombatRegistry } from "@/systems/combat/CombatRegistry";
 import type { TimeDilation } from "@/systems/combat/TimeDilation";
 import type { IThemeEnvironment } from "@/types/theme";

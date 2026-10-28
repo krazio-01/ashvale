@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import type { Object3D } from "three";
-import type { CombatEvents, ICombatEventMap } from "@/systems/combat/services/CombatEvents";
+import type { CombatEvents, ICombatEventMap } from "@/events/CombatEvents";
 import { AwarenessMeter } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
 import type { IAwarenessStimulus } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
 import type { HearingSensor } from "@/systems/enemyBehaviour/perception/HearingSensor";

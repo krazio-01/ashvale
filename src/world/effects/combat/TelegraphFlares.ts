@@ -8,11 +8,7 @@ import {
     SpriteMaterial,
     Vector3,
 } from "three";
-import type {
-    CombatEvents,
-    ICombatEventMap,
-    ITelegraphSource,
-} from "@/systems/combat/services/CombatEvents";
+import type { CombatEvents, ICombatEventMap, ITelegraphSource } from "@/events/CombatEvents";
 import { TELEGRAPH_FLARES } from "@/constants/combat";
 import type { HitShape, IStrikeSegment, TelegraphDanger } from "@/types/combat";
 import type { IWorldEntity } from "@/types/world";
