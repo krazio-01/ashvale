@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import { PHYSICS } from "@/constants/physics";
-import type { LinkKind, ParticleSolver } from "@/systems/physics/core/ParticleSolver";
+import type { LinkKind, ParticleSolver } from "@/systems/physics/ParticleSolver";
 import type {
     IClothFeel,
     IPhysicsBinding,

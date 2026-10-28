@@ -3,8 +3,8 @@ import { PHYSICS } from "@/constants/physics";
 import { FULL_TURN } from "@/lib/helpers";
 import { createPhysicsBody } from "@/systems/physics/bodies/PhysicsBody";
 import type { PhysicsBody } from "@/systems/physics/bodies/PhysicsBody";
-import { ParticleSolver } from "@/systems/physics/core/ParticleSolver";
-import type { ICarriedMotion, ISolverEnvironment } from "@/systems/physics/core/ParticleSolver";
+import { ParticleSolver } from "@/systems/physics/ParticleSolver";
+import type { ICarriedMotion, ISolverEnvironment } from "@/systems/physics/ParticleSolver";
 import type {
     ICapsuleSource,
     IPhysicsBinding,

@@ -1,9 +1,9 @@
 import { Vector3 } from "three";
 import type { Object3D } from "three";
 import { PHYSICS } from "@/constants/physics";
-import { SkeletonBinding } from "@/systems/physics/bindings/SkeletonBinding";
+import { SkeletonBinding } from "@/systems/physics/SkeletonBinding";
 import { PhysicsSimulation, type IPhysicsFrame } from "@/systems/physics/PhysicsSimulation";
-import { PhysicsDiagnostics } from "@/systems/physics/services/PhysicsDiagnostics";
+import { PhysicsDiagnostics } from "@/systems/physics/PhysicsDiagnostics";
 import type { ICapsuleSource, IPhysicsDefinition, PhysicsDetail } from "@/types/physics";
 import type { IGroundProbe } from "@/types/procedural";
 
