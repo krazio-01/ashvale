@@ -4,7 +4,7 @@ import { TerrainSurface } from "@/world/terrain/TerrainSurface";
 import { GrassField } from "@/world/vegetation/GrassField";
 import { Player } from "@/entities/characters/player/Player";
 import { composeBoss } from "@/entities/characters/bosses/BossComposer";
-import { CombatDiagnostics } from "@/systems/combat/services/CombatDiagnostics";
+import { CombatDiagnostics } from "@/systems/combat/CombatDiagnostics";
 import { AlertMarkerProjector } from "@/world/effects/combat/AlertMarkerProjector";
 import { DamageNumberProjector } from "@/world/effects/combat/DamageNumberProjector";
 import { CombatNoise } from "@/systems/enemyBehaviour/perception/CombatNoise";

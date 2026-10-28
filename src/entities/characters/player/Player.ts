@@ -46,7 +46,7 @@ import {
     PLAYER_MOVE_IDS,
     PLAYER_MOVES,
 } from "@/systems/combat/moveSets/playerMoves";
-import { cycleTarget, selectTarget } from "@/systems/combat/services/TargetSelector";
+import { cycleTarget, selectTarget } from "@/systems/combat/TargetSelector";
 import { FootstepNoise } from "@/entities/characters/player/FootstepNoise";
 import type { FootstepGait } from "@/entities/characters/player/FootstepNoise";
 import { chooseKillCamShot, PlayerCamera } from "@/entities/characters/player/PlayerCamera";

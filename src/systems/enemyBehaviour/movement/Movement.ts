@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import type { CombatRegistry } from "@/systems/combat/services/CombatRegistry";
+import type { CombatRegistry } from "@/systems/combat/CombatRegistry";
 import { ENEMY_STEERING, OBSTACLE_PROBE } from "@/constants/enemies";
 import { angleDelta } from "@/lib/helpers";
 import type { ICombatant } from "@/types/combat";

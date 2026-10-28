@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import { capsulesOverlap } from "@/systems/combat/hit/SweepMath";
-import type { CombatRegistry } from "@/systems/combat/services/CombatRegistry";
+import type { CombatRegistry } from "@/systems/combat/CombatRegistry";
 import type { ICombatant, Team } from "@/types/combat";
 
 const SUBSTEPS = 3;

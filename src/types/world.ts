@@ -10,11 +10,11 @@ import type {
 import type { World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { AssetLibrary } from "@/world/assets/AssetLibrary";
-import type { AttackCoordinator } from "@/systems/combat/services/AttackCoordinator";
-import type { ProjectileSystem } from "@/systems/combat/services/ProjectileSystem";
+import type { AttackCoordinator } from "@/systems/combat/AttackCoordinator";
+import type { ProjectileSystem } from "@/systems/combat/ProjectileSystem";
 import type { CombatEvents } from "@/systems/combat/services/CombatEvents";
-import type { CombatRegistry } from "@/systems/combat/services/CombatRegistry";
-import type { TimeDilation } from "@/systems/combat/services/TimeDilation";
+import type { CombatRegistry } from "@/systems/combat/CombatRegistry";
+import type { TimeDilation } from "@/systems/combat/TimeDilation";
 import type { IThemeEnvironment } from "@/types/theme";
 
 export interface IWorldEntity {
