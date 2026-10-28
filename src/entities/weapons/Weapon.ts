@@ -2,8 +2,17 @@ import { Box3, Euler, Group, Mesh, Object3D, Quaternion, Vector3 } from "three";
 import { BLADE_THICKNESS_SLICES, GRIP } from "@/constants/combat";
 import { axisVector, degrees, measureBladeAxes } from "@/lib/helpers";
 import type { Axis, IBladeAxes } from "@/lib/helpers";
+import { SlashTrail } from "@/world/effects/combat/SlashTrail";
 import type { IStrikeSegment } from "@/types/combat";
-import type { ICarryRig, IHandRig, IWeaponCarry, IWeaponSpec, WeaponMount } from "@/types/weapons";
+import type {
+    ICarryRig,
+    IHandRig,
+    IMeleeWeaponSpec,
+    IWeaponCarry,
+    IWeaponSpec,
+    WeaponDefinition,
+    WeaponMount,
+} from "@/types/weapons";
 import type { IModelTemplate } from "@/types/world";
 
 interface IMountPose {
@@ -68,7 +77,8 @@ function measureBladeHalfThickness(
         .map((high, slice) => high - lows[slice])
         .filter(Number.isFinite)
         .sort((a, b) => a - b);
-    if (thicknesses.length === 0) throw new Error("no vertices inside the blade span, cannot measure thickness");
+    if (thicknesses.length === 0)
+        throw new Error("no vertices inside the blade span, cannot measure thickness");
     return thicknesses[Math.floor(thicknesses.length / 2)] / 2;
 }
 
@@ -259,5 +269,69 @@ export abstract class Weapon<Spec extends IWeaponSpec = IWeaponSpec> {
             .divideScalar(boneScale)
             .sub(this.handleOffset(pose.quaternion, pose.scale));
         return pose;
+    }
+}
+
+class MeleeWeapon extends Weapon<IMeleeWeaponSpec> {
+    private readonly trail: SlashTrail;
+    private readonly localGuard = new Vector3();
+    private readonly localTip = new Vector3();
+    private readonly trailSegment: IStrikeSegment = {
+        start: new Vector3(),
+        end: new Vector3(),
+        radius: 0,
+    };
+
+    constructor(
+        template: IModelTemplate,
+        spec: IMeleeWeaponSpec,
+        handRig: IHandRig,
+        effectsRoot: Object3D,
+        carryRig?: ICarryRig
+    ) {
+        super(template, spec, handRig, carryRig);
+
+        this.localTip[this.lengthAxis] = this.tipCoordinate;
+        this.localGuard[this.lengthAxis] = this.coordinateAt(spec.guardFraction);
+
+        this.trail = new SlashTrail(spec.trailColor);
+        effectsRoot.add(this.trail.mesh);
+    }
+
+    sampleStrike(segment: IStrikeSegment): boolean {
+        if (this.mounted !== "hand") return false;
+        this.model.updateWorldMatrix(true, false);
+        segment.start.copy(this.localGuard).applyMatrix4(this.model.matrixWorld);
+        segment.end.copy(this.localTip).applyMatrix4(this.model.matrixWorld);
+        segment.radius = this.spec.bladeRadius;
+        return true;
+    }
+
+    update(deltaSeconds: number, isStriking: boolean): void {
+        const emitting = isStriking && this.mounted === "hand";
+        if (emitting) {
+            this.sampleStrike(this.trailSegment);
+            this.trail.push(this.trailSegment.start, this.trailSegment.end);
+        }
+
+        this.trail.update(deltaSeconds, emitting);
+    }
+
+    dispose(): void {
+        this.trail.dispose();
+        super.dispose();
+    }
+}
+
+export function createWeapon(
+    definition: WeaponDefinition,
+    template: IModelTemplate,
+    handRig: IHandRig,
+    effectsRoot: Object3D,
+    carryRig?: ICarryRig
+): Weapon {
+    switch (definition.kind) {
+        case "melee":
+            return new MeleeWeapon(template, definition, handRig, effectsRoot, carryRig);
     }
 }

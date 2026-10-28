@@ -32,7 +32,7 @@ import type {
     IStrafeLocomotion,
     LocomotionDefinition,
 } from "@/entities/characters/CharacterAnimator";
-import { createWeapon } from "@/entities/weapons/createWeapon";
+import { createWeapon } from "@/entities/weapons/Weapon";
 import type { Weapon } from "@/entities/weapons/Weapon";
 import { HAND_BONES, PROCEDURAL } from "@/constants/characters";
 import { PHYSICS } from "@/constants/physics";
