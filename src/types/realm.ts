@@ -49,6 +49,11 @@ export interface IChapterBoss {
     chapterAppearanceCount: number;
 }
 
+export interface IRepoReference {
+    owner: string;
+    name: string;
+}
+
 export interface IFeaturedRealm {
     repositoryOwner: string;
     repositoryName: string;
@@ -67,4 +72,16 @@ export enum ChapterSeason {
     Summer = "summer",
     Autumn = "autumn",
     Winter = "winter",
+}
+
+export interface ISuccessResponse<TData> {
+    success: true;
+    message: string;
+    data: TData;
+}
+
+export interface IErrorResponse {
+    success: false;
+    message: string;
+    data: null;
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
-import { IErrorResponse, ISuccessResponse } from "@/types";
+import { IErrorResponse, ISuccessResponse } from "@/types/realm";
 import { API_MESSAGES, HttpMethod } from "@/constants/strings";
 import { HttpError } from "@/lib/ResponseWrapper";
 

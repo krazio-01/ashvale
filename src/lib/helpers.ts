@@ -1,6 +1,7 @@
 import { SCALE } from "@/constants/world";
 import { Color, Vector3 } from "three";
 import type { Box3, Vector3Tuple } from "three";
+import type { IRepoReference } from "@/types/realm";
 
 export const FULL_TURN = Math.PI * 2;
 export const QUARTER_TURN = Math.PI / 2;
@@ -225,4 +226,22 @@ export function measureBladeAxes(bounds: Box3): IBladeAxes {
     const thicknessAxis = axes.find((axis) => axis !== lengthAxis && axis !== widthAxis) as Axis;
     const tipAtMaximum = Math.abs(bounds.max[lengthAxis]) >= Math.abs(bounds.min[lengthAxis]);
     return { size, lengthAxis, widthAxis, thicknessAxis, bladeSign: tipAtMaximum ? 1 : -1 };
+}
+
+const REPO_URL_PATTERN = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s]+)\/([^/\s#?]+)/i;
+const SHORTHAND_PATTERN = /^([^/\s]+)\/([^/\s]+)$/;
+const GIT_SUFFIX_PATTERN = /\.git$/i;
+
+export function parseRepoInput(rawInput: string): IRepoReference | null {
+    const trimmed = rawInput.trim().replace(/\/+$/, "");
+    if (!trimmed) return null;
+
+    const match = trimmed.match(REPO_URL_PATTERN) ?? trimmed.match(SHORTHAND_PATTERN);
+    const [, owner, rawName] = match ?? [];
+    if (!owner || !rawName) return null;
+
+    const name = rawName.replace(GIT_SUFFIX_PATTERN, "");
+    if (!name) return null;
+
+    return { owner, name };
 }
