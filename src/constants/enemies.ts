@@ -1,5 +1,5 @@
 import { degrees, metres, pair } from "@/lib/helpers";
-import type { IVitalsSpec } from "@/systems/combat/core/Vitals";
+import type { IVitalsSpec } from "@/systems/combat/Vitals";
 import { GOLEM_MOVES, GOLEM_MOVE_IDS } from "@/systems/combat/moveSets/enemy/golemMoves";
 import { GREMLIN_MOVES, GREMLIN_MOVE_IDS } from "@/systems/combat/moveSets/enemy/gremlinMoves";
 import { SENTINEL_MOVES, SENTINEL_MOVE_IDS } from "@/systems/combat/moveSets/enemy/sentinelMoves";

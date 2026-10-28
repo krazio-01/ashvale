@@ -3,8 +3,8 @@ import type { Material, Object3D, Skeleton, Vector3Tuple } from "three";
 import { clone as cloneSkinnedModel } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { ActionMachine } from "@/systems/combat/actions/ActionMachine";
 import type { IMachineInput, IMachineOutput } from "@/systems/combat/actions/ActionMachine";
-import { CharacterMotor } from "@/systems/combat/core/CharacterMotor";
-import type { IMotorSpec } from "@/systems/combat/core/CharacterMotor";
+import { CharacterMotor } from "@/systems/combat/CharacterMotor";
+import type { IMotorSpec } from "@/systems/combat/CharacterMotor";
 import { AttackExecutor } from "@/systems/combat/hit/AttackExecutor";
 import type { IAttackOwner } from "@/systems/combat/hit/AttackExecutor";
 import type {
@@ -22,8 +22,8 @@ import {
 } from "@/systems/combat/actions/MoveTimeline";
 import { attackThreatFor } from "@/systems/combat/core/AttackThreat";
 import type { ICombatEventMap } from "@/systems/combat/services/CombatEvents";
-import { Vitals } from "@/systems/combat/core/Vitals";
-import type { IVitalsSpec } from "@/systems/combat/core/Vitals";
+import { Vitals } from "@/systems/combat/Vitals";
+import type { IVitalsSpec } from "@/systems/combat/Vitals";
 import { CharacterAnimator } from "@/entities/characters/CharacterAnimator";
 import { ProceduralRig } from "@/entities/characters/ProceduralRig";
 import type {

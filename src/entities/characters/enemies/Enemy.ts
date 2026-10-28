@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import type { Vector3Tuple } from "three";
-import type { IMotorSpec } from "@/systems/combat/core/CharacterMotor";
+import type { IMotorSpec } from "@/systems/combat/CharacterMotor";
 import { CombatCharacter } from "@/entities/characters/CombatCharacter";
 import { enemyCombatLocomotion, enemyRelaxedLocomotion } from "@/entities/characters/locomotion";
 import { BehaviourSelector } from "@/systems/enemyBehaviour/behaviours/BehaviourSelector";

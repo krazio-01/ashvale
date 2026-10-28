@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import type { Camera, Vector3Tuple } from "three";
-import type { IMotorSpec } from "@/systems/combat/core/CharacterMotor";
+import type { IMotorSpec } from "@/systems/combat/CharacterMotor";
 import { PHYSICS } from "@/constants/physics";
 import type { ICapsuleSource } from "@/types/physics";
 import { CombatCharacter } from "@/entities/characters/CombatCharacter";
