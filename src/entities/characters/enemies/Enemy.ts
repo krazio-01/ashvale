@@ -5,7 +5,7 @@ import { CombatCharacter } from "@/entities/characters/CombatCharacter";
 import { enemyCombatLocomotion, enemyRelaxedLocomotion } from "@/entities/characters/locomotion";
 import { BehaviourSelector } from "@/systems/enemyBehaviour/behaviours/EnemyBehaviour";
 import type { IEnemyCombatBody } from "@/systems/enemyBehaviour/behaviours/EnemyBehaviour";
-import { EngageBehaviour } from "@/systems/enemyBehaviour/behaviours/EngageBehaviour";
+import { EngageBehaviour } from "@/systems/enemyBehaviour/behaviours/CombatBehaviours";
 import {
     InvestigateBehaviour,
     SearchBehaviour,

@@ -1,16 +1,160 @@
+import { SPAM_TRACKER, ENGAGE_TACTICS } from "@/constants/enemies";
+import type { IAttackThreat, IAttackThreatSource, ICombatant } from "@/types/combat";
 import { Vector3 } from "three";
 import { EnemyBehaviour } from "@/systems/enemyBehaviour/behaviours/EnemyBehaviour";
 import type { IEnemyCombatBody } from "@/systems/enemyBehaviour/behaviours/EnemyBehaviour";
 import type { AwarenessMeter } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
-import { AttackPlanner } from "@/systems/enemyBehaviour/combat/AttackPlanner";
-import type { IEnemyAttack } from "@/systems/enemyBehaviour/combat/AttackPlanner";
-import { DefenseReader } from "@/systems/enemyBehaviour/combat/DefenseReader";
-import { SpamTracker } from "@/systems/enemyBehaviour/combat/SpamTracker";
 import type { AttackCoordinator } from "@/systems/combat/AttackCoordinator";
 import { ENEMY_DEFENSE_MOVE_IDS } from "@/systems/combat/moveSets/enemyMoveBuilders";
-import { ENGAGE_TACTICS } from "@/constants/enemies";
 import { angleDelta, clamp, horizontalDistance, yawTowards } from "@/lib/helpers";
-import type { IAttackThreatSource, ICombatant } from "@/types/combat";
+
+export class SpamTracker {
+    private readonly hitTimes: number[] = [];
+    private elapsed = 0;
+
+    tick(deltaSeconds: number): void {
+        this.elapsed += deltaSeconds;
+        const cutoff = this.elapsed - SPAM_TRACKER.windowSeconds;
+        while ((this.hitTimes[0] ?? Number.POSITIVE_INFINITY) < cutoff) this.hitTimes.shift();
+    }
+
+    notifyLightHitLanded(): void {
+        this.hitTimes.push(this.elapsed);
+    }
+
+    parryBonus(): number {
+        return Math.min(SPAM_TRACKER.maxBonus, this.hitTimes.length * SPAM_TRACKER.bonusPerHit);
+    }
+}
+
+export interface IDefenseTactics {
+    reactionSeconds: number;
+    parryChance: number;
+    evadeChance: number;
+}
+
+type DefenseMove = "parry" | "evade";
+type DefenseRoll = DefenseMove | "take";
+
+const LEAD_SECONDS: Record<DefenseMove, number> = { parry: 0.15, evade: 0.2 };
+
+export class DefenseReader {
+    private readonly tactics: IDefenseTactics;
+    private readonly spam: SpamTracker;
+    private readonly random: () => number;
+    private trackedSerial = -1;
+    private decision: DefenseRoll | null = null;
+    private noticeRemaining = 0;
+    private triggered = false;
+
+    constructor(tactics: IDefenseTactics, spam: SpamTracker, random: () => number) {
+        this.tactics = tactics;
+        this.spam = spam;
+        this.random = random;
+    }
+
+    tick(deltaSeconds: number, threat: IAttackThreat | null): DefenseMove | null {
+        if (!threat) {
+            this.trackedSerial = -1;
+            this.decision = null;
+            return null;
+        }
+
+        if (threat.moveSerial !== this.trackedSerial) {
+            this.trackedSerial = threat.moveSerial;
+            this.triggered = false;
+            this.noticeRemaining = this.tactics.reactionSeconds;
+            this.decision = threat.secondsUntilHit < this.tactics.reactionSeconds ? "take" : null;
+        }
+
+        if (this.decision === null) {
+            this.noticeRemaining -= deltaSeconds;
+            if (this.noticeRemaining <= 0) this.decision = this.roll(threat);
+        }
+
+        const decision = this.decision;
+        if (this.triggered || decision === null || decision === "take") return null;
+        if (threat.secondsUntilHit > LEAD_SECONDS[decision]) return null;
+
+        this.triggered = true;
+        return decision;
+    }
+
+    private roll(threat: IAttackThreat): DefenseRoll {
+        const roll = this.random();
+        if (!threat.parryable || threat.perilous)
+            return roll < this.tactics.evadeChance ? "evade" : "take";
+
+        const parryChance = Math.min(1, this.tactics.parryChance + this.spam.parryBonus());
+        if (roll < parryChance) return "parry";
+        return roll < parryChance + this.tactics.evadeChance ? "evade" : "take";
+    }
+}
+
+export interface IEnemyAttack {
+    id: string;
+    openingMove: string;
+    range: readonly [number, number];
+    weight: number;
+    cooldownSeconds: number;
+    tokenCost: number;
+    chain: readonly string[];
+    continueChance: number;
+}
+
+const REPEAT_WEIGHT_SCALE = 0.5;
+
+export class AttackPlanner {
+    private readonly attacks: readonly IEnemyAttack[];
+    private readonly random: () => number;
+    private readonly cooldowns = new Map<string, number>();
+    private lastAttackId: string | null = null;
+
+    constructor(attacks: readonly IEnemyAttack[], random: () => number) {
+        this.attacks = attacks;
+        this.random = random;
+    }
+
+    tick(deltaSeconds: number, cooldownRate = 1): void {
+        for (const [id, remaining] of this.cooldowns) {
+            const next = remaining - deltaSeconds * cooldownRate;
+            if (next <= 0) this.cooldowns.delete(id);
+            else this.cooldowns.set(id, next);
+        }
+    }
+
+    pick(gap: number): IEnemyAttack | null {
+        let totalWeight = 0;
+        for (const attack of this.attacks)
+            if (this.isAvailable(attack, gap)) totalWeight += this.weightOf(attack);
+        if (totalWeight === 0) return null;
+
+        let roll = this.random() * totalWeight;
+        let chosen: IEnemyAttack | null = null;
+        for (const attack of this.attacks) {
+            if (!this.isAvailable(attack, gap)) continue;
+            chosen = attack;
+            roll -= this.weightOf(attack);
+            if (roll < 0) break;
+        }
+        return chosen;
+    }
+
+    commit(attack: IEnemyAttack): void {
+        if (attack.cooldownSeconds > 0) this.cooldowns.set(attack.id, attack.cooldownSeconds);
+        this.lastAttackId = attack.id;
+    }
+
+    private isAvailable(attack: IEnemyAttack, gap: number): boolean {
+        return gap >= attack.range[0] && gap <= attack.range[1] && !this.cooldowns.has(attack.id);
+    }
+
+    private weightOf(attack: IEnemyAttack): number {
+        return attack.id === this.lastAttackId
+            ? attack.weight * REPEAT_WEIGHT_SCALE
+            : attack.weight;
+    }
+}
 
 type Tactic = "close" | "circle" | "attack" | "retreat";
 type EngageTarget = ICombatant & IAttackThreatSource;

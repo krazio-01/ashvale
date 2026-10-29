@@ -10,8 +10,10 @@ import {
     WRAITH_MOVES,
     WRAITH_MOVE_IDS,
 } from "@/systems/combat/moveSets/enemyMoves";
-import type { IEnemyAttack } from "@/systems/enemyBehaviour/combat/AttackPlanner";
-import type { IDefenseTactics } from "@/systems/enemyBehaviour/combat/DefenseReader";
+import type {
+    IEnemyAttack,
+    IDefenseTactics,
+} from "@/systems/enemyBehaviour/behaviours/CombatBehaviours";
 import { CREATURE, STRIDE } from "@/constants/characters";
 import { WEAPONS } from "@/constants/combat";
 import type { EnemyArchetype, IMoveSet, VictimRig } from "@/types/combat";
