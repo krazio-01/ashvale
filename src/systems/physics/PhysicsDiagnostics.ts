@@ -1,6 +1,6 @@
 import type { Object3D } from "three";
 import { PHYSICS } from "@/constants/physics";
-import type { PhysicsSimulation } from "@/systems/physics/PhysicsSimulation";
+import type { PhysicsSimulation } from "@/systems/physics/ClothSimulation";
 
 interface IRegisteredSimulation {
     root: Object3D;

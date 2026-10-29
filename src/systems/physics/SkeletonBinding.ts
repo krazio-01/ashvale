@@ -1,7 +1,7 @@
 import { Matrix3, Matrix4, Quaternion, SkinnedMesh, Vector3 } from "three";
 import type { Bone, Object3D, Skeleton } from "three";
 import { PHYSICS } from "@/constants/physics";
-import { sheetTangents } from "@/systems/physics/bodies/PhysicsBody";
+import { sheetTangents } from "@/systems/physics/ClothBody";
 import type { IPhysicsBinding, IPhysicsBodyDefinition, IPhysicsDefinition } from "@/types/physics";
 
 const scratchPoint = new Vector3();

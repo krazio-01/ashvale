@@ -1,8 +1,9 @@
 import { Quaternion, Vector3 } from "three";
+import type { Object3D } from "three";
 import { PHYSICS } from "@/constants/physics";
 import { FULL_TURN } from "@/lib/helpers";
-import { createPhysicsBody } from "@/systems/physics/bodies/PhysicsBody";
-import type { PhysicsBody } from "@/systems/physics/bodies/PhysicsBody";
+import { createPhysicsBody } from "@/systems/physics/ClothBody";
+import type { PhysicsBody } from "@/systems/physics/ClothBody";
 import { ParticleSolver } from "@/systems/physics/ParticleSolver";
 import type { ICarriedMotion, ISolverEnvironment } from "@/systems/physics/ParticleSolver";
 import type {
@@ -11,6 +12,9 @@ import type {
     IPhysicsDefinition,
     PhysicsDetail,
 } from "@/types/physics";
+import { SkeletonBinding } from "@/systems/physics/SkeletonBinding";
+import { PhysicsDiagnostics } from "@/systems/physics/PhysicsDiagnostics";
+import type { IGroundProbe } from "@/types/procedural";
 
 export interface IPhysicsFrame {
     deltaSeconds: number;
@@ -18,14 +22,19 @@ export interface IPhysicsFrame {
     floorY: number | null;
 }
 
-const DEGENERATE = PHYSICS.epsilon.motion;
-const scratchStart = new Vector3();
-const scratchEnd = new Vector3();
-const scratchMove = new Vector3();
-const scratchAxis = new Vector3();
-const scratchTurn = new Quaternion();
-
 export class PhysicsSimulation {
+    private static readonly DEGENERATE = PHYSICS.epsilon.motion;
+
+    private static readonly scratchStart = new Vector3();
+
+    private static readonly scratchEnd = new Vector3();
+
+    private static readonly scratchMove = new Vector3();
+
+    private static readonly scratchAxis = new Vector3();
+
+    private static readonly scratchTurn = new Quaternion();
+
     readonly solver: ParticleSolver;
     private readonly bodies: PhysicsBody[];
     private readonly binding: IPhysicsBinding;
@@ -160,18 +169,29 @@ export class PhysicsSimulation {
 
     private updateColliders(): void {
         for (let collider = 0; collider < this.colliderCount; collider++) {
-            const radius = this.binding.colliderWorld(collider, scratchStart, scratchEnd);
-            this.solver.setCollider(collider, scratchStart, scratchEnd, radius);
+            const radius = this.binding.colliderWorld(
+                collider,
+                PhysicsSimulation.scratchStart,
+                PhysicsSimulation.scratchEnd
+            );
+            this.solver.setCollider(
+                collider,
+                PhysicsSimulation.scratchStart,
+                PhysicsSimulation.scratchEnd,
+                radius
+            );
         }
         for (let slot = 0; slot < this.capsuleSources.length; slot++) {
             const source = this.capsuleSources[slot];
-            const radius = source ? source.worldCapsule(scratchStart, scratchEnd) : null;
+            const radius = source
+                ? source.worldCapsule(PhysicsSimulation.scratchStart, PhysicsSimulation.scratchEnd)
+                : null;
             if (radius === null) this.solver.disableCollider(this.colliderCount + slot);
             else
                 this.solver.setCollider(
                     this.colliderCount + slot,
-                    scratchStart,
-                    scratchEnd,
+                    PhysicsSimulation.scratchStart,
+                    PhysicsSimulation.scratchEnd,
                     radius
                 );
         }
@@ -191,8 +211,11 @@ export class PhysicsSimulation {
     private carryReference(seconds: number): void {
         const { linearInertia, angularInertia, flingScale, maxLinearSpeed, maxAngularSpeed } =
             PHYSICS.reference;
-        const move = scratchMove.subVectors(this.nextPosition, this.referencePosition);
-        const turn = scratchTurn
+        const move = PhysicsSimulation.scratchMove.subVectors(
+            this.nextPosition,
+            this.referencePosition
+        );
+        const turn = PhysicsSimulation.scratchTurn
             .copy(this.referenceRotation)
             .invert()
             .premultiply(this.nextRotation);
@@ -200,9 +223,9 @@ export class PhysicsSimulation {
         const angle = 2 * Math.acos(Math.min(turn.w, 1));
         const sine = Math.sqrt(Math.max(1 - turn.w * turn.w, 0));
         const axis =
-            sine > DEGENERATE
-                ? scratchAxis.set(turn.x / sine, turn.y / sine, turn.z / sine)
-                : scratchAxis.set(0, 1, 0);
+            sine > PhysicsSimulation.DEGENERATE
+                ? PhysicsSimulation.scratchAxis.set(turn.x / sine, turn.y / sine, turn.z / sine)
+                : PhysicsSimulation.scratchAxis.set(0, 1, 0);
         this.motion.referenceMoveX = move.x;
         this.motion.referenceMoveY = move.y;
         this.motion.referenceMoveZ = move.z;
@@ -212,7 +235,8 @@ export class PhysicsSimulation {
         const cappedAngle = Math.min(angle, maxAngularSpeed * simulatedSeconds);
         const carriedDistance = distance - cappedDistance + (1 - linearInertia) * cappedDistance;
         const carriedAngle = angle - cappedAngle + (1 - angularInertia) * cappedAngle;
-        if (distance > DEGENERATE) move.multiplyScalar(carriedDistance / distance);
+        if (distance > PhysicsSimulation.DEGENERATE)
+            move.multiplyScalar(carriedDistance / distance);
         this.motion.axisX = axis.x;
         this.motion.axisY = axis.y;
         this.motion.axisZ = axis.z;
@@ -255,5 +279,64 @@ export class PhysicsSimulation {
         this.environment.windX = direction[0] * strength;
         this.environment.windY = direction[1] * strength;
         this.environment.windZ = direction[2] * strength;
+    }
+}
+
+export class PhysicsLayer {
+    private static readonly scratch = {
+        origin: new Vector3(),
+        push: new Vector3(),
+    };
+    private readonly simulation: PhysicsSimulation;
+    private readonly body: Object3D;
+    private readonly probe: IGroundProbe;
+    private readonly frame: IPhysicsFrame = {
+        deltaSeconds: 0,
+        detail: "frozen",
+        floorY: null,
+    };
+
+    private constructor(
+        model: Object3D,
+        body: Object3D,
+        probe: IGroundProbe,
+        definition: IPhysicsDefinition
+    ) {
+        this.body = body;
+        this.probe = probe;
+        this.simulation = new PhysicsSimulation(definition, new SkeletonBinding(model, definition));
+        PhysicsDiagnostics.register(body, this.simulation);
+    }
+
+    static create(model: Object3D, body: Object3D, probe: IGroundProbe): PhysicsLayer | null {
+        const definition = model.userData[PHYSICS.dataKey] as IPhysicsDefinition | undefined;
+        return definition ? new PhysicsLayer(model, body, probe, definition) : null;
+    }
+
+    impact(push: Vector3, strength: number): void {
+        if (push.lengthSq() < PHYSICS.impulse.minimumPushLengthSquared) return;
+        const speed = strength * PHYSICS.impulse.speedPerStrength;
+        const scaled = PhysicsLayer.scratch.push.copy(push).normalize().multiplyScalar(speed);
+        this.simulation.solver.kick(scaled.x, scaled.y, scaled.z);
+    }
+
+    attachCapsule(slot: number, source: ICapsuleSource | null): void {
+        this.simulation.attachCapsule(slot, source);
+    }
+
+    update(deltaSeconds: number, detail: PhysicsDetail): void {
+        const origin = this.body.getWorldPosition(PhysicsLayer.scratch.origin);
+        this.frame.deltaSeconds = deltaSeconds;
+        this.frame.detail = detail;
+        this.frame.floorY = this.probe.groundHeightAt(origin.x, origin.z, origin.y);
+        this.simulation.update(this.frame);
+    }
+
+    reset(): void {
+        this.simulation.reset();
+    }
+
+    dispose(): void {
+        PhysicsDiagnostics.unregister(this.simulation);
     }
 }

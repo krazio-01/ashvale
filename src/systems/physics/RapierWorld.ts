@@ -1,6 +1,7 @@
 import type { Collider, Ray, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import type { Vector3 } from "three";
 import { COLLISION_GROUPS } from "@/constants/world";
+
 export function isSegmentBlocked(
     physicsWorld: PhysicsWorld,
     ray: Ray,

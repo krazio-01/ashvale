@@ -1,8 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Group } from "three";
-import type { Vector3 } from "three";
-import type { WebGLRenderer } from "three";
+import type { Vector3, WebGLRenderer } from "three";
 import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import { AssetLibrary } from "@/world/assets/AssetLibrary";
 import { CombatEvents } from "@/events/CombatEvents";
@@ -13,7 +12,7 @@ import { ProjectileSystem } from "@/systems/combat/ProjectileSystem";
 import type { IThemeEnvironment, IThemeManifest } from "@/types/theme";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import { WORLD } from "@/constants/world";
-import { isSegmentBlocked } from "@/world/SegmentQuery";
+import { isSegmentBlocked } from "@/systems/physics/RapierWorld";
 
 export class World {
     private readonly physicsWorld: PhysicsWorld;

@@ -4,7 +4,7 @@ import type { CombatEvents, ICombatEventMap } from "@/events/CombatEvents";
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { Collider, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { SIGHT, AWARENESS } from "@/constants/enemies";
-import { isSegmentBlocked } from "@/world/SegmentQuery";
+import { isSegmentBlocked } from "@/systems/physics/RapierWorld";
 import { angleDelta, clamp, horizontalDistance, lerp, smoothstep, yawTowards } from "@/lib/helpers";
 import { AwarenessMeter } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
 import type { IAwarenessStimulus } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
