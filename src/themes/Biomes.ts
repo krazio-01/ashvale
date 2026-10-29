@@ -1,5 +1,5 @@
 import { ChapterTheme } from "@/types/realm";
-import type { IThemeManifest, IThemeProp } from "@/types/theme";
+import type { IThemeManifest, IThemeProp } from "@/types/world";
 import {
     CANOPY_TREES,
     PINE_TREES,

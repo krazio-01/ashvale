@@ -1,10 +1,5 @@
-import { LIGHT } from "@/constants/rendering";
-import type {
-    GraphicsQuality,
-    IGameSettings,
-    ShadowQuality,
-    OutlineQuality,
-} from "@/types/settings";
+import { LIGHT } from "@/constants/world";
+import type { GraphicsQuality, IGameSettings, ShadowQuality, OutlineQuality } from "@/types/ui";
 
 type GraphicsPresetValues = Pick<
     IGameSettings,

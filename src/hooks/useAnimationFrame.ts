@@ -1,7 +1,7 @@
 "use client";
 import { useContext, useEffect, useRef } from "react";
 import { AnimationFrameContext } from "@/context/AnimationFrameContext";
-import type { AnimationFrameCallback } from "@/types/animationFrame";
+import type { AnimationFrameCallback } from "@/types/store";
 
 export function useAnimationFrame(callback: AnimationFrameCallback): void {
     const callbacks = useContext(AnimationFrameContext);

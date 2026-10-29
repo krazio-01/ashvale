@@ -18,8 +18,8 @@ import {
     FoliageMaskPass,
     OutlineEffect,
 } from "@/world/postProcessing/PostProcessPasses";
-import type { IThemeEnvironment } from "@/types/theme";
-import { POST_PROCESSING, RENDER } from "@/constants/rendering";
+import type { IThemeEnvironment } from "@/types/world";
+import { POST_PROCESSING, RENDER } from "@/constants/world";
 import { useSettings } from "@/settings/SettingsStore";
 import { OUTLINE_MASK_SCALES } from "@/settings/QualityPresets";
 

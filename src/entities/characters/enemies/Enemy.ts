@@ -21,12 +21,12 @@ import {
 import { NON_PLAYER, SIGHT } from "@/constants/enemies";
 import type { IEnemyArchetype } from "@/constants/enemies";
 import { IDLE_VARIATION, jitteredIdleDelay } from "@/constants/characters";
-import { HUD } from "@/constants/presentation";
+import { HUD } from "@/constants/ui";
 import { alertMarkerFillFor, alertMarkerKindFor } from "@/world/HudTrackers";
 import type { IAlertMarkerSource } from "@/world/HudTrackers";
 import { horizontalDirection } from "@/lib/helpers";
 import type { AwarenessState, ICombatant, IHitPayload } from "@/types/combat";
-import type { AlertMarkerKind } from "@/types/hud";
+import type { AlertMarkerKind } from "@/types/ui";
 import type { IWorldContext } from "@/types/world";
 
 export class Enemy extends CombatCharacter implements IEnemyCombatBody, IAlertMarkerSource {

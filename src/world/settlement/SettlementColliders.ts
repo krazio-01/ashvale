@@ -3,8 +3,7 @@ import type { RigidBody, World as PhysicsWorld } from "@dimforge/rapier3d-compat
 import { Group } from "three";
 import type { Vector3Tuple } from "three";
 import { Entity } from "@/entities/Entity";
-import type { IWorldContext, IWorldEntity } from "@/types/world";
-import type { ISettlementColliderDesc } from "@/types/settlement";
+import type { IWorldContext, IWorldEntity, ISettlementColliderDesc } from "@/types/world";
 
 export class SettlementColliders extends Entity implements IWorldEntity {
     readonly sceneObject = new Group();

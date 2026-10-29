@@ -1,4 +1,4 @@
-import { PROP_TRANSFORM_STRIDE, type IPropGroup, type IThemeProp } from "@/types/theme";
+import { PROP_TRANSFORM_STRIDE, type IPropGroup, type IThemeProp } from "@/types/world";
 import { TERRAIN } from "@/constants/world";
 import { clamp } from "@/lib/helpers";
 

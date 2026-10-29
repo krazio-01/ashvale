@@ -14,7 +14,7 @@ import type {
 } from "@/types/physics";
 import { SkeletonBinding } from "@/systems/physics/SkeletonBinding";
 import { PhysicsDiagnostics } from "@/systems/physics/PhysicsDiagnostics";
-import type { IGroundProbe } from "@/types/procedural";
+import type { IGroundProbe } from "@/types/characters";
 
 export interface IPhysicsFrame {
     deltaSeconds: number;

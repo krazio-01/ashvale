@@ -2,8 +2,8 @@ import { Quaternion, Vector3 } from "three";
 import type { Object3D } from "three";
 import { PROCEDURAL, PROCEDURAL_EPSILON } from "@/constants/characters";
 import { clamp } from "@/lib/helpers";
-import type { ILimb } from "@/types/procedural";
-import type { Handedness } from "@/types/weapons";
+import type { ILimb } from "@/types/characters";
+import type { Handedness } from "@/types/combat";
 
 type LimbNames = readonly [string, string, string];
 

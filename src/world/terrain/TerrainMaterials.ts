@@ -2,7 +2,7 @@ import { CanvasTexture, Color, LinearFilter, RepeatWrapping, Vector2, Vector4 } 
 import { GROUND_MATERIAL, SOIL_RAMP, TRAIL } from "@/constants/world";
 import { clamp, shiftColorHsl } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
-import type { ITerrainProfile } from "@/types/theme";
+import type { ITerrainProfile } from "@/types/world";
 
 const TRAIL_WEAR_BAND: [number, number] = [
     TRAIL.halfWidth,

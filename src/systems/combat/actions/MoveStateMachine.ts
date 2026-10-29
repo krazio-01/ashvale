@@ -6,6 +6,7 @@ import type {
     MoveTag,
     ReactionTier,
     Stance,
+    WeaponMount,
 } from "@/types/combat";
 import {
     allowsCancel,
@@ -15,7 +16,6 @@ import {
     secondsSinceStart,
 } from "@/systems/combat/actions/MoveTimeline";
 import { COMBAT_TIMING } from "@/constants/combat";
-import type { WeaponMount } from "@/types/weapons";
 
 interface IQueuedIntent {
     intent: IntentKind;

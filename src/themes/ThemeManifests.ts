@@ -9,7 +9,7 @@ import type {
     IThemeLighting,
     IThemeManifest,
     IWaterProfile,
-} from "@/types/theme";
+} from "@/types/world";
 import {
     HIGHLANDS_MANIFEST,
     RUINS_MANIFEST,

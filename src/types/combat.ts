@@ -1,26 +1,86 @@
-import type { Object3D, Vector3 } from "three";
+import type { Object3D, Vector3Tuple, Vector3 } from "three";
 import type { IEnemyArchetype } from "@/constants/enemies";
-import type { WeaponMount } from "@/types/weapons";
+
+export type Handedness = "right" | "left";
+
+export interface IHandRig {
+    hand: Object3D;
+    indexBase: Object3D;
+    middleBase: Object3D;
+    ringBase: Object3D;
+    pinkyBase: Object3D | null;
+    thumbBase: Object3D;
+}
+
+export type WeaponMount = "hand" | "carry";
+
+export interface IWeaponCarry {
+    bone: string;
+    position: Vector3Tuple;
+    rotationDegrees: Vector3Tuple;
+}
+
+export interface ICarryRig {
+    bone: Object3D;
+}
+
+export interface IWeaponSpec {
+    id: string;
+    modelPath: string;
+    gripHand: Handedness;
+    handleCentreFraction: number;
+    gripRoll: number;
+    worldLength: number;
+    guardFraction: number;
+    damage: number;
+    carry?: IWeaponCarry;
+}
+
+export interface IMeleeWeaponSpec extends IWeaponSpec {
+    kind: "melee";
+    bladeRadius: number;
+    trailColor: string;
+}
+
+export type WeaponDefinition = IMeleeWeaponSpec;
+
 export type Team = "player" | "enemy";
+
 export type ImpactTier = "light" | "heavy" | "finisher";
+
 export type ReactionTier = "none" | "flinch" | "stagger" | "knockback" | "knockdown";
+
 export type MoveTag =
     "light" | "heavy" | "dodge" | "parry" | "shoot" | "movement" | "jump" | "stance";
+
 export type Stance = "sheathed" | "drawn";
+
 export type DodgeSide = "left" | "right";
+
 export type IntentKind =
     "light" | "heavy" | "dodge" | "parry" | "shoot" | "slide" | "jump" | "draw";
+
 type MoveGround = "grounded" | "airborne" | "any";
+
 type MoveMotion = "rootMotion" | "momentum" | "physics";
+
 type HitOutcomeKind =
     "ignored" | "evaded" | "perfectEvaded" | "parried" | "damaged" | "staggered" | "killed";
+
 export type AwarenessState = "unaware" | "suspicious" | "alert";
+
 export type AlertPhase = "unaware" | "suspicious" | "alert" | "searching" | "returning";
+
 export type VictimRig = "humanoid" | "creature";
+
 export type FinisherKind = "counter" | "execution" | "backstab";
+
 export type EnemyArchetype = "sentinel" | "wraith" | "golem" | "gremlin";
+
 export type ParryTier = "parry" | "perfect";
+
 export type SwingDirection = "high" | "side";
+
 export type ParriedReactions = Readonly<
     Record<ParryTier, Readonly<Record<SwingDirection, string>>>
 >;
@@ -81,6 +141,7 @@ export interface ISlowMotionProfile {
 }
 
 export type TelegraphDanger = "parryable" | "perilous";
+
 export type ProjectileKind = "bolt" | "blast";
 
 export interface IProjectileLaunch {

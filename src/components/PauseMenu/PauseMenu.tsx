@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GraphicsQuality, IGameSettings, SettingSection } from "@/types/settings";
+import type { GraphicsQuality, IGameSettings, SettingSection } from "@/types/ui";
 import { SETTING_SECTIONS } from "@/settings/SettingsCatalogue";
 import {
     DEFAULT_SETTINGS,

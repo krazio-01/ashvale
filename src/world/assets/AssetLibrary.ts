@@ -11,12 +11,11 @@ import {
     Vector3,
     VectorKeyframeTrack,
 } from "three";
-import type { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { BufferGeometry, KeyframeTrack, WebGLRenderer } from "three";
+import type { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { createGltfLoader } from "@/world/assets/GltfLoaderFactory";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
-import type { IThemeManifest } from "@/types/theme";
-import type { IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
+import type { IThemeManifest, IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
 import { CHARACTER, CREATURE, CLIP, SKELETON_BONES } from "@/constants/characters";
 const FOLIAGE_MATERIAL_PATTERN = /leaves|leaf|foliage/i;
 const USED_CLIP_NAMES = new Set<string>(Object.values(CLIP));

@@ -1,6 +1,6 @@
 import { metres } from "@/lib/helpers";
-import type { IHudVitalDescriptor } from "@/types/hud";
-import { ATMOSPHERE } from "@/constants/rendering";
+import type { IHudVitalDescriptor } from "@/types/ui";
+import { ATMOSPHERE } from "@/constants/world";
 import { PALETTE } from "@/constants/characters";
 
 export const HUD = {

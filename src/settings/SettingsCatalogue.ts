@@ -1,4 +1,4 @@
-import type { IGameSettings, ISettingControlDescriptor, SettingSection } from "@/types/settings";
+import type { IGameSettings, ISettingControlDescriptor, SettingSection } from "@/types/ui";
 
 type SettingsCatalogueMap = {
     [K in keyof IGameSettings]: ISettingControlDescriptor<K>;

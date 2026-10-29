@@ -1,5 +1,5 @@
-import { HUD } from "@/constants/presentation";
-import type { IHudAlertMarker, IHudDamageNumber, IHudSlice } from "@/types/hud";
+import { HUD } from "@/constants/ui";
+import type { IHudAlertMarker, IHudDamageNumber, IHudSlice } from "@/types/ui";
 import type { GetState, IStoreState, SetState } from "@/types/store";
 
 function createDamageNumberPool(): IHudDamageNumber[] {

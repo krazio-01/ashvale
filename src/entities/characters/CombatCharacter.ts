@@ -28,6 +28,10 @@ import type {
     IStrikeSegment,
     DodgeSide,
     Stance,
+    Handedness,
+    ICarryRig,
+    IHandRig,
+    WeaponDefinition,
 } from "@/types/combat";
 import { Group, Mesh, MeshBasicMaterial, SkinnedMesh, Vector3 } from "three";
 import type { Material, Object3D, Skeleton, Vector3Tuple } from "three";
@@ -57,8 +61,7 @@ import { PHYSICS } from "@/constants/physics";
 import { COMBAT_TIMING, CONTACT, FOCUS, MOVEMENT, PARRY, SLOW_MOTION } from "@/constants/combat";
 import { BoneMath } from "@/lib/boneMath";
 import { angleDelta, clamp, pickRandom, yawTowards } from "@/lib/helpers";
-import type { IBladeSource, IProceduralFrame } from "@/types/procedural";
-import type { Handedness, ICarryRig, IHandRig, WeaponDefinition } from "@/types/weapons";
+import type { IBladeSource, IProceduralFrame } from "@/types/characters";
 import type { ISkinnedModel, IWorldContext, IWorldEntity } from "@/types/world";
 
 interface ICombatCharacterConfig {

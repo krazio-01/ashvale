@@ -1,4 +1,4 @@
-import type { IHudSlice } from "@/types/hud";
+import type { IHudSlice } from "@/types/ui";
 
 export type StoreListener<State> = (state: State, previousState: State) => void;
 
@@ -20,3 +20,5 @@ export interface IStoreApi<State> {
 export interface IStoreState {
     hud: IHudSlice;
 }
+
+export type AnimationFrameCallback = (state: IStoreState, deltaSeconds: number) => void;

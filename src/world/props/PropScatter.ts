@@ -1,4 +1,4 @@
-import { DEFAULT_FAMILY, type IThemeProp } from "@/types/theme";
+import { DEFAULT_FAMILY, type IThemeProp } from "@/types/world";
 import type { IPropFieldInput, IRegionSite, ISpeciesByLayer } from "@/world/props/PropField";
 import {
     collidesWithPlayer,

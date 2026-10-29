@@ -1,4 +1,4 @@
-import { DEFAULT_FAMILY, PropLayer, type IThemeProp } from "@/types/theme";
+import { DEFAULT_FAMILY, PropLayer, type IThemeProp } from "@/types/world";
 import { SCALE } from "@/constants/world";
 const MODEL_DIRECTORY = "/models/woodland";
 const HIGHLANDS_DIRECTORY = "/models/highlands";

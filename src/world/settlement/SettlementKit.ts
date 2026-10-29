@@ -1,4 +1,4 @@
-import { DEFAULT_FAMILY, PropLayer, type IThemeProp } from "@/types/theme";
+import { DEFAULT_FAMILY, PropLayer, type IThemeProp } from "@/types/world";
 import { SCALE } from "@/constants/world";
 import { metres } from "@/lib/helpers";
 

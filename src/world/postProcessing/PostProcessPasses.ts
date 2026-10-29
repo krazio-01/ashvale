@@ -13,8 +13,8 @@ import {
 } from "three";
 import type { Texture } from "three";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
-import type { ISkyGradient } from "@/types/theme";
-import { ATMOSPHERE, OUTLINE } from "@/constants/rendering";
+import type { ISkyGradient } from "@/types/world";
+import { ATMOSPHERE, OUTLINE } from "@/constants/world";
 
 const VIEW_POSITION_FUNCTION = `
     uniform mat4 inverseProjectionMatrix;

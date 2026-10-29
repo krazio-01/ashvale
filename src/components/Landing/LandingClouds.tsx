@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Group, IcosahedronGeometry, MeshBasicMaterial } from "three";
 import { useFrame } from "@react-three/fiber";
 import { createSeededRandom, FULL_TURN, lerp } from "@/lib/helpers";
-import { LANDING_CLOUDS } from "@/constants/presentation";
+import { LANDING_CLOUDS } from "@/constants/ui";
 interface ICloudPuff {
     id: number;
     x: number;

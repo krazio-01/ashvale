@@ -1,5 +1,5 @@
 import { ChapterSeason } from "@/types/realm";
-import type { ISeasonProfile } from "@/types/theme";
+import type { ISeasonProfile } from "@/types/world";
 
 export const SPRING_SEASON: ISeasonProfile = {
     season: ChapterSeason.Spring,

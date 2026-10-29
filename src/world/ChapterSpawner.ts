@@ -27,12 +27,15 @@ import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
 import { ChapterTheme } from "@/types/realm";
 import type { IChapterRegion, IRegionPathway } from "@/types/realm";
-import type { ISettlementLayoutResult } from "@/types/settlement";
+import type {
+    ISettlementLayoutResult,
+    IPropGroup,
+    IThemeManifest,
+    SpawnProgressListener,
+} from "@/types/world";
 import { buildSettlementLayout } from "@/world/settlement/SettlementLayout";
 import { SettlementColliders } from "@/world/settlement/SettlementColliders";
-import type { IPropGroup, IThemeManifest } from "@/types/theme";
 import type { CombatCharacter } from "@/entities/characters/CombatCharacter";
-import type { SpawnProgressListener } from "@/types/world";
 import { ENEMY_PLACEMENT, SPAWNING } from "@/constants/enemies";
 import { PLAYER } from "@/constants/player";
 import { TERRAIN } from "@/constants/world";

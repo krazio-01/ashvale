@@ -1,4 +1,4 @@
-import { SHADING } from "@/constants/rendering";
+import { SHADING } from "@/constants/world";
 import {
     DataTexture,
     MeshStandardMaterial,

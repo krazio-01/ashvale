@@ -28,14 +28,14 @@ import { resolveThemeManifest } from "@/themes/ThemeManifests";
 import { isRequestCancellation, useRequest } from "@/hooks/useRequest";
 import { HttpMethod } from "@/constants/strings";
 import { QUICK_PLAY_FALLBACK_REPOS } from "@/constants/realm";
-import { LANDING_CAMERA, LANDING_SKY } from "@/constants/presentation";
-import { POST_PROCESSING } from "@/constants/rendering";
+import { LANDING_CAMERA, LANDING_SKY } from "@/constants/ui";
+import { POST_PROCESSING } from "@/constants/world";
 import { ChapterSeason, ChapterTheme } from "@/types/realm";
 import type { FeaturedRealmResponse } from "@/responses/realm/RealmResponse";
 import { clamp, parseRepoInput } from "@/lib/helpers";
 import { InlineLoader } from "generative-loaders";
 import "generative-loaders/styles.css";
-import "./landing.scss";
+import "@/components/Landing/landing.scss";
 
 const INVALID_REPO_MESSAGE = "Enter a GitHub URL or owner/repo, like facebook/react";
 

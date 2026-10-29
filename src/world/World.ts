@@ -9,8 +9,7 @@ import { CombatRegistry } from "@/systems/combat/CombatRegistry";
 import { TimeDilation } from "@/systems/combat/TimeDilation";
 import { AttackCoordinator } from "@/systems/combat/AttackCoordinator";
 import { ProjectileSystem } from "@/systems/combat/ProjectileSystem";
-import type { IThemeEnvironment, IThemeManifest } from "@/types/theme";
-import type { IWorldContext, IWorldEntity } from "@/types/world";
+import type { IThemeEnvironment, IThemeManifest, IWorldContext, IWorldEntity } from "@/types/world";
 import { WORLD } from "@/constants/world";
 import { isSegmentBlocked } from "@/systems/physics/RapierWorld";
 

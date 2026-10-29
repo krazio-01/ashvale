@@ -1,7 +1,7 @@
 "use client";
 import { useRef } from "react";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
-import { HUD } from "@/constants/presentation";
+import { HUD } from "@/constants/ui";
 import { roundForStyle, screenAnchorTransform } from "@/lib/hud";
 import "./damageNumbers.scss";
 

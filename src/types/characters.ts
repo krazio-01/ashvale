@@ -1,6 +1,6 @@
 import type { Object3D, Vector3 } from "three";
 import type { PhysicsDetail } from "@/types/physics";
-import type { Handedness } from "@/types/weapons";
+import type { Handedness } from "@/types/combat";
 
 export type ProceduralDetail = "full" | "impact" | "none";
 

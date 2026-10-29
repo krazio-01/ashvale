@@ -5,23 +5,17 @@ import {
     BufferGeometry,
     CanvasTexture,
     Color,
-    type DataTexture,
     Mesh,
     MeshLambertMaterial,
-    type IUniform,
-    type Vector3Tuple,
 } from "three";
+import type { DataTexture, IUniform, Vector3Tuple } from "three";
 import { Entity } from "@/entities/Entity";
-import type { ITerrainProfile } from "@/types/theme";
-import type { IWorldContext, IWorldEntity } from "@/types/world";
+import type { ITerrainProfile, IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
 import { GROUND, TERRAIN, TERRAIN_DETAIL, WATER_CHANNEL } from "@/constants/world";
 import { clamp, smoothstep } from "@/lib/helpers";
-import {
-    GROUND_MATERIAL_GLSL,
-    groundMaterialUniforms,
-    type IGroundMaterials,
-} from "@/world/terrain/TerrainMaterials";
+import { GROUND_MATERIAL_GLSL, groundMaterialUniforms } from "@/world/terrain/TerrainMaterials";
+import type { IGroundMaterials } from "@/world/terrain/TerrainMaterials";
 
 export class TerrainSurface extends Entity implements IWorldEntity {
     readonly sceneObject: Mesh;

@@ -4,8 +4,8 @@ import { useFrame } from "@react-three/fiber";
 import type { DirectionalLight, Vector3Tuple } from "three";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
 import { SCENE_LIGHT_LAYERS } from "@/world/postProcessing/PostProcessPasses";
-import type { IThemeEnvironment } from "@/types/theme";
-import { LIGHT } from "@/constants/rendering";
+import type { IThemeEnvironment } from "@/types/world";
+import { LIGHT } from "@/constants/world";
 import { useSettings } from "@/settings/SettingsStore";
 import { SHADOW_MAP_SIZES } from "@/settings/QualityPresets";
 

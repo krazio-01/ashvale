@@ -1,4 +1,4 @@
-import { SettlementCellKind, type ISettlementBuildingTemplate } from "@/types/settlement";
+import { SettlementCellKind, type ISettlementBuildingTemplate } from "@/types/world";
 import { SETTLEMENT_CLUTTER_PROPS, SETTLEMENT_ROOFS } from "@/world/settlement/SettlementKit";
 import { QUARTER_TURN } from "@/lib/helpers";
 

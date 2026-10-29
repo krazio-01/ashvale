@@ -1,6 +1,6 @@
 "use client";
 import { useMemo } from "react";
-import { RENDER } from "@/constants/rendering";
+import { RENDER } from "@/constants/world";
 import { useSettings } from "@/settings/SettingsStore";
 
 export function useRenderPixelRatio(): number {

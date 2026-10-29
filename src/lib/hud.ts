@@ -1,5 +1,5 @@
-import { HUD } from "@/constants/presentation";
-import type { IHudVital } from "@/types/hud";
+import { HUD } from "@/constants/ui";
+import type { IHudVital } from "@/types/ui";
 
 export function vitalFraction(vital: IHudVital): number {
     return vital.maximum > 0 ? vital.current / vital.maximum : 0;

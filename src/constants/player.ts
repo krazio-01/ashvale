@@ -2,8 +2,7 @@ import { degrees, metres, vec3, pair } from "@/lib/helpers";
 import { STRIDE } from "@/constants/characters";
 import { WEAPONS } from "@/constants/combat";
 import { VIEW_DISTANCE } from "@/constants/world";
-import type { WeaponDefinition } from "@/types/weapons";
-import type { ImpactTier, ReactionTier } from "@/types/combat";
+import type { WeaponDefinition, ImpactTier, ReactionTier } from "@/types/combat";
 
 const PLAYER_HEIGHT = metres(2.1);
 

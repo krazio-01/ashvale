@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { BackSide, Color, Mesh, ShaderMaterial } from "three";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
-import type { IThemeEnvironment } from "@/types/theme";
-import { ATMOSPHERE } from "@/constants/rendering";
+import type { IThemeEnvironment } from "@/types/world";
+import { ATMOSPHERE } from "@/constants/world";
 
 const VERTEX_SHADER = `
     varying vec3 vWorldPosition;

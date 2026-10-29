@@ -1,5 +1,5 @@
 "use client";
-import type { IGameSettings, SettingSection } from "@/types/settings";
+import type { IGameSettings, SettingSection } from "@/types/ui";
 import { getControlsForSection } from "@/settings/SettingsCatalogue";
 import { ControlsReference } from "./ControlsReference/ControlsReference";
 import { SettingControlRow, type SettingChangeHandler } from "./SettingControls";

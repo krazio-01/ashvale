@@ -5,7 +5,7 @@ import type {
     ISliderControlDescriptor,
     IToggleControlDescriptor,
     IChoiceControlDescriptor,
-} from "@/types/settings";
+} from "@/types/ui";
 
 export interface SettingChangeHandler {
     (partial: Partial<IGameSettings>): void;

@@ -1,6 +1,6 @@
 "use client";
 import { useSyncExternalStore } from "react";
-import type { GraphicsQuality, IGameSettings } from "@/types/settings";
+import type { GraphicsQuality, IGameSettings } from "@/types/ui";
 import { QUALITY_PRESETS, detectMatchingPreset, GRAPHICS_PRESET_KEYS } from "./QualityPresets";
 import { SETTINGS_CATALOGUE } from "./SettingsCatalogue";
 

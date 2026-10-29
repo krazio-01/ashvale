@@ -10,8 +10,8 @@ import type {
     ILimb,
     IProceduralFrame,
     ProceduralDetail,
-} from "@/types/procedural";
-import type { Handedness } from "@/types/weapons";
+} from "@/types/characters";
+import type { Handedness } from "@/types/combat";
 
 interface IJointSpring {
     bone: Object3D;

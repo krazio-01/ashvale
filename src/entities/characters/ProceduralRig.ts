@@ -13,8 +13,8 @@ import {
 import type { ProceduralLayer } from "@/entities/characters/ProceduralLayers";
 import { PhysicsLayer } from "@/systems/physics/ClothSimulation";
 import type { ICapsuleSource } from "@/types/physics";
-import type { IBladeSource, IGroundProbe, IProceduralFrame } from "@/types/procedural";
-import type { Handedness } from "@/types/weapons";
+import type { IBladeSource, IGroundProbe, IProceduralFrame } from "@/types/characters";
+import type { Handedness } from "@/types/combat";
 
 export class ProceduralRig {
     private readonly model: Object3D;

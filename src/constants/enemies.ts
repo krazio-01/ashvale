@@ -16,8 +16,7 @@ import type {
 } from "@/systems/enemyBehaviour/behaviours/CombatBehaviours";
 import { CREATURE, STRIDE } from "@/constants/characters";
 import { WEAPONS } from "@/constants/combat";
-import type { EnemyArchetype, IMoveSet, VictimRig } from "@/types/combat";
-import type { WeaponDefinition } from "@/types/weapons";
+import type { EnemyArchetype, IMoveSet, VictimRig, WeaponDefinition } from "@/types/combat";
 
 export const SPAWNING = {
     filesPerEnemy: 8,

@@ -1,9 +1,9 @@
 "use client";
 import { useRef } from "react";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
-import { HUD } from "@/constants/presentation";
+import { HUD } from "@/constants/ui";
 import { roundForStyle, vitalFraction } from "@/lib/hud";
-import type { IHudVitalDescriptor } from "@/types/hud";
+import type { IHudVitalDescriptor } from "@/types/ui";
 import "./vitalBar.scss";
 
 export const VitalBar = ({ descriptor }: { descriptor: IHudVitalDescriptor }) => {

@@ -6,8 +6,8 @@ import type {
     ISlowMotionProfile,
     ParryTier,
     ProjectileKind,
+    WeaponDefinition,
 } from "@/types/combat";
-import type { WeaponDefinition } from "@/types/weapons";
 
 export const COMBAT_TIMING = {
     inputBufferSeconds: 0.3,

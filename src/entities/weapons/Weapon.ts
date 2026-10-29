@@ -3,8 +3,8 @@ import { BLADE_THICKNESS_SLICES, GRIP } from "@/constants/combat";
 import { axisVector, degrees, measureBladeAxes } from "@/lib/helpers";
 import type { Axis, IBladeAxes } from "@/lib/helpers";
 import { SlashTrail } from "@/systems/effects/Effects";
-import type { IStrikeSegment } from "@/types/combat";
 import type {
+    IStrikeSegment,
     ICarryRig,
     IHandRig,
     IMeleeWeaponSpec,
@@ -12,7 +12,7 @@ import type {
     IWeaponSpec,
     WeaponDefinition,
     WeaponMount,
-} from "@/types/weapons";
+} from "@/types/combat";
 import type { IModelTemplate } from "@/types/world";
 
 interface IMountPose {

@@ -1,5 +1,5 @@
 import type { Vector3Tuple } from "three";
-import { PropLayer, type IThemeProp } from "@/types/theme";
+import { PropLayer, type IThemeProp } from "@/types/world";
 import {
     createGridSample,
     type IGridSample,

@@ -2,7 +2,7 @@ import type {
     ISettlementKeepOutDisc,
     ISettlementLayoutResult,
     ISettlementPlacement,
-} from "@/types/settlement";
+} from "@/types/world";
 import type { ICorridorLane, IRegionSite } from "@/world/props/PropField";
 import { createGridSample, type TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
 import { generateBuilding } from "@/world/settlement/SettlementBuilding";

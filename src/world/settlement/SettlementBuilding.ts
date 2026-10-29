@@ -1,6 +1,10 @@
-import { SettlementCellKind, type ISettlementBuildingTemplate } from "@/types/settlement";
-import type { ISettlementColliderDesc, ISettlementPlacement } from "@/types/settlement";
-import type { IThemeProp } from "@/types/theme";
+import { SettlementCellKind } from "@/types/world";
+import type {
+    ISettlementBuildingTemplate,
+    ISettlementColliderDesc,
+    ISettlementPlacement,
+    IThemeProp,
+} from "@/types/world";
 import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
 import {
     CELL_SIZE,

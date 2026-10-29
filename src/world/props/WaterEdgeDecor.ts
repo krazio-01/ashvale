@@ -1,4 +1,4 @@
-import type { IThemeProp } from "@/types/theme";
+import type { IThemeProp } from "@/types/world";
 import type { IWaterCourse } from "@/world/water/WaterCourse";
 import { forceProp, pickSpecies, type IFieldContext } from "@/world/props/PropPlacement";
 import type { ISpeciesByLayer } from "@/world/props/PropField";

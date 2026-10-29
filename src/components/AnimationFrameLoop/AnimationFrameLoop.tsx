@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { AnimationFrameContext } from "@/context/AnimationFrameContext";
 import { store } from "@/store/store";
-import type { AnimationFrameCallback } from "@/types/animationFrame";
+import type { AnimationFrameCallback } from "@/types/store";
 
 const MAXIMUM_FRAME_DELTA_SECONDS = 0.1;
 

@@ -1,6 +1,6 @@
 import { metres } from "@/lib/helpers";
-import type { ProceduralDetail } from "@/types/procedural";
-import type { Handedness } from "@/types/weapons";
+import type { ProceduralDetail } from "@/types/characters";
+import type { Handedness } from "@/types/combat";
 
 export const STRIDE = {
     walk: 1.25,
