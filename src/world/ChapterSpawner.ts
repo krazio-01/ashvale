@@ -6,7 +6,7 @@ import { Player } from "@/entities/characters/player/Player";
 import { composeBoss } from "@/entities/characters/bosses/BossComposer";
 import { CombatDiagnostics } from "@/systems/combat/CombatDiagnostics";
 import { AlertMarkerProjector, DamageNumberProjector } from "@/world/HudTrackers";
-import { CombatNoise } from "@/systems/enemyBehaviour/perception/CombatNoise";
+import { CombatNoise } from "@/systems/enemyBehaviour/perception/CombatNoiseEmitter";
 import { HitSparks, TelegraphFlares } from "@/systems/effects/Effects";
 import { Enemy } from "@/entities/characters/enemies/Enemy";
 import { spawnEnemy } from "@/entities/characters/enemies/EnemySpawner";
