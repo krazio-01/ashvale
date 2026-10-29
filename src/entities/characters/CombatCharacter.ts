@@ -1,53 +1,23 @@
-import { Group, Mesh, MeshBasicMaterial, SkinnedMesh, Vector3 } from "three";
-import type { Material, Object3D, Skeleton, Vector3Tuple } from "three";
-import { clone as cloneSkinnedModel } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { ActionMachine } from "@/systems/combat/actions/ActionMachine";
-import type { IMachineInput, IMachineOutput } from "@/systems/combat/actions/ActionMachine";
-import { CharacterMotor } from "@/systems/combat/CharacterMotor";
-import type { IMotorSpec } from "@/systems/combat/CharacterMotor";
-import { AttackExecutor } from "@/systems/combat/hit/AttackExecutor";
-import type { IAttackOwner } from "@/systems/combat/hit/AttackExecutor";
-import type {
-    IPairedParticipant,
-    PairedRole,
-} from "@/systems/combat/finishers/PairedAnimationDirector";
-import { reactionFor, resolveDefense } from "@/systems/combat/hit/HitResolver";
-import type { IDefenderSnapshot } from "@/systems/combat/hit/HitResolver";
+import { ActionMachine } from "@/systems/combat/actions/MoveStateMachine";
+import type { IMachineOutput, IMachineInput } from "@/systems/combat/actions/MoveStateMachine";
 import {
+    firstStrikeAt,
     hasCrossed,
     isWithin,
     isStrikeMove,
     telegraphDanger,
     telegraphTime,
 } from "@/systems/combat/actions/MoveTimeline";
-import { attackThreatFor } from "@/systems/combat/core/AttackThreat";
-import type { ICombatEventMap } from "@/events/CombatEvents";
-import { Vitals } from "@/systems/combat/Vitals";
-import type { IVitalsSpec } from "@/systems/combat/Vitals";
-import { CharacterAnimator } from "@/entities/characters/CharacterAnimator";
-import { ProceduralRig } from "@/entities/characters/ProceduralRig";
 import type {
-    IFreeLocomotion,
-    IOneShotOptions,
-    IStrafeLocomotion,
-    LocomotionDefinition,
-} from "@/entities/characters/CharacterAnimator";
-import { createWeapon } from "@/entities/weapons/Weapon";
-import type { Weapon } from "@/entities/weapons/Weapon";
-import { HAND_BONES, PROCEDURAL } from "@/constants/characters";
-import { PHYSICS } from "@/constants/physics";
-import { COMBAT_TIMING, CONTACT, FOCUS, MOVEMENT, PARRY, SLOW_MOTION } from "@/constants/combat";
-import { BoneMath } from "@/lib/boneMath";
-import { angleDelta, clamp, pickRandom, yawTowards } from "@/lib/helpers";
-import type {
+    IAttackThreat,
+    IHitWindow,
+    IMoveDefinition,
     AwarenessState,
     HitShape,
-    IAttackThreat,
     ICapsule,
     ICombatant,
     IHitOutcome,
     IHitPayload,
-    IMoveDefinition,
     IParryResult,
     IProjectileLaunch,
     IMoveSet,
@@ -59,6 +29,34 @@ import type {
     DodgeSide,
     Stance,
 } from "@/types/combat";
+import { Group, Mesh, MeshBasicMaterial, SkinnedMesh, Vector3 } from "three";
+import type { Material, Object3D, Skeleton, Vector3Tuple } from "three";
+import { clone as cloneSkinnedModel } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { CharacterMotor } from "@/systems/combat/CharacterMotor";
+import type { IMotorSpec } from "@/systems/combat/CharacterMotor";
+import { AttackExecutor } from "@/systems/combat/hit/AttackExecutor";
+import type { IAttackOwner } from "@/systems/combat/hit/AttackExecutor";
+import type { IPairedParticipant, PairedRole } from "@/systems/combat/finishers/FinisherSequence";
+import { reactionFor, resolveDefense } from "@/systems/combat/hit/HitResolver";
+import type { IDefenderSnapshot } from "@/systems/combat/hit/HitResolver";
+import type { ICombatEventMap } from "@/events/CombatEvents";
+import { Vitals } from "@/systems/combat/Vitals";
+import type { IVitalsSpec } from "@/systems/combat/Vitals";
+import { CharacterAnimator } from "@/entities/characters/CharacterAnimator";
+import type {
+    IFreeLocomotion,
+    IOneShotOptions,
+    IStrafeLocomotion,
+    LocomotionDefinition,
+} from "@/entities/characters/CharacterAnimator";
+import { ProceduralRig } from "@/entities/characters/ProceduralRig";
+import { createWeapon } from "@/entities/weapons/Weapon";
+import type { Weapon } from "@/entities/weapons/Weapon";
+import { HAND_BONES, PROCEDURAL } from "@/constants/characters";
+import { PHYSICS } from "@/constants/physics";
+import { COMBAT_TIMING, CONTACT, FOCUS, MOVEMENT, PARRY, SLOW_MOTION } from "@/constants/combat";
+import { BoneMath } from "@/lib/boneMath";
+import { angleDelta, clamp, pickRandom, yawTowards } from "@/lib/helpers";
 import type { IBladeSource, IProceduralFrame } from "@/types/procedural";
 import type { Handedness, ICarryRig, IHandRig, WeaponDefinition } from "@/types/weapons";
 import type { ISkinnedModel, IWorldContext, IWorldEntity } from "@/types/world";
@@ -85,43 +83,74 @@ interface ICombatCharacterConfig {
     reactionDodgeCancelSeconds?: number;
 }
 
-const flashMaterial = new MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
-const STILL = new Vector3();
-const MOVING_SPEED = 0.15;
-const WEAPON_GAZE_ALONG_BLADE = 0.6;
-const scratchRootMotion = new Vector3();
-const scratchDesired = new Vector3();
-const scratchLaunchOrigin = new Vector3();
-const scratchLaunchAim = new Vector3();
-const scratchPush = new Vector3();
-const scratchForward = new Vector3();
-
-const REACTION_PLAYBACK: IOneShotOptions = {
-    fadeSeconds: COMBAT_TIMING.reactionFade,
-    loop: false,
-    driven: false,
-    rate: 1,
-};
-const STAGGER_PLAYBACK: IOneShotOptions = { fadeSeconds: 0.08, loop: true, driven: false, rate: 1 };
-const PARRIED_PLAYBACK: IOneShotOptions = { ...STAGGER_PLAYBACK, fadeSeconds: 0.03 };
-const DEATH_PLAYBACK: IOneShotOptions = {
-    fadeSeconds: COMBAT_TIMING.deathFade,
-    loop: false,
-    driven: false,
-    rate: 1,
-};
-const PAIRED_PLAYBACK: IOneShotOptions = { fadeSeconds: 0.1, loop: false, driven: true, rate: 1 };
-const PAIRED_LOOP_PLAYBACK: IOneShotOptions = {
-    fadeSeconds: 0.12,
-    loop: true,
-    driven: false,
-    rate: 1,
-};
-const PAIRED_RETURN_FADE = 0.25;
-
 export abstract class CombatCharacter
     implements IWorldEntity, IAttackOwner, IPairedParticipant, IBladeSource
 {
+    private static readonly STAGGER_PLAYBACK: IOneShotOptions = {
+        fadeSeconds: 0.08,
+        loop: true,
+        driven: false,
+        rate: 1,
+    };
+
+    private static readonly flashMaterial = new MeshBasicMaterial({
+        color: 0xffffff,
+        toneMapped: false,
+    });
+
+    private static readonly STILL = new Vector3();
+
+    private static readonly MOVING_SPEED = 0.15;
+
+    private static readonly WEAPON_GAZE_ALONG_BLADE = 0.6;
+
+    private static readonly scratchRootMotion = new Vector3();
+
+    private static readonly scratchDesired = new Vector3();
+
+    private static readonly scratchLaunchOrigin = new Vector3();
+
+    private static readonly scratchLaunchAim = new Vector3();
+
+    private static readonly scratchPush = new Vector3();
+
+    private static readonly scratchForward = new Vector3();
+
+    private static readonly REACTION_PLAYBACK: IOneShotOptions = {
+        fadeSeconds: COMBAT_TIMING.reactionFade,
+        loop: false,
+        driven: false,
+        rate: 1,
+    };
+
+    private static readonly PARRIED_PLAYBACK: IOneShotOptions = {
+        ...CombatCharacter.STAGGER_PLAYBACK,
+        fadeSeconds: 0.03,
+    };
+
+    private static readonly DEATH_PLAYBACK: IOneShotOptions = {
+        fadeSeconds: COMBAT_TIMING.deathFade,
+        loop: false,
+        driven: false,
+        rate: 1,
+    };
+
+    private static readonly PAIRED_PLAYBACK: IOneShotOptions = {
+        fadeSeconds: 0.1,
+        loop: false,
+        driven: true,
+        rate: 1,
+    };
+
+    private static readonly PAIRED_LOOP_PLAYBACK: IOneShotOptions = {
+        fadeSeconds: 0.12,
+        loop: true,
+        driven: false,
+        rate: 1,
+    };
+
+    private static readonly PAIRED_RETURN_FADE = 0.25;
+
     readonly id: string;
     readonly team: Team;
     readonly victimRig: VictimRig;
@@ -579,14 +608,21 @@ export abstract class CombatCharacter
         this.faceImmediately(yaw);
         this.pairedClip = null;
         this.pairedTime = 0;
-        this.animator.playOneShot(clip, PAIRED_LOOP_PLAYBACK);
+        this.animator.playOneShot(clip, CombatCharacter.PAIRED_LOOP_PLAYBACK);
     }
 
-    playPaired(clip: string, yaw: number, blendInSeconds = PAIRED_PLAYBACK.fadeSeconds): void {
+    playPaired(
+        clip: string,
+        yaw: number,
+        blendInSeconds = CombatCharacter.PAIRED_PLAYBACK.fadeSeconds
+    ): void {
         this.faceImmediately(yaw);
         this.pairedClip = clip;
         this.pairedTime = 0;
-        this.animator.playOneShot(clip, { ...PAIRED_PLAYBACK, fadeSeconds: blendInSeconds });
+        this.animator.playOneShot(clip, {
+            ...CombatCharacter.PAIRED_PLAYBACK,
+            fadeSeconds: blendInSeconds,
+        });
     }
 
     drivePaired(clipSeconds: number): void {
@@ -620,7 +656,7 @@ export abstract class CombatCharacter
 
         this.machine.exitPaired();
         this.motor.enableCollision();
-        this.animator.returnToLocomotion(PAIRED_RETURN_FADE);
+        this.animator.returnToLocomotion(CombatCharacter.PAIRED_RETURN_FADE);
     }
 
     finishOff(killer: ICombatant, deathClip?: string): void {
@@ -697,15 +733,16 @@ export abstract class CombatCharacter
             fromSeconds,
             toSeconds,
             this.facingYaw,
-            scratchRootMotion
+            CombatCharacter.scratchRootMotion
         );
-        scratchRootMotion.y = 0;
-        this.rootMotionAccumulator.add(scratchRootMotion);
+        CombatCharacter.scratchRootMotion.y = 0;
+        this.rootMotionAccumulator.add(CombatCharacter.scratchRootMotion);
     }
 
     private commitAccumulatedMotion(deltaSeconds: number, followsGround: boolean): void {
         const displacement = this.rootMotionAccumulator;
-        if (this.motor.isCollidable) this.motor.step(deltaSeconds, STILL, displacement);
+        if (this.motor.isCollidable)
+            this.motor.step(deltaSeconds, CombatCharacter.STILL, displacement);
         else if (displacement.lengthSq() === 0) this.motor.hold();
         else if (followsGround) this.motor.translateOnGround(displacement);
         else this.motor.translate(displacement);
@@ -792,7 +829,7 @@ export abstract class CombatCharacter
     private weaponGazePoint(): Vector3 | null {
         if (!this.animator.gazesAtWeapon || !this.bladeSegment(this.gazeHilt, this.gazeTip))
             return null;
-        return this.gazeHilt.lerp(this.gazeTip, WEAPON_GAZE_ALONG_BLADE);
+        return this.gazeHilt.lerp(this.gazeTip, CombatCharacter.WEAPON_GAZE_ALONG_BLADE);
     }
 
     bladeSegment(hilt: Vector3, tip: Vector3): boolean {
@@ -806,14 +843,15 @@ export abstract class CombatCharacter
 
     protected pushDirectionAwayFrom(source: Vector3): Vector3 {
         const position = this.sceneObject.position;
-        scratchPush.set(position.x - source.x, 0, position.z - source.z);
-        if (scratchPush.lengthSq() < 1e-8) BoneMath.forwardFromYaw(this.facingYaw, scratchPush);
-        return scratchPush.normalize();
+        CombatCharacter.scratchPush.set(position.x - source.x, 0, position.z - source.z);
+        if (CombatCharacter.scratchPush.lengthSq() < 1e-8)
+            BoneMath.forwardFromYaw(this.facingYaw, CombatCharacter.scratchPush);
+        return CombatCharacter.scratchPush.normalize();
     }
 
     private isTranslating(): boolean {
         const resolved = this.motor.contact.resolvedVelocity;
-        return Math.hypot(resolved.x, resolved.z) > MOVING_SPEED;
+        return Math.hypot(resolved.x, resolved.z) > CombatCharacter.MOVING_SPEED;
     }
 
     private gripWeight(): number {
@@ -887,7 +925,7 @@ export abstract class CombatCharacter
 
         if (playDeathClip) {
             const clip = deathClip ?? pickRandom(this.moveSet.reactions.deaths);
-            this.animator.playOneShot(clip, DEATH_PLAYBACK);
+            this.animator.playOneShot(clip, CombatCharacter.DEATH_PLAYBACK);
             this.deathHoldSeconds = this.animator.durationOf(clip);
             this.deathClip = clip;
             this.deathClipTime = 0;
@@ -907,7 +945,7 @@ export abstract class CombatCharacter
         if (output.reactionStarted) {
             this.animator.playOneShot(
                 this.pendingReactionClip ?? this.pickReactionClip(output.reactionStarted),
-                REACTION_PLAYBACK
+                CombatCharacter.REACTION_PLAYBACK
             );
             this.pendingReactionClip = null;
         }
@@ -915,7 +953,9 @@ export abstract class CombatCharacter
         if (output.staggerStarted) {
             this.animator.playOneShot(
                 this.pendingStaggerClip ?? this.moveSet.reactions.stagger,
-                this.pendingStaggerIsParried ? PARRIED_PLAYBACK : STAGGER_PLAYBACK
+                this.pendingStaggerIsParried
+                    ? CombatCharacter.PARRIED_PLAYBACK
+                    : CombatCharacter.STAGGER_PLAYBACK
             );
             this.pendingStaggerClip = null;
             this.pendingStaggerIsParried = false;
@@ -982,7 +1022,7 @@ export abstract class CombatCharacter
     ): Vector3 | null {
         if (move.motion === "physics") return null;
 
-        const displacement = scratchRootMotion.set(0, 0, 0);
+        const displacement = CombatCharacter.scratchRootMotion.set(0, 0, 0);
         const contact = this.motor.contact;
         const isBlockedHeadOn = output.previousTime > 0 && contact.isHeadOn;
         if (move.motion === "rootMotion") {
@@ -1028,10 +1068,10 @@ export abstract class CombatCharacter
     }
 
     protected isLowObstacleAhead(reach: number): boolean {
-        BoneMath.forwardFromYaw(this.facingYaw, scratchForward);
+        BoneMath.forwardFromYaw(this.facingYaw, CombatCharacter.scratchForward);
         return this.motor.isWorldBlockedAhead(
-            scratchForward.x,
-            scratchForward.z,
+            CombatCharacter.scratchForward.x,
+            CombatCharacter.scratchForward.z,
             reach + CONTACT.lowProbeMargin,
             CONTACT.lowProbeHeightFraction
         );
@@ -1045,17 +1085,19 @@ export abstract class CombatCharacter
 
     private moveDesiredVelocity(move: IMoveDefinition | null, output: IMachineOutput): Vector3 {
         if (output.allowsLocomotion) return this.desiredVelocity;
-        if (!move || move.motion !== "physics") return STILL;
+        if (!move || move.motion !== "physics") return CombatCharacter.STILL;
 
         const velocity = this.motor.velocity;
         const inputSpeed = Math.hypot(this.desiredVelocity.x, this.desiredVelocity.z);
         if (!this.hasDirectionalInput || inputSpeed < 1e-4) {
-            if (this.motor.isGrounded && move.launch === undefined) return STILL;
-            return scratchDesired.set(velocity.x, 0, velocity.z);
+            if (this.motor.isGrounded && move.launch === undefined) return CombatCharacter.STILL;
+            return CombatCharacter.scratchDesired.set(velocity.x, 0, velocity.z);
         }
 
         const speed = Math.max(Math.hypot(velocity.x, velocity.z), inputSpeed);
-        return scratchDesired.copy(this.desiredVelocity).multiplyScalar(speed / inputSpeed);
+        return CombatCharacter.scratchDesired
+            .copy(this.desiredVelocity)
+            .multiplyScalar(speed / inputSpeed);
     }
 
     private beginMove(move: IMoveDefinition): void {
@@ -1096,7 +1138,7 @@ export abstract class CombatCharacter
             return;
         }
 
-        if (Math.hypot(velocity.x, velocity.z) > MOVING_SPEED)
+        if (Math.hypot(velocity.x, velocity.z) > CombatCharacter.MOVING_SPEED)
             this.facingYaw = Math.atan2(velocity.x, velocity.z);
     }
 
@@ -1123,14 +1165,25 @@ export abstract class CombatCharacter
 
     private launchProjectile(launch: IProjectileLaunch): void {
         const socket = this.boneNamed(launch.socket);
-        if (socket) socket.getWorldPosition(scratchLaunchOrigin);
-        else scratchLaunchOrigin.copy(this.position);
+        if (socket) socket.getWorldPosition(CombatCharacter.scratchLaunchOrigin);
+        else CombatCharacter.scratchLaunchOrigin.copy(this.position);
 
         const hurtbox = this.target && !this.target.isDead ? this.target.hurtboxes[0] : undefined;
-        if (hurtbox) scratchLaunchAim.addVectors(hurtbox.start, hurtbox.end).multiplyScalar(0.5);
-        else BoneMath.forwardFromYaw(this.facingYaw, scratchLaunchAim).add(scratchLaunchOrigin);
+        if (hurtbox)
+            CombatCharacter.scratchLaunchAim
+                .addVectors(hurtbox.start, hurtbox.end)
+                .multiplyScalar(0.5);
+        else
+            BoneMath.forwardFromYaw(this.facingYaw, CombatCharacter.scratchLaunchAim).add(
+                CombatCharacter.scratchLaunchOrigin
+            );
 
-        this.context.projectiles.launch(this, launch.kind, scratchLaunchOrigin, scratchLaunchAim);
+        this.context.projectiles.launch(
+            this,
+            launch.kind,
+            CombatCharacter.scratchLaunchOrigin,
+            CombatCharacter.scratchLaunchAim
+        );
     }
 
     private emitTelegraph(move: IMoveDefinition): void {
@@ -1197,7 +1250,7 @@ export abstract class CombatCharacter
             const mesh = this.meshes[index];
             if (!mesh) continue;
             originals[index] = mesh.material;
-            mesh.material = flashMaterial;
+            mesh.material = CombatCharacter.flashMaterial;
         }
         this.isFlashing = true;
     }
@@ -1220,4 +1273,30 @@ export abstract class CombatCharacter
         }
         this.isFlashing = false;
     }
+}
+
+export function attackThreatFor(
+    move: IMoveDefinition | null,
+    output: IMachineOutput,
+    out: IAttackThreat
+): IAttackThreat | null {
+    if (!move) return null;
+
+    let window: IHitWindow | undefined;
+    for (let index = 0; index < move.hits.length && !window; index += 1) {
+        const hit = move.hits[index];
+        if (hit && hit.from > output.time) window = hit;
+    }
+    if (!window) return null;
+
+    out.moveSerial = output.moveSerial;
+    const windupEnd = Math.min(window.from, firstStrikeAt(move) ?? window.from);
+    const windupLeft = Math.max(0, windupEnd - output.time);
+    out.secondsUntilHit =
+        windupLeft * output.windupUnitSeconds +
+        (window.from - output.time - windupLeft) * output.moveSeconds;
+    out.parryable = window.parryable;
+    out.perilous = window.perilous;
+    out.impact = window.impact;
+    return out;
 }

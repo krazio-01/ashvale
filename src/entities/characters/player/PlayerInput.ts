@@ -1,23 +1,31 @@
 import { INPUT_BINDINGS, MOUSE_BINDINGS } from "@/constants/player";
-type KeyAction = keyof typeof INPUT_BINDINGS;
-type PointerAction = keyof typeof MOUSE_BINDINGS;
-type InputAction = KeyAction | PointerAction;
-
-function isKeyAction(value: string): value is KeyAction {
-    return value in INPUT_BINDINGS;
-}
-
-function isPointerAction(value: string): value is PointerAction {
-    return value in MOUSE_BINDINGS;
-}
 
 const ACTION_BY_KEY_CODE = new Map<string, KeyAction>();
-for (const [action, codes] of Object.entries(INPUT_BINDINGS))
-    if (isKeyAction(action)) for (const code of codes) ACTION_BY_KEY_CODE.set(code, action);
 
 const ACTION_BY_MOUSE_BUTTON = new Map<number, PointerAction>();
-for (const [action, button] of Object.entries(MOUSE_BINDINGS))
-    if (isPointerAction(action)) ACTION_BY_MOUSE_BUTTON.set(button, action);
+
+type KeyAction = keyof typeof INPUT_BINDINGS;
+
+type PointerAction = keyof typeof MOUSE_BINDINGS;
+
+type InputAction = KeyAction | PointerAction;
+
+export interface IPlayerCommands {
+    moveForward: number;
+    moveRight: number;
+    wantsSprint: boolean;
+    crouchPressed: boolean;
+    jump: boolean;
+    light: boolean;
+    heavy: boolean;
+    heavyHeld: boolean;
+    dodge: boolean;
+    parry: boolean;
+    finisher: boolean;
+    draw: boolean;
+    toggleLock: boolean;
+    cycleLock: number;
+}
 
 export class PlayerInput {
     private readonly heldCounts = new Map<InputAction, number>();
@@ -138,3 +146,72 @@ export class PlayerInput {
         this.heldCounts.set(action, count - 1);
     }
 }
+
+export class PlayerController {
+    private readonly commands: IPlayerCommands = {
+        moveForward: 0,
+        moveRight: 0,
+        wantsSprint: false,
+        crouchPressed: false,
+        jump: false,
+        light: false,
+        heavy: false,
+        heavyHeld: false,
+        dodge: false,
+        parry: false,
+        finisher: false,
+        draw: false,
+        toggleLock: false,
+        cycleLock: 0,
+    };
+
+    private readonly input = new PlayerInput();
+
+    read(): IPlayerCommands {
+        const commands = this.commands;
+        const input = this.input;
+
+        commands.moveForward = input.axis("backward", "forward");
+        commands.moveRight = input.axis("left", "right");
+        commands.dodge = input.consumePress("dodge");
+        commands.wantsSprint = input.isHeld("sprint");
+        commands.crouchPressed = input.consumePress("crouch");
+        commands.jump = input.consumePress("jump");
+        commands.light = input.consumePress("light");
+        commands.heavy = input.consumePress("heavy");
+        commands.heavyHeld = input.isHeld("heavy");
+        commands.parry = input.consumePress("parry");
+        commands.finisher = input.consumePress("finisher");
+        commands.draw = input.consumePress("draw");
+        commands.toggleLock = input.consumePress("lock");
+        commands.cycleLock = input.consumeWheel();
+
+        return commands;
+    }
+
+    discardPending(): void {
+        this.input.discardPresses();
+    }
+
+    consumeLook(target: { x: number; y: number }): void {
+        this.input.consumeMouseDelta(target);
+    }
+
+    dispose(): void {
+        this.input.dispose();
+    }
+}
+
+function isKeyAction(value: string): value is KeyAction {
+    return value in INPUT_BINDINGS;
+}
+
+function isPointerAction(value: string): value is PointerAction {
+    return value in MOUSE_BINDINGS;
+}
+
+for (const [action, codes] of Object.entries(INPUT_BINDINGS))
+    if (isKeyAction(action)) for (const code of codes) ACTION_BY_KEY_CODE.set(code, action);
+
+for (const [action, button] of Object.entries(MOUSE_BINDINGS))
+    if (isPointerAction(action)) ACTION_BY_MOUSE_BUTTON.set(button, action);

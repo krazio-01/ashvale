@@ -1,4 +1,12 @@
-import { IntentQueue } from "@/systems/combat/actions/IntentQueue";
+import type {
+    IntentKind,
+    DodgeSide,
+    IMoveDefinition,
+    IMoveSet,
+    MoveTag,
+    ReactionTier,
+    Stance,
+} from "@/types/combat";
 import {
     allowsCancel,
     firstStrikeAt,
@@ -7,16 +15,12 @@ import {
     secondsSinceStart,
 } from "@/systems/combat/actions/MoveTimeline";
 import { COMBAT_TIMING } from "@/constants/combat";
-import type {
-    DodgeSide,
-    IMoveDefinition,
-    IMoveSet,
-    IntentKind,
-    MoveTag,
-    ReactionTier,
-    Stance,
-} from "@/types/combat";
 import type { WeaponMount } from "@/types/weapons";
+
+interface IQueuedIntent {
+    intent: IntentKind;
+    ageSeconds: number;
+}
 
 type MachineState = "locomotion" | "move" | "reaction" | "staggered" | "paired" | "dead";
 
@@ -55,48 +59,103 @@ export interface IMachineOutput {
     mountTarget: WeaponMount | null;
 }
 
-const TAG_FOR_INTENT: Record<IntentKind, MoveTag> = {
-    light: "light",
-    heavy: "heavy",
-    dodge: "dodge",
-    parry: "parry",
-    shoot: "shoot",
-    slide: "dodge",
-    jump: "jump",
-    draw: "stance",
-};
+export class IntentQueue {
+    private readonly lifetimeSeconds: number;
+    private readonly capacity: number;
+    private readonly entries: IQueuedIntent[] = [];
 
-const WEAPON_INTENTS: ReadonlySet<IntentKind> = new Set(["light", "heavy", "parry"]);
+    constructor(lifetimeSeconds: number, capacity: number) {
+        this.lifetimeSeconds = lifetimeSeconds;
+        this.capacity = capacity;
+    }
 
-function meetsGround(move: IMoveDefinition, isGrounded: boolean): boolean {
-    const requirement = move.requires ?? "grounded";
-    return requirement === "any" || (requirement === "grounded") === isGrounded;
-}
+    get size(): number {
+        return this.entries.length;
+    }
 
-function validateMoveSet(moveSet: IMoveSet): void {
-    const references: (string | undefined)[] = [
-        ...Object.values(moveSet.entry),
-        ...Object.values(moveSet.sprintEntry),
-        ...Object.values(moveSet.lockedFarEntry ?? {}),
-        ...Object.values(moveSet.sideDodgeEntry ?? {}),
-        ...Object.values(moveSet.airEntry),
-        moveSet.air?.airborne,
-        moveSet.air?.land,
-        ...Object.values(moveSet.stanceEntry ?? {}),
-    ];
-    for (const move of Object.values(moveSet.moves))
-        references.push(
-            move.followedBy,
-            move.onLand,
-            move.blockedInto,
-            ...Object.values(move.next ?? {})
-        );
+    intentAt(index: number): IntentKind | null {
+        return this.entries[index]?.intent ?? null;
+    }
 
-    for (const id of references)
-        if (id !== undefined && !moveSet.moves[id]) throw new Error(`unknown move id "${id}"`);
+    push(intent: IntentKind): void {
+        if (intent === "draw" && this.entries.some((entry) => entry.intent === "draw")) return;
+        if (this.entries.length >= this.capacity) this.entries.shift();
+        this.entries.push({ intent, ageSeconds: 0 });
+    }
+
+    removeAt(index: number): void {
+        this.entries.splice(index, 1);
+    }
+
+    removeBefore(index: number): void {
+        this.entries.splice(0, index);
+    }
+
+    removeThrough(index: number): void {
+        this.entries.splice(0, index + 1);
+    }
+
+    clear(): void {
+        this.entries.length = 0;
+    }
+
+    tick(realDeltaSeconds: number, frozen: ReadonlySet<IntentKind> | null): void {
+        for (let index = this.entries.length - 1; index >= 0; index -= 1) {
+            const entry = this.entries[index];
+            if (!entry || frozen?.has(entry.intent)) continue;
+
+            entry.ageSeconds += realDeltaSeconds;
+            if (entry.ageSeconds > this.lifetimeSeconds) this.entries.splice(index, 1);
+        }
+    }
 }
 
 export class ActionMachine {
+    private static readonly TAG_FOR_INTENT: Record<IntentKind, MoveTag> = {
+        light: "light",
+        heavy: "heavy",
+        dodge: "dodge",
+        parry: "parry",
+        shoot: "shoot",
+        slide: "dodge",
+        jump: "jump",
+        draw: "stance",
+    };
+
+    private static readonly WEAPON_INTENTS: ReadonlySet<IntentKind> = new Set([
+        "light",
+        "heavy",
+        "parry",
+    ]);
+
+    private static meetsGround(move: IMoveDefinition, isGrounded: boolean): boolean {
+        const requirement = move.requires ?? "grounded";
+        return requirement === "any" || (requirement === "grounded") === isGrounded;
+    }
+
+    private static validateMoveSet(moveSet: IMoveSet): void {
+        const references: (string | undefined)[] = [
+            ...Object.values(moveSet.entry),
+            ...Object.values(moveSet.sprintEntry),
+            ...Object.values(moveSet.lockedFarEntry ?? {}),
+            ...Object.values(moveSet.sideDodgeEntry ?? {}),
+            ...Object.values(moveSet.airEntry),
+            moveSet.air?.airborne,
+            moveSet.air?.land,
+            ...Object.values(moveSet.stanceEntry ?? {}),
+        ];
+        for (const move of Object.values(moveSet.moves))
+            references.push(
+                move.followedBy,
+                move.onLand,
+                move.blockedInto,
+                ...Object.values(move.next ?? {})
+            );
+
+        for (const id of references)
+            if (id !== undefined && !moveSet.moves[id]) throw new Error(`unknown move id "${id}"`);
+    }
+
     readonly output: IMachineOutput = {
         state: "locomotion",
         move: null,
@@ -145,7 +204,7 @@ export class ActionMachine {
     constructor(moveSet: IMoveSet, clipSeconds: (clip: string) => number) {
         this.moveSet = moveSet;
         this.clipSeconds = clipSeconds;
-        validateMoveSet(moveSet);
+        ActionMachine.validateMoveSet(moveSet);
     }
 
     get state(): MachineState {
@@ -282,7 +341,7 @@ export class ActionMachine {
     tick(input: IMachineInput): IMachineOutput {
         this.intents.tick(
             input.realDeltaSeconds,
-            this.currentMove?.tags.includes("stance") ? WEAPON_INTENTS : null
+            this.currentMove?.tags.includes("stance") ? ActionMachine.WEAPON_INTENTS : null
         );
 
         if (this.currentState === "reaction" || this.currentState === "staggered")
@@ -364,8 +423,9 @@ export class ActionMachine {
             }
 
             const isStanceMove = target.tags.includes("stance");
-            const tag = isStanceMove ? "stance" : TAG_FOR_INTENT[intent];
-            if (!this.permits(tag) || !meetsGround(target, input.isGrounded)) continue;
+            const tag = isStanceMove ? "stance" : ActionMachine.TAG_FOR_INTENT[intent];
+            if (!this.permits(tag) || !ActionMachine.meetsGround(target, input.isGrounded))
+                continue;
 
             if (!input.spendStamina(target.staminaCost)) {
                 intents.removeAt(index);
@@ -414,7 +474,7 @@ export class ActionMachine {
             const stanceId =
                 intent === "draw"
                     ? stanceEntry[stanceAfter]
-                    : WEAPON_INTENTS.has(intent) && stanceAfter === "sheathed"
+                    : ActionMachine.WEAPON_INTENTS.has(intent) && stanceAfter === "sheathed"
                       ? stanceEntry.sheathed
                       : undefined;
             if (stanceId) return this.moveSet.moves[stanceId] ?? null;

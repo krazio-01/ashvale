@@ -1,3 +1,11 @@
+import {
+    COMBAT_TIMING,
+    CONTACT,
+    FINISHER_RULES,
+    PARRY,
+    SLOW_MOTION,
+    TARGETING,
+} from "@/constants/combat";
 import { Vector3 } from "three";
 import type { Camera, Vector3Tuple } from "three";
 import type { IMotorSpec } from "@/systems/combat/CharacterMotor";
@@ -10,9 +18,10 @@ import {
     selectFinisher,
 } from "@/systems/combat/finishers/FinisherSelector";
 import { FINISHERS } from "@/systems/combat/finishers/finishers";
-import { pairCentreDistance } from "@/systems/combat/finishers/PairAlignment";
-import { FinisherTrigger } from "@/systems/combat/finishers/FinisherTrigger";
-import { PairedAnimationDirector } from "@/systems/combat/finishers/PairedAnimationDirector";
+import {
+    pairCentreDistance,
+    PairedAnimationDirector,
+} from "@/systems/combat/finishers/FinisherSequence";
 import {
     PLAYER_CROUCH_LOCOMOTION,
     PLAYER_FREE_LOCOMOTION,
@@ -32,14 +41,6 @@ import {
     DODGE,
 } from "@/constants/player";
 import { CHARACTER } from "@/constants/characters";
-import {
-    COMBAT_TIMING,
-    CONTACT,
-    FINISHER_RULES,
-    PARRY,
-    SLOW_MOTION,
-    TARGETING,
-} from "@/constants/combat";
 import { SIGHT } from "@/constants/enemies";
 import {
     PARRY_DEFLECT_MOVES,
@@ -50,8 +51,8 @@ import { cycleTarget, selectTarget } from "@/systems/combat/TargetSelector";
 import { FootstepNoise } from "@/entities/characters/player/FootstepNoise";
 import type { FootstepGait } from "@/entities/characters/player/FootstepNoise";
 import { chooseKillCamShot, PlayerCamera } from "@/entities/characters/player/PlayerCamera";
-import { PlayerController } from "@/entities/characters/player/PlayerController";
-import type { IPlayerCommands } from "@/entities/characters/player/PlayerController";
+import { PlayerController } from "@/entities/characters/player/PlayerInput";
+import type { IPlayerCommands } from "@/entities/characters/player/PlayerInput";
 import { store } from "@/store/store";
 import { angleDelta, horizontalDirection, horizontalDistance, yawTowards } from "@/lib/helpers";
 import { settings } from "@/settings/SettingsStore";
@@ -65,7 +66,75 @@ import type {
 } from "@/types/combat";
 import type { IWorldContext } from "@/types/world";
 
+export class FinisherTrigger {
+    private requestRemaining = 0;
+    private streakRemaining = 0;
+
+    get isRequested(): boolean {
+        return this.requestRemaining > 0;
+    }
+
+    get inStreak(): boolean {
+        return this.streakRemaining > 0;
+    }
+
+    press(): void {
+        this.requestRemaining = COMBAT_TIMING.inputBufferSeconds;
+    }
+
+    openStreak(): void {
+        this.streakRemaining = COMBAT_TIMING.streakWindowSeconds;
+    }
+
+    reset(): void {
+        this.requestRemaining = 0;
+        this.streakRemaining = 0;
+    }
+
+    tick(deltaSeconds: number): void {
+        this.requestRemaining = Math.max(0, this.requestRemaining - deltaSeconds);
+        this.streakRemaining = Math.max(0, this.streakRemaining - deltaSeconds);
+    }
+}
+
 export class Player extends CombatCharacter implements ICapsuleSource {
+    private static readonly PLAYER_MOTOR: IMotorSpec = {
+        height: PLAYER.height,
+        radius: PLAYER.radius,
+        colliderOffset: PLAYER.colliderOffset,
+        maxSlopeClimbAngle: PLAYER.maxSlopeClimbAngle,
+        minSlopeSlideAngle: PLAYER.minSlopeSlideAngle,
+        autostepMaxHeight: PLAYER.autostepMaxHeight,
+        autostepMinWidth: PLAYER.autostepMinWidth,
+        snapToGroundDistance: PLAYER.snapToGroundDistance,
+        terminalVelocity: PLAYER.terminalVelocity,
+        groundAcceleration: PLAYER.groundAcceleration,
+        airAcceleration: PLAYER.airAcceleration,
+        pushesDynamicBodies: true,
+    };
+
+    private static readonly PROMPT_LABELS: Record<FinisherKind, string> = {
+        backstab: "Assassinate",
+        execution: "Execute",
+        counter: "Counter",
+    };
+
+    private static readonly cameraForward = new Vector3();
+
+    private static readonly cameraRight = new Vector3();
+
+    private static readonly moveDirection = new Vector3();
+
+    private static readonly killCamFocus = new Vector3();
+
+    private static readonly approachDirection = new Vector3();
+
+    private static readonly mouseDelta = { x: 0, y: 0 };
+
+    private static readonly opponents: ICombatant[] = [];
+
+    private static readonly lockCandidates: ICombatant[] = [];
+
     private readonly controller = new PlayerController();
     private readonly followCamera: PlayerCamera;
     private readonly finishers: PairedAnimationDirector;
@@ -103,7 +172,7 @@ export class Player extends CombatCharacter implements ICapsuleSource {
             team: "player",
             context,
             model,
-            motor: PLAYER_MOTOR,
+            motor: Player.PLAYER_MOTOR,
             vitals: PLAYER_VITALS,
             moveSet: PLAYER_MOVES,
             freeLocomotion: PLAYER_FREE_LOCOMOTION,
@@ -319,27 +388,27 @@ export class Player extends CombatCharacter implements ICapsuleSource {
     }
 
     private applyMouseLook(): void {
-        this.controller.consumeLook(mouseDelta);
+        this.controller.consumeLook(Player.mouseDelta);
 
         const sensitivity = CAMERA.mouseSensitivity * settings.mouseSensitivity;
-        const pitchDelta = settings.invertY ? -mouseDelta.y : mouseDelta.y;
-        this.followCamera.turnBy(mouseDelta.x * sensitivity, pitchDelta * sensitivity);
+        const pitchDelta = settings.invertY ? -Player.mouseDelta.y : Player.mouseDelta.y;
+        this.followCamera.turnBy(Player.mouseDelta.x * sensitivity, pitchDelta * sensitivity);
     }
 
     private computeCameraBasis(): void {
         const yaw = this.followCamera.yaw;
-        cameraForward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
-        cameraRight.set(-cameraForward.z, 0, cameraForward.x);
+        Player.cameraForward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+        Player.cameraRight.set(-Player.cameraForward.z, 0, Player.cameraForward.x);
     }
 
     private computeMovement(commands: IPlayerCommands, deltaSeconds: number): void {
-        moveDirection
+        Player.moveDirection
             .set(0, 0, 0)
-            .addScaledVector(cameraForward, commands.moveForward)
-            .addScaledVector(cameraRight, commands.moveRight);
+            .addScaledVector(Player.cameraForward, commands.moveForward)
+            .addScaledVector(Player.cameraRight, commands.moveRight);
 
-        this.hasDirectionalInput = moveDirection.lengthSq() > 0;
-        if (this.hasDirectionalInput) moveDirection.normalize();
+        this.hasDirectionalInput = Player.moveDirection.lengthSq() > 0;
+        if (this.hasDirectionalInput) Player.moveDirection.normalize();
 
         this.isCrouching = this.crouchToggled;
         const stamina = this.vitals.stamina;
@@ -365,7 +434,7 @@ export class Player extends CombatCharacter implements ICapsuleSource {
             horizontalDistance(this.sceneObject.position, this.lockTarget.sceneObject.position) >
                 TARGETING.gapCloseMinDistance;
 
-        this.desiredVelocity.copy(moveDirection).multiplyScalar(this.locomotionSpeed());
+        this.desiredVelocity.copy(Player.moveDirection).multiplyScalar(this.locomotionSpeed());
         this.locomotionOverride =
             this.isCrouching && !this.facesTarget ? PLAYER_CROUCH_LOCOMOTION : null;
         this.heavyHeld = commands.heavyHeld;
@@ -401,7 +470,7 @@ export class Player extends CombatCharacter implements ICapsuleSource {
         if (commands.cycleLock !== 0 && this.lockTarget)
             this.lockTarget = cycleTarget(
                 this.sceneObject.position,
-                cameraForward,
+                Player.cameraForward,
                 this.lockTarget,
                 this.gatherLockCandidates(),
                 commands.cycleLock > 0 ? 1 : -1,
@@ -416,7 +485,7 @@ export class Player extends CombatCharacter implements ICapsuleSource {
     private acquireLockTarget(): ICombatant | null {
         return selectTarget(
             this.sceneObject.position,
-            cameraForward,
+            Player.cameraForward,
             this.gatherLockCandidates(),
             TARGETING.lockRange,
             TARGETING.lockMinDot
@@ -429,11 +498,11 @@ export class Player extends CombatCharacter implements ICapsuleSource {
                 this.team,
                 this.sceneObject.position,
                 TARGETING.lockRange,
-                lockCandidates
+                Player.lockCandidates
             );
             this.lockCandidatesGathered = true;
         }
-        return lockCandidates;
+        return Player.lockCandidates;
     }
 
     private issueCombatIntents(commands: IPlayerCommands): void {
@@ -459,10 +528,10 @@ export class Player extends CombatCharacter implements ICapsuleSource {
             if (this.hasDirectionalInput) {
                 const referenceYaw = this.facesTarget
                     ? this.facingYaw
-                    : Math.atan2(cameraForward.x, cameraForward.z);
+                    : Math.atan2(Player.cameraForward.x, Player.cameraForward.z);
                 const inputOffset = angleDelta(
                     referenceYaw,
-                    Math.atan2(moveDirection.x, moveDirection.z)
+                    Math.atan2(Player.moveDirection.x, Player.moveDirection.z)
                 );
                 const isSideways =
                     Math.abs(inputOffset) >= DODGE.minSideAngle &&
@@ -484,17 +553,17 @@ export class Player extends CombatCharacter implements ICapsuleSource {
             return;
         }
 
-        const facing = this.hasDirectionalInput ? moveDirection : cameraForward;
+        const facing = this.hasDirectionalInput ? Player.moveDirection : Player.cameraForward;
         this.context.combatRegistry.collectOpponents(
             this.team,
             this.sceneObject.position,
             TARGETING.softRange,
-            opponents
+            Player.opponents
         );
         this.target = selectTarget(
             this.sceneObject.position,
             facing,
-            opponents,
+            Player.opponents,
             TARGETING.softRange,
             TARGETING.softMinDot
         );
@@ -507,7 +576,9 @@ export class Player extends CombatCharacter implements ICapsuleSource {
         const state = this.machine.state;
         if (state === "locomotion" || state === "move") this.findFinisherCandidate();
 
-        store.getState().hud.setPrompt(this.promptKind ? PROMPT_LABELS[this.promptKind] : null);
+        store
+            .getState()
+            .hud.setPrompt(this.promptKind ? Player.PROMPT_LABELS[this.promptKind] : null);
     }
 
     private findFinisherCandidate(): void {
@@ -516,25 +587,25 @@ export class Player extends CombatCharacter implements ICapsuleSource {
             ? FINISHER_RULES.streakReach
             : Math.max(FINISHER_RULES.executionReach, FINISHER_RULES.backstabReach);
         const position = this.sceneObject.position;
-        const facing = this.hasDirectionalInput ? moveDirection : cameraForward;
+        const facing = this.hasDirectionalInput ? Player.moveDirection : Player.cameraForward;
 
         this.context.combatRegistry.collectOpponents(
             this.team,
             position,
             reach + this.bodyRadius,
-            opponents
+            Player.opponents
         );
         let widestRadius = 0;
-        for (const opponent of opponents)
+        for (const opponent of Player.opponents)
             widestRadius = Math.max(widestRadius, opponent.bodyRadius);
 
         const candidate =
-            this.lockTarget && opponents.includes(this.lockTarget)
+            this.lockTarget && Player.opponents.includes(this.lockTarget)
                 ? this.lockTarget
                 : selectTarget(
                       position,
                       facing,
-                      opponents,
+                      Player.opponents,
                       reach + this.bodyRadius + widestRadius,
                       0
                   );
@@ -586,8 +657,8 @@ export class Player extends CombatCharacter implements ICapsuleSource {
     private beginKillCam(victim: CombatCharacter, finisher: IFinisherDefinition): void {
         const own = this.sceneObject.position;
         const theirs = victim.sceneObject.position;
-        killCamFocus.addVectors(own, theirs).multiplyScalar(0.5);
-        killCamFocus.y += KILL_CAMERA.focusLift;
+        Player.killCamFocus.addVectors(own, theirs).multiplyScalar(0.5);
+        Player.killCamFocus.y += KILL_CAMERA.focusLift;
 
         const pairAxisYaw = yawTowards(own, theirs);
         const pairSpan = pairCentreDistance(finisher.distance, this.bodyRadius, victim.bodyRadius);
@@ -596,9 +667,9 @@ export class Player extends CombatCharacter implements ICapsuleSource {
             this.followCamera.yaw,
             pairSpan,
             (yaw, pitch, distance) =>
-                this.followCamera.isShotClear(killCamFocus, yaw, pitch, distance)
+                this.followCamera.isShotClear(Player.killCamFocus, yaw, pitch, distance)
         );
-        this.followCamera.beginKillCam(shot, killCamFocus);
+        this.followCamera.beginKillCam(shot, Player.killCamFocus);
     }
 
     private trackKillCam(): void {
@@ -607,9 +678,9 @@ export class Player extends CombatCharacter implements ICapsuleSource {
             return;
         }
 
-        this.finishers.pairMidpoint(killCamFocus);
-        killCamFocus.y += KILL_CAMERA.focusLift;
-        this.followCamera.setKillCamFocus(killCamFocus);
+        this.finishers.pairMidpoint(Player.killCamFocus);
+        Player.killCamFocus.y += KILL_CAMERA.focusLift;
+        this.followCamera.setKillCamFocus(Player.killCamFocus);
         if (this.finishers.isRecovering) this.followCamera.endKillCam();
     }
 
@@ -625,12 +696,16 @@ export class Player extends CombatCharacter implements ICapsuleSource {
     private hasClearApproach(victim: CombatCharacter, finisher: IFinisherDefinition): boolean {
         const own = this.position;
         const theirs = victim.position;
-        const distance = horizontalDirection(own, theirs, approachDirection);
+        const distance = horizontalDirection(own, theirs, Player.approachDirection);
         const travel =
             distance - pairCentreDistance(finisher.distance, this.bodyRadius, victim.bodyRadius);
         if (travel <= 0 || distance < 1e-4) return true;
 
-        return !this.motor.isPathBlocked(approachDirection.x, approachDirection.z, travel);
+        return !this.motor.isPathBlocked(
+            Player.approachDirection.x,
+            Player.approachDirection.z,
+            travel
+        );
     }
 
     private publishVitals(): void {
@@ -656,33 +731,3 @@ export class Player extends CombatCharacter implements ICapsuleSource {
         else store.getState().hud.setTarget(false, "", 0, 0);
     }
 }
-
-const PLAYER_MOTOR: IMotorSpec = {
-    height: PLAYER.height,
-    radius: PLAYER.radius,
-    colliderOffset: PLAYER.colliderOffset,
-    maxSlopeClimbAngle: PLAYER.maxSlopeClimbAngle,
-    minSlopeSlideAngle: PLAYER.minSlopeSlideAngle,
-    autostepMaxHeight: PLAYER.autostepMaxHeight,
-    autostepMinWidth: PLAYER.autostepMinWidth,
-    snapToGroundDistance: PLAYER.snapToGroundDistance,
-    terminalVelocity: PLAYER.terminalVelocity,
-    groundAcceleration: PLAYER.groundAcceleration,
-    airAcceleration: PLAYER.airAcceleration,
-    pushesDynamicBodies: true,
-};
-
-const PROMPT_LABELS: Record<FinisherKind, string> = {
-    backstab: "Assassinate",
-    execution: "Execute",
-    counter: "Counter",
-};
-
-const cameraForward = new Vector3();
-const cameraRight = new Vector3();
-const moveDirection = new Vector3();
-const killCamFocus = new Vector3();
-const approachDirection = new Vector3();
-const mouseDelta = { x: 0, y: 0 };
-const opponents: ICombatant[] = [];
-const lockCandidates: ICombatant[] = [];

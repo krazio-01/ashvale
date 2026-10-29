@@ -1,5 +1,5 @@
 import { Group, Mesh, MeshBasicMaterial, SphereGeometry, Vector3 } from "three";
-import { WeaponSweep } from "@/systems/combat/hit/WeaponSweep";
+import { WeaponSweep } from "@/systems/combat/hit/SweptHitDetector";
 import { emitHitLanded } from "@/events/CombatEvents";
 import type { CombatEvents, ICombatEventMap } from "@/events/CombatEvents";
 import { isConnected } from "@/systems/combat/hit/HitResolver";

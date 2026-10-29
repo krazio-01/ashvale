@@ -1,14 +1,8 @@
 import { Vector3 } from "three";
-import {
-    approachTravel,
-    enforceSeparation,
-    pairCentreDistance,
-    PairSlot,
-} from "@/systems/combat/finishers/PairAlignment";
-import { CLIP } from "@/constants/characters";
 import { FINISHER_RULES } from "@/constants/combat";
-import { angleDelta, horizontalDistance, smoothstep, yawTowards } from "@/lib/helpers";
-import type { ICombatant, IFinisherDefinition } from "@/types/combat";
+import { yawTowards, angleDelta, horizontalDistance, smoothstep } from "@/lib/helpers";
+import type { IFinisherDefinition, ICombatant } from "@/types/combat";
+import { CLIP } from "@/constants/characters";
 import type { IWorldContext } from "@/types/world";
 
 export type PairedRole = "attacker" | "victim";
@@ -31,15 +25,43 @@ type PairedServices = Pick<IWorldContext, "combatEvents">;
 
 type FinisherPhase = "approach" | "perform";
 
-const APPROACH_TIMEOUT_FACTOR = 1.5;
+export class PairSlot {
+    attackerYaw = 0;
+    victimYaw = 0;
+    readonly victimPosition = new Vector3();
 
-const scratchStep = new Vector3();
-const scratchSyncTarget = new Vector3();
-const scratchSyncDelta = new Vector3();
-const scratchPush = new Vector3();
-const scratchAttackerShift = new Vector3();
+    solve(
+        attacker: Vector3,
+        victim: Vector3,
+        finisher: IFinisherDefinition,
+        attackerRadius: number,
+        victimRadius: number
+    ): void {
+        const towardVictim = yawTowards(attacker, victim);
+        const centreDistance = pairCentreDistance(finisher.distance, attackerRadius, victimRadius);
+        this.attackerYaw = towardVictim - finisher.bearing;
+        this.victimYaw = this.attackerYaw + finisher.relativeYaw;
+        this.victimPosition.set(
+            attacker.x + Math.sin(towardVictim) * centreDistance,
+            victim.y,
+            attacker.z + Math.cos(towardVictim) * centreDistance
+        );
+    }
+}
 
 export class PairedAnimationDirector {
+    private static readonly APPROACH_TIMEOUT_FACTOR = 1.5;
+
+    private static readonly scratchStep = new Vector3();
+
+    private static readonly scratchSyncTarget = new Vector3();
+
+    private static readonly scratchSyncDelta = new Vector3();
+
+    private static readonly scratchPush = new Vector3();
+
+    private static readonly scratchAttackerShift = new Vector3();
+
     private readonly services: PairedServices;
     private readonly slot = new PairSlot();
     private readonly victimSyncFrom = new Vector3();
@@ -181,14 +203,23 @@ export class PairedAnimationDirector {
         }
 
         this.approachElapsed += deltaSeconds;
-        if (this.approachElapsed > FINISHER_RULES.approachMaxSeconds * APPROACH_TIMEOUT_FACTOR) {
+        if (
+            this.approachElapsed >
+            FINISHER_RULES.approachMaxSeconds * PairedAnimationDirector.APPROACH_TIMEOUT_FACTOR
+        ) {
             this.abort();
             return true;
         }
 
         const heading = yawTowards(attacker.position, victim.position);
         const step = Math.min(remaining, this.approachSpeed * deltaSeconds);
-        attacker.movePaired(scratchStep.set(Math.sin(heading) * step, 0, Math.cos(heading) * step));
+        attacker.movePaired(
+            PairedAnimationDirector.scratchStep.set(
+                Math.sin(heading) * step,
+                0,
+                Math.cos(heading) * step
+            )
+        );
         attacker.setPairedYaw(heading);
         victim.setPairedYaw(heading + finisher.relativeYaw);
         return false;
@@ -231,7 +262,7 @@ export class PairedAnimationDirector {
     ): boolean {
         this.elapsed += deltaSeconds;
 
-        const attackerShift = scratchAttackerShift.subVectors(
+        const attackerShift = PairedAnimationDirector.scratchAttackerShift.subVectors(
             attacker.position,
             this.attackerLastPosition
         );
@@ -247,7 +278,12 @@ export class PairedAnimationDirector {
             victim.drivePaired((attackerSeconds / this.duration) * this.victimClipDuration);
 
         const minimum = attacker.bodyRadius + victim.bodyRadius + FINISHER_RULES.contactGap;
-        const push = enforceSeparation(attacker.position, victim.position, minimum, scratchPush);
+        const push = enforceSeparation(
+            attacker.position,
+            victim.position,
+            minimum,
+            PairedAnimationDirector.scratchPush
+        );
         if (push.lengthSq() > 0) victim.movePaired(push);
 
         const nextImpactAt = finisher.impactAt?.[this.impactsFired];
@@ -265,10 +301,17 @@ export class PairedAnimationDirector {
 
     private syncPair(attacker: IPairedParticipant, victim: IPairedParticipant): void {
         const blend = smoothstep(0, FINISHER_RULES.syncSeconds, this.elapsed);
-        scratchSyncTarget.lerpVectors(this.victimSyncFrom, this.slot.victimPosition, blend);
-        scratchSyncDelta.subVectors(scratchSyncTarget, this.victimSyncApplied).setY(0);
-        if (scratchSyncDelta.lengthSq() > 0) victim.movePaired(scratchSyncDelta);
-        this.victimSyncApplied.copy(scratchSyncTarget);
+        PairedAnimationDirector.scratchSyncTarget.lerpVectors(
+            this.victimSyncFrom,
+            this.slot.victimPosition,
+            blend
+        );
+        PairedAnimationDirector.scratchSyncDelta
+            .subVectors(PairedAnimationDirector.scratchSyncTarget, this.victimSyncApplied)
+            .setY(0);
+        if (PairedAnimationDirector.scratchSyncDelta.lengthSq() > 0)
+            victim.movePaired(PairedAnimationDirector.scratchSyncDelta);
+        this.victimSyncApplied.copy(PairedAnimationDirector.scratchSyncTarget);
 
         attacker.setPairedYaw(
             this.attackerSyncFromYaw +
@@ -284,4 +327,33 @@ export class PairedAnimationDirector {
         victim.finishOff(attacker, this.finisher?.victimDeath);
         this.services.combatEvents.emit("finisherKill", { attacker, victim });
     }
+}
+
+export function pairCentreDistance(
+    authoredDistance: number,
+    attackerRadius: number,
+    victimRadius: number
+): number {
+    return Math.max(authoredDistance, attackerRadius + victimRadius + FINISHER_RULES.contactGap);
+}
+
+export function approachTravel(currentCentreDistance: number, slotCentreDistance: number): number {
+    const excess = currentCentreDistance - slotCentreDistance;
+    return excess > FINISHER_RULES.syncMaxShift ? excess : 0;
+}
+
+export function enforceSeparation(
+    attacker: Vector3,
+    victim: Vector3,
+    minimumCentreDistance: number,
+    out: Vector3
+): Vector3 {
+    const offsetX = victim.x - attacker.x;
+    const offsetZ = victim.z - attacker.z;
+    const distance = Math.hypot(offsetX, offsetZ);
+    if (distance >= minimumCentreDistance) return out.set(0, 0, 0);
+    if (distance < 1e-6) return out.set(0, 0, minimumCentreDistance);
+
+    const shortfall = minimumCentreDistance - distance;
+    return out.set((offsetX / distance) * shortfall, 0, (offsetZ / distance) * shortfall);
 }
