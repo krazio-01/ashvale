@@ -9,7 +9,7 @@ import { Vector3 } from "three";
 import type { Camera, PerspectiveCamera } from "three";
 import { CAMERA, CAMERA_SHAKE, KILL_CAMERA, LOCK_CAMERA } from "@/constants/player";
 import { angleDelta, clamp, lerp, smoothstep } from "@/lib/helpers";
-import { settings } from "@/settings/SettingsStore";
+import { settings } from "@/store/settingsSlice";
 
 export class PlayerCamera {
     private readonly camera: PerspectiveCamera;

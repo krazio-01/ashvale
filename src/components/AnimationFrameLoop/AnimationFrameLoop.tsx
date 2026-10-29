@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { AnimationFrameContext } from "@/context/AnimationFrameContext";
+import { AnimationFrameContext } from "@/context/FrameCallbacksContext";
 import { store } from "@/store/store";
 import type { AnimationFrameCallback } from "@/types/store";
 

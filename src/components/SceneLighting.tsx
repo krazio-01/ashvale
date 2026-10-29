@@ -6,8 +6,7 @@ import { sunDirectionOf } from "@/themes/Themes";
 import { SCENE_LIGHT_LAYERS } from "@/world/postProcessing/PostProcessPasses";
 import type { IThemeEnvironment } from "@/types/world";
 import { LIGHT } from "@/constants/world";
-import { useSettings } from "@/settings/SettingsStore";
-import { SHADOW_MAP_SIZES } from "@/settings/QualityPresets";
+import { useSettings, SHADOW_MAP_SIZES } from "@/store/settingsSlice";
 
 const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
     const { sky, lighting } = environment;

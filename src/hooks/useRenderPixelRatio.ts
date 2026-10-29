@@ -1,7 +1,7 @@
 "use client";
 import { useMemo } from "react";
 import { RENDER } from "@/constants/world";
-import { useSettings } from "@/settings/SettingsStore";
+import { useSettings } from "@/store/settingsSlice";
 
 export function useRenderPixelRatio(): number {
     const { resolutionScale } = useSettings();

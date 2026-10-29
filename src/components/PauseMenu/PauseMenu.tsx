@@ -1,17 +1,17 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GraphicsQuality, IGameSettings, SettingSection } from "@/types/ui";
-import { SETTING_SECTIONS } from "@/settings/SettingsCatalogue";
 import {
+    SETTING_SECTIONS,
     DEFAULT_SETTINGS,
     draftWithChange,
     draftWithPreset,
     settingsMatch,
     updateSettings,
     useSettings,
-} from "@/settings/SettingsStore";
-import { SettingsPanel } from "./SettingsPanel";
-import "./pauseMenu.scss";
+} from "@/store/settingsSlice";
+import { SettingsPanel } from "@/components/PauseMenu/SettingsPanel";
+import "@/components/PauseMenu/pauseMenu.scss";
 
 interface PauseMenuProps {
     onResume: () => void;

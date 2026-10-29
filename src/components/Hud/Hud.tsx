@@ -1,5 +1,5 @@
 "use client";
-import { useStore } from "@/hooks/useStore";
+import { useStore } from "@/hooks/useStoreState";
 import { VitalBar } from "@/components/Hud/VitalBar/VitalBar";
 import { AlertMarkers } from "@/components/Hud/AlertMarkers/AlertMarkers";
 import { DamageVignette } from "@/components/Hud/DamageVignette/DamageVignette";

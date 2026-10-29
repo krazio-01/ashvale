@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useStore } from "@react-three/fiber";
-import { useSettings } from "@/settings/SettingsStore";
+import { useSettings } from "@/store/settingsSlice";
 
 const VSYNC_TOLERANCE_MS = 2;
 

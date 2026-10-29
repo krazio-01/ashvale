@@ -1,6 +1,6 @@
 "use client";
 import { INPUT_BINDINGS, keyLabel } from "@/constants/player";
-import { useStore } from "@/hooks/useStore";
+import { useStore } from "@/hooks/useStoreState";
 import "./finisherPrompt.scss";
 
 const FINISHER_KEY_LABEL = keyLabel(INPUT_BINDINGS.finisher[0]);

@@ -55,7 +55,7 @@ import { PlayerController } from "@/entities/characters/player/PlayerInput";
 import type { IPlayerCommands } from "@/entities/characters/player/PlayerInput";
 import { store } from "@/store/store";
 import { angleDelta, horizontalDirection, horizontalDistance, yawTowards } from "@/lib/helpers";
-import { settings } from "@/settings/SettingsStore";
+import { settings } from "@/store/settingsSlice";
 import type {
     FinisherKind,
     ICombatant,

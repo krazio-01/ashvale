@@ -21,7 +21,7 @@ import PerformanceOverlay from "../PerformanceOverlay";
 import { useFrameLimit } from "@/components/FrameLimiter/FrameLimiter";
 import { useRenderPixelRatio } from "@/hooks/useRenderPixelRatio";
 import { usePointerLock } from "@/hooks/usePointerLock";
-import { settings } from "@/settings/SettingsStore";
+import { settings } from "@/store/settingsSlice";
 import { FrameRateMeter } from "@/components/FrameRateMeter/FrameRateMeter";
 import { AnimationFrameLoop } from "@/components/AnimationFrameLoop/AnimationFrameLoop";
 import { Hud } from "@/components/Hud/Hud";

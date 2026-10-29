@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useSettings } from "@/settings/SettingsStore";
+import { useSettings } from "@/store/settingsSlice";
 import { getRenderedFrameCount } from "@/components/FrameLimiter/FrameLimiter";
 import "./frameRateMeter.scss";
 

@@ -1,4 +1,5 @@
 "use client";
+
 import { useSyncExternalStore } from "react";
 import { store } from "@/store/store";
 import type { IStoreState } from "@/types/store";
