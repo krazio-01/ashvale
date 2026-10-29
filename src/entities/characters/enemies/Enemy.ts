@@ -18,15 +18,12 @@ import { Movement } from "@/systems/enemyBehaviour/movement/Movement";
 import { EnemyPerception } from "@/systems/enemyBehaviour/perception/EnemyPerception";
 import { HearingSensor } from "@/systems/enemyBehaviour/perception/HearingSensor";
 import { SightSensor } from "@/systems/enemyBehaviour/perception/SightSensor";
+import { NON_PLAYER, SIGHT } from "@/constants/enemies";
 import type { IEnemyArchetype } from "@/constants/enemies";
 import { IDLE_VARIATION, jitteredIdleDelay } from "@/constants/characters";
-import { NON_PLAYER, SIGHT } from "@/constants/enemies";
 import { HUD } from "@/constants/presentation";
-import {
-    alertMarkerFillFor,
-    alertMarkerKindFor,
-} from "@/world/effects/combat/AlertMarkerProjector";
-import type { IAlertMarkerSource } from "@/world/effects/combat/AlertMarkerProjector";
+import { alertMarkerFillFor, alertMarkerKindFor } from "@/world/HudTrackers";
+import type { IAlertMarkerSource } from "@/world/HudTrackers";
 import { horizontalDirection } from "@/lib/helpers";
 import type { AwarenessState, ICombatant, IHitPayload } from "@/types/combat";
 import type { AlertMarkerKind } from "@/types/hud";

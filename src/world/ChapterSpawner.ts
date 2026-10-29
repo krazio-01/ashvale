@@ -5,29 +5,30 @@ import { GrassField } from "@/world/vegetation/GrassField";
 import { Player } from "@/entities/characters/player/Player";
 import { composeBoss } from "@/entities/characters/bosses/BossComposer";
 import { CombatDiagnostics } from "@/systems/combat/CombatDiagnostics";
-import { AlertMarkerProjector } from "@/world/effects/combat/AlertMarkerProjector";
-import { DamageNumberProjector } from "@/world/effects/combat/DamageNumberProjector";
+import { AlertMarkerProjector, DamageNumberProjector } from "@/world/HudTrackers";
 import { CombatNoise } from "@/systems/enemyBehaviour/perception/CombatNoise";
 import { HitSparks } from "@/world/effects/combat/HitSparks";
 import { TelegraphFlares } from "@/world/effects/combat/TelegraphFlares";
 import { Enemy } from "@/entities/characters/enemies/Enemy";
 import { spawnEnemy } from "@/entities/characters/enemies/EnemySpawner";
 import { placeRegionEnemies } from "@/world/EnemyPlacement";
-import { buildPropField, type ICorridorLane, type IRegionSite } from "@/world/props/PropField";
+import { buildPropField } from "@/world/props/PropField";
+import type { ICorridorLane, IRegionSite } from "@/world/props/PropField";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
 import {
     CorridorClimbStyle,
     TerrainGenerator,
     TerrainSampleGrid,
     WALKABLE_REACH,
-    type IRegionFloor,
-    type ICorridorPath,
 } from "@/world/terrain/TerrainGeneration";
-import { plotWaterCourses, type IRegionLink } from "@/world/water/WaterCourse";
+import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainGeneration";
+import { plotWaterCourses } from "@/world/water/WaterCourse";
+import type { IRegionLink } from "@/world/water/WaterCourse";
 import { WaterSurface } from "@/world/water/WaterSurface";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
-import { ChapterTheme, type IChapterRegion, type IRegionPathway } from "@/types/realm";
+import { ChapterTheme } from "@/types/realm";
+import type { IChapterRegion, IRegionPathway } from "@/types/realm";
 import type { ISettlementLayoutResult } from "@/types/settlement";
 import { buildSettlementLayout } from "@/world/settlement/SettlementLayout";
 import { SettlementColliders } from "@/world/settlement/SettlementColliders";
@@ -38,13 +39,13 @@ import { ENEMY_PLACEMENT, SPAWNING } from "@/constants/enemies";
 import { PLAYER } from "@/constants/player";
 import { TERRAIN } from "@/constants/world";
 import { createSeededRandom, hashString, yieldToBrowser } from "@/lib/helpers";
-import { TerrainEdgeBarrier, TerrainLedges } from "./terrain/TerrainFeatures";
+import { TerrainEdgeBarrier, TerrainLedges } from "@/world/terrain/TerrainFeatures";
 import {
     buildGroundDetailTexture,
     buildGroundSplatTexture,
     deriveGroundMaterials,
-} from "./terrain/TerrainMaterials";
-import { BloomField } from "./vegetation/BloomField";
+} from "@/world/terrain/TerrainMaterials";
+import { BloomField } from "@/world/vegetation/BloomField";
 
 const SPAWN_TIME_SLICE_MS = 8;
 const MAX_SETTLED_REGIONS = 4;
