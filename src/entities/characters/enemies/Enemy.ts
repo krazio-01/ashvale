@@ -12,7 +12,7 @@ import {
     DisengageBehaviour,
     PatrolBehaviour,
 } from "@/systems/enemyBehaviour/behaviours/AmbientBehaviours";
-import { Movement } from "@/systems/enemyBehaviour/movement/Movement";
+import { Movement } from "@/systems/enemyBehaviour/EnemySteering";
 import {
     EnemyPerception,
     HearingSensor,

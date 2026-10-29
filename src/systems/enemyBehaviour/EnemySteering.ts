@@ -4,7 +4,17 @@ import { ENEMY_STEERING, OBSTACLE_PROBE } from "@/constants/enemies";
 import { angleDelta } from "@/lib/helpers";
 import type { ICombatant } from "@/types/combat";
 
+interface ISteeringBody extends ICombatant {
+    readonly bodyRadius: number;
+    readonly position: Vector3;
+    isPathBlocked(directionX: number, directionZ: number, distance: number): boolean;
+}
+
 export class Movement {
+    private static readonly scratchSeparation = new Vector3();
+
+    private static readonly scratchTeammates: ICombatant[] = [];
+
     private readonly body: ISteeringBody;
     private readonly registry: CombatRegistry;
     private avoidanceSide = 0;
@@ -36,14 +46,14 @@ export class Movement {
     }
 
     private separationFromTeammates(): Vector3 {
-        const separation = scratchSeparation.set(0, 0, 0);
+        const separation = Movement.scratchSeparation.set(0, 0, 0);
         const position = this.body.position;
         const ownRadius = this.body.bodyRadius;
         const teammates = this.registry.collectTeammates(
             this.body.team,
             position,
             ownRadius * 2 + ENEMY_STEERING.separationMargin,
-            scratchTeammates
+            Movement.scratchTeammates
         );
 
         for (const teammate of teammates) {
@@ -130,12 +140,3 @@ export class Movement {
         return null;
     }
 }
-
-interface ISteeringBody extends ICombatant {
-    readonly bodyRadius: number;
-    readonly position: Vector3;
-    isPathBlocked(directionX: number, directionZ: number, distance: number): boolean;
-}
-
-const scratchSeparation = new Vector3();
-const scratchTeammates: ICombatant[] = [];

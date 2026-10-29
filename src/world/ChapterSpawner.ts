@@ -9,8 +9,7 @@ import { AlertMarkerProjector, DamageNumberProjector } from "@/world/HudTrackers
 import { CombatNoise } from "@/systems/enemyBehaviour/perception/CombatNoiseEmitter";
 import { HitSparks, TelegraphFlares } from "@/systems/effects/Effects";
 import { Enemy } from "@/entities/characters/enemies/Enemy";
-import { spawnEnemy } from "@/entities/characters/enemies/EnemySpawner";
-import { placeRegionEnemies } from "@/world/EnemyPlacement";
+import { spawnEnemy, placeRegionEnemies } from "@/entities/characters/enemies/EnemySpawner";
 import { buildPropField } from "@/world/props/PropField";
 import type { ICorridorLane, IRegionSite } from "@/world/props/PropField";
 import { resolveThemeManifest } from "@/themes/ThemeManifests";
