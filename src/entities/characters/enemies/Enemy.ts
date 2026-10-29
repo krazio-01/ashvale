@@ -3,17 +3,15 @@ import type { Vector3Tuple } from "three";
 import type { IMotorSpec } from "@/systems/combat/CharacterMotor";
 import { CombatCharacter } from "@/entities/characters/CombatCharacter";
 import { enemyCombatLocomotion, enemyRelaxedLocomotion } from "@/entities/characters/locomotion";
-import { BehaviourSelector } from "@/systems/enemyBehaviour/behaviours/BehaviourSelector";
+import { BehaviourSelector } from "@/systems/enemyBehaviour/behaviours/EnemyBehaviour";
 import type { IEnemyCombatBody } from "@/systems/enemyBehaviour/behaviours/EnemyBehaviour";
 import { EngageBehaviour } from "@/systems/enemyBehaviour/behaviours/EngageBehaviour";
 import {
     InvestigateBehaviour,
     SearchBehaviour,
-} from "@/systems/enemyBehaviour/behaviours/InvestigateBehaviour";
-import {
     DisengageBehaviour,
     PatrolBehaviour,
-} from "@/systems/enemyBehaviour/behaviours/PatrolBehaviour";
+} from "@/systems/enemyBehaviour/behaviours/AmbientBehaviours";
 import { Movement } from "@/systems/enemyBehaviour/movement/Movement";
 import { EnemyPerception } from "@/systems/enemyBehaviour/perception/EnemyPerception";
 import { HearingSensor } from "@/systems/enemyBehaviour/perception/HearingSensor";

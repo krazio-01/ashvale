@@ -1,6 +1,10 @@
 import type { Vector3 } from "three";
 import type { AwarenessMeter } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
+import { LOOK_AROUND } from "@/constants/enemies";
 import type { IEnemyArchetype } from "@/constants/enemies";
+import { scaleBetween } from "@/lib/helpers";
+import type { AlertPhase } from "@/types/combat";
+
 export interface IEnemyBody {
     readonly position: Vector3;
     readonly home: Vector3;
@@ -45,4 +49,54 @@ export abstract class EnemyBehaviour<
     abstract tick(deltaSeconds: number): void;
 
     exit(): void {}
+}
+
+export class LookAround {
+    private readonly body: IEnemyBody;
+    private readonly random: () => number;
+    private secondsUntilGlance = 0;
+    private baseYaw = 0;
+
+    constructor(body: IEnemyBody, random: () => number) {
+        this.body = body;
+        this.random = random;
+    }
+
+    reset(): void {
+        this.secondsUntilGlance = 0;
+        this.baseYaw = this.body.yaw;
+    }
+
+    tick(deltaSeconds: number): void {
+        this.secondsUntilGlance -= deltaSeconds;
+        if (this.secondsUntilGlance > 0) return;
+
+        this.secondsUntilGlance = scaleBetween(LOOK_AROUND.glanceSeconds, this.random());
+        this.body.lookTowards(this.baseYaw + (this.random() * 2 - 1) * LOOK_AROUND.maxTurn);
+    }
+}
+
+export class BehaviourSelector {
+    private readonly behaviours: Readonly<Record<AlertPhase, IEnemyBehaviour>>;
+    private active: IEnemyBehaviour | null = null;
+
+    constructor(behaviours: Readonly<Record<AlertPhase, IEnemyBehaviour>>) {
+        this.behaviours = behaviours;
+    }
+
+    tick(phase: AlertPhase, deltaSeconds: number): void {
+        const next = this.behaviours[phase];
+        if (next !== this.active) {
+            this.active?.exit();
+            this.active = next;
+            next.enter();
+        }
+
+        next.tick(deltaSeconds);
+    }
+
+    stop(): void {
+        this.active?.exit();
+        this.active = null;
+    }
 }
