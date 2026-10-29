@@ -1,9 +1,15 @@
 import { degrees, metres, pair } from "@/lib/helpers";
 import type { IVitalsSpec } from "@/systems/combat/Vitals";
-import { GOLEM_MOVES, GOLEM_MOVE_IDS } from "@/systems/combat/moveSets/enemy/golemMoves";
-import { GREMLIN_MOVES, GREMLIN_MOVE_IDS } from "@/systems/combat/moveSets/enemy/gremlinMoves";
-import { SENTINEL_MOVES, SENTINEL_MOVE_IDS } from "@/systems/combat/moveSets/enemy/sentinelMoves";
-import { WRAITH_MOVES, WRAITH_MOVE_IDS } from "@/systems/combat/moveSets/enemy/wraithMoves";
+import {
+    GOLEM_MOVES,
+    GOLEM_MOVE_IDS,
+    GREMLIN_MOVES,
+    GREMLIN_MOVE_IDS,
+    SENTINEL_MOVES,
+    SENTINEL_MOVE_IDS,
+    WRAITH_MOVES,
+    WRAITH_MOVE_IDS,
+} from "@/systems/combat/moveSets/enemyMoves";
 import type { IEnemyAttack } from "@/systems/enemyBehaviour/combat/AttackPlanner";
 import type { IDefenseTactics } from "@/systems/enemyBehaviour/combat/DefenseReader";
 import { CREATURE, STRIDE } from "@/constants/characters";

@@ -7,7 +7,7 @@ import type { IEnemyAttack } from "@/systems/enemyBehaviour/combat/AttackPlanner
 import { DefenseReader } from "@/systems/enemyBehaviour/combat/DefenseReader";
 import { SpamTracker } from "@/systems/enemyBehaviour/combat/SpamTracker";
 import type { AttackCoordinator } from "@/systems/combat/AttackCoordinator";
-import { ENEMY_DEFENSE_MOVE_IDS } from "@/systems/combat/moveSets/enemy/enemyMoveKit";
+import { ENEMY_DEFENSE_MOVE_IDS } from "@/systems/combat/moveSets/enemyMoveBuilders";
 import { ENGAGE_TACTICS } from "@/constants/enemies";
 import { angleDelta, clamp, horizontalDistance, yawTowards } from "@/lib/helpers";
 import type { IAttackThreatSource, ICombatant } from "@/types/combat";
