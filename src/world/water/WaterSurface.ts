@@ -7,14 +7,13 @@ import {
     ShaderMaterial,
     Vector3,
     Vector4,
-    type Object3D,
-    type Vector3Tuple,
 } from "three";
+import type { Object3D, Vector3Tuple } from "three";
 import { Entity } from "@/entities/Entity";
-import { sunDirectionOf } from "@/themes/ThemeManifests";
+import { sunDirectionOf } from "@/themes/Themes";
 import type { IWorldContext, IWorldEntity } from "@/types/world";
 import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
-import { shoreAllowanceAt } from "@/world/water/WaterChannel";
+import { shoreAllowanceAt } from "@/world/water/WaterCourse";
 import type { IWaterCourse, IWaterPoint } from "@/world/water/WaterCourse";
 import { WATER_CHANNEL, WATER_SURFACE, WATER_WADER } from "@/constants/world";
 import { catmullRomAt, lerp, smoothstep } from "@/lib/helpers";

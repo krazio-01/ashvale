@@ -1,7 +1,7 @@
 import type { Camera, Vector3Tuple } from "three";
-import { PropBatch } from "@/world/props/PropBatch";
+import { PropBatch } from "@/world/props/PropChunk";
 import { TerrainSurface } from "@/world/terrain/TerrainSurface";
-import { GrassField } from "@/world/vegetation/GrassField";
+import { GrassField, BloomField } from "@/world/vegetation/GroundCoverField";
 import { Player } from "@/entities/characters/player/Player";
 import { composeBoss } from "@/entities/characters/bosses/BossComposer";
 import { CombatDiagnostics } from "@/systems/combat/CombatDiagnostics";
@@ -12,7 +12,7 @@ import { Enemy } from "@/entities/characters/enemies/Enemy";
 import { spawnEnemy, placeRegionEnemies } from "@/entities/characters/enemies/EnemySpawner";
 import { buildPropField } from "@/world/props/PropField";
 import type { ICorridorLane, IRegionSite } from "@/world/props/PropField";
-import { resolveThemeManifest } from "@/themes/ThemeManifests";
+import { resolveThemeManifest } from "@/themes/Themes";
 import {
     CorridorClimbStyle,
     TerrainGenerator,
@@ -46,7 +46,6 @@ import {
     buildGroundSplatTexture,
     deriveGroundMaterials,
 } from "@/world/terrain/TerrainMaterials";
-import { BloomField } from "@/world/vegetation/BloomField";
 
 const SPAWN_TIME_SLICE_MS = 8;
 const MAX_SETTLED_REGIONS = 4;

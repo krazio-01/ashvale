@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useSettings } from "@/settings/SettingsStore";
-import { getRenderedFrameCount } from "@/hooks/useFrameLimit";
+import { getRenderedFrameCount } from "@/components/FrameLimiter/FrameLimiter";
 import "./frameRateMeter.scss";
 
 const SAMPLE_WINDOW_MS = 500;

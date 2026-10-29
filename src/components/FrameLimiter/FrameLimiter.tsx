@@ -1,11 +1,15 @@
 "use client";
+
 import { useEffect, useRef } from "react";
 import { useStore } from "@react-three/fiber";
 import { useSettings } from "@/settings/SettingsStore";
 
 const VSYNC_TOLERANCE_MS = 2;
+
 const MAXIMUM_ADVANCE_DELTA_MS = 100;
+
 const UNCAPPED_FRAME_RATE_THRESHOLD = 240;
+
 const FALLBACK_FRAME_RATE = 60;
 
 let renderedFrameCount = 0;

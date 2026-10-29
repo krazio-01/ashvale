@@ -1,7 +1,10 @@
 import type { Vector3Tuple } from "three";
-import { PropLayer, type IPropGroup, type IThemeManifest, type IThemeProp } from "@/types/world";
-import { createGridSample, type TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
-import { PropOccupancy, PropCollector } from "@/world/props/PropFieldState";
+import { PropLayer } from "@/types/world";
+import type { IPropGroup, IThemeManifest, IThemeProp } from "@/types/world";
+import { createGridSample } from "@/world/terrain/TerrainGeneration";
+import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
+import { PropOccupancy, PropCollector } from "@/world/props/PropPlacement";
+import type { IFieldContext } from "@/world/props/PropPlacement";
 import {
     fillClump,
     scatterDebris,
@@ -10,7 +13,6 @@ import {
     seedClumps,
 } from "@/world/props/PropScatter";
 import { decorateWaterCourse } from "@/world/props/WaterEdgeDecor";
-import type { IFieldContext } from "@/world/props/PropPlacement";
 import type { IWaterCourse } from "@/world/water/WaterCourse";
 import { PROP_FIELD } from "@/constants/placement";
 import { createSeededRandom } from "@/lib/helpers";

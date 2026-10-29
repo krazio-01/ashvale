@@ -16,12 +16,7 @@ import {
     SETTLEMENT_MANIFEST,
     WOODLAND_MANIFEST,
 } from "@/themes/Biomes";
-import {
-    AUTUMN_SEASON,
-    SPRING_SEASON,
-    SUMMER_SEASON,
-    WINTER_SEASON,
-} from "@/themes/seasonProfiles";
+import { AUTUMN_SEASON, SPRING_SEASON, SUMMER_SEASON, WINTER_SEASON } from "@/themes/Seasons";
 import { blendColors, clamp, shiftColorHsl, tintKeepingLightness } from "@/lib/helpers";
 
 const BIOME_MANIFESTS: Record<ChapterTheme, IThemeManifest> = {

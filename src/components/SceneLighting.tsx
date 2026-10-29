@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { DirectionalLight, Vector3Tuple } from "three";
-import { sunDirectionOf } from "@/themes/ThemeManifests";
+import { sunDirectionOf } from "@/themes/Themes";
 import { SCENE_LIGHT_LAYERS } from "@/world/postProcessing/PostProcessPasses";
 import type { IThemeEnvironment } from "@/types/world";
 import { LIGHT } from "@/constants/world";

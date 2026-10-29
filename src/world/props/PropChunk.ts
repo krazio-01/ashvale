@@ -8,11 +8,41 @@ import { FOLIAGE_LAYER } from "@/world/postProcessing/PostProcessPasses";
 import { PROP_FIELD } from "@/constants/placement";
 import { createSeededRandom, hashString, lerp } from "@/lib/helpers";
 
-const instanceTransform = new Object3D();
-const cameraGroundPosition = new Vector3();
-let matrixScratch = new Float32Array(0);
-
 export class PropBatch extends Entity implements IWorldEntity {
+    private static readonly instanceTransform = new Object3D();
+
+    private static matrixScratch = new Float32Array(0);
+
+    private static readonly cameraGroundPosition = new Vector3();
+
+    private static buildInstanceMatrices(group: IPropGroup): Float32Array {
+        const requiredLength = group.instanceCount * 16;
+        if (PropBatch.matrixScratch.length < requiredLength)
+            PropBatch.matrixScratch = new Float32Array(requiredLength);
+
+        for (let instance = 0; instance < group.instanceCount; instance += 1) {
+            const offset = instance * PROP_TRANSFORM_STRIDE;
+
+            PropBatch.instanceTransform.position.set(
+                group.transforms[offset] ?? 0,
+                group.transforms[offset + 1] ?? 0,
+                group.transforms[offset + 2] ?? 0
+            );
+            PropBatch.instanceTransform.rotation.y = group.transforms[offset + 3] ?? 0;
+            PropBatch.instanceTransform.scale.setScalar(group.transforms[offset + 4] ?? 1);
+            PropBatch.instanceTransform.updateMatrix();
+            PropBatch.instanceTransform.matrix.toArray(PropBatch.matrixScratch, instance * 16);
+        }
+
+        return PropBatch.matrixScratch;
+    }
+
+    private static shadowCastingLayer(layer: PropLayer): boolean {
+        return (
+            layer === PropLayer.Canopy || layer === PropLayer.Rock || layer === PropLayer.Understory
+        );
+    }
+
     readonly sceneObject = new Group();
 
     private readonly physicsWorld: PhysicsWorld;
@@ -53,10 +83,10 @@ export class PropBatch extends Entity implements IWorldEntity {
     }
 
     update(): void {
-        this.camera.getWorldPosition(cameraGroundPosition);
+        this.camera.getWorldPosition(PropBatch.cameraGroundPosition);
 
-        const offsetX = cameraGroundPosition.x - this.footprintCenterX;
-        const offsetZ = cameraGroundPosition.z - this.footprintCenterZ;
+        const offsetX = PropBatch.cameraGroundPosition.x - this.footprintCenterX;
+        const offsetZ = PropBatch.cameraGroundPosition.z - this.footprintCenterZ;
         const distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
 
         this.sceneObject.visible = this.sceneObject.visible
@@ -74,8 +104,8 @@ export class PropBatch extends Entity implements IWorldEntity {
     }
 
     private addBatches(group: IPropGroup, template: IModelTemplate): void {
-        const matrices = buildInstanceMatrices(group);
-        const castsShadow = shadowCastingLayer(group.layer);
+        const matrices = PropBatch.buildInstanceMatrices(group);
+        const castsShadow = PropBatch.shadowCastingLayer(group.layer);
 
         for (const part of template.parts) {
             const batch = new InstancedMesh(part.geometry, part.material, group.instanceCount);
@@ -182,29 +212,4 @@ export class PropBatch extends Entity implements IWorldEntity {
         this.activationDistanceSquared = activationDistance * activationDistance;
         this.deactivationDistanceSquared = deactivationDistance * deactivationDistance;
     }
-}
-
-function buildInstanceMatrices(group: IPropGroup): Float32Array {
-    const requiredLength = group.instanceCount * 16;
-    if (matrixScratch.length < requiredLength) matrixScratch = new Float32Array(requiredLength);
-
-    for (let instance = 0; instance < group.instanceCount; instance += 1) {
-        const offset = instance * PROP_TRANSFORM_STRIDE;
-
-        instanceTransform.position.set(
-            group.transforms[offset] ?? 0,
-            group.transforms[offset + 1] ?? 0,
-            group.transforms[offset + 2] ?? 0
-        );
-        instanceTransform.rotation.y = group.transforms[offset + 3] ?? 0;
-        instanceTransform.scale.setScalar(group.transforms[offset + 4] ?? 1);
-        instanceTransform.updateMatrix();
-        instanceTransform.matrix.toArray(matrixScratch, instance * 16);
-    }
-
-    return matrixScratch;
-}
-
-function shadowCastingLayer(layer: PropLayer): boolean {
-    return layer === PropLayer.Canopy || layer === PropLayer.Rock || layer === PropLayer.Understory;
 }

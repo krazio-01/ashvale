@@ -12,7 +12,7 @@ import {
     Vector2,
 } from "three";
 import type { Texture } from "three";
-import { sunDirectionOf } from "@/themes/ThemeManifests";
+import { sunDirectionOf } from "@/themes/Themes";
 import type { ISkyGradient } from "@/types/world";
 import { ATMOSPHERE, OUTLINE } from "@/constants/world";
 

@@ -17,7 +17,7 @@ import {
 import { GROUND_COVER } from "@/constants/placement";
 import { clamp, distanceOutsideBox, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
-import { createChannelReading, WaterChannel } from "@/world/water/WaterChannel";
+import { createChannelReading, WaterChannel } from "@/world/water/WaterCourse";
 import type { IWaterCourse } from "@/world/water/WaterCourse";
 
 export const WALKABLE_REACH = WORLD_EDGE.groundApron + WORLD_EDGE.lipWidth;

@@ -14,8 +14,11 @@ import {
 import type { AnimationAction } from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
-import { flattenForInstancing, prepareSkinnedModel } from "@/world/assets/AssetLibrary";
-import { createGltfLoader } from "@/world/assets/GltfLoaderFactory";
+import {
+    flattenForInstancing,
+    prepareSkinnedModel,
+    createGltfLoader,
+} from "@/world/assets/AssetLibrary";
 import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import { FOLIAGE_LAYER } from "@/world/postProcessing/PostProcessPasses";
 import { FractalNoise } from "@/lib/noise";

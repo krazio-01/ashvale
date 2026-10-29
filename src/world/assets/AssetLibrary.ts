@@ -1,4 +1,5 @@
 import {
+    Cache,
     AnimationClip,
     Bone,
     Box3,
@@ -11,16 +12,47 @@ import {
     Vector3,
     VectorKeyframeTrack,
 } from "three";
-import type { BufferGeometry, KeyframeTrack, WebGLRenderer } from "three";
-import type { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { createGltfLoader } from "@/world/assets/GltfLoaderFactory";
+import type { WebGLRenderer, BufferGeometry, KeyframeTrack } from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { IThemeManifest, IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
 import { CHARACTER, CREATURE, CLIP, SKELETON_BONES } from "@/constants/characters";
+
+const IMAGE_BITMAP_KEY_PREFIX = "image-bitmap:";
+
+const TRANSCODER_PATH = "/vendor/basis/";
+
+let ktx2Loader: KTX2Loader | null = null;
+
+let isCacheFixInstalled = false;
+
 const FOLIAGE_MATERIAL_PATTERN = /leaves|leaf|foliage/i;
+
 const USED_CLIP_NAMES = new Set<string>(Object.values(CLIP));
 
+const ROOT_POSITION_TRACK = "root.position";
+
+const PELVIS_POSITION_TRACK = `${SKELETON_BONES.pelvis}.position`;
+
+const PELVIS_RATIO_EPSILON = 1e-4;
+
+const POSITION_VARIANCE_EPSILON = 1e-4;
+
 export class AssetLibrary {
+    private static async loadPropScene(
+        loader: GLTFLoader,
+        modelPath: string
+    ): Promise<{ modelPath: string; scene: Object3D | null }> {
+        try {
+            return { modelPath, scene: (await loader.loadAsync(modelPath)).scene };
+        } catch {
+            return { modelPath, scene: null };
+        }
+    }
+
     private readonly templatesByPath = new Map<string, IModelTemplate>();
     private readonly skinnedModelsByPath = new Map<string, ISkinnedModel>();
 
@@ -41,7 +73,9 @@ export class AssetLibrary {
         const creatureModelPaths = [CREATURE.impModelPath, CREATURE.puglinModelPath];
 
         const [loadedModels, characterModel, clipLibraries, creatureModels] = await Promise.all([
-            Promise.all(uniqueModelPaths.map((modelPath) => loadPropScene(loader, modelPath))),
+            Promise.all(
+                uniqueModelPaths.map((modelPath) => AssetLibrary.loadPropScene(loader, modelPath))
+            ),
             loader.loadAsync(CHARACTER.modelPath),
             Promise.all(CHARACTER.clipLibraryPaths.map((path) => loader.loadAsync(path))),
             Promise.all(creatureModelPaths.map((path) => loader.loadAsync(path))),
@@ -120,15 +154,28 @@ export class AssetLibrary {
     }
 }
 
-async function loadPropScene(
-    loader: GLTFLoader,
-    modelPath: string
-): Promise<{ modelPath: string; scene: Object3D | null }> {
-    try {
-        return { modelPath, scene: (await loader.loadAsync(modelPath)).scene };
-    } catch {
-        return { modelPath, scene: null };
-    }
+function installImageBitmapCacheFix(): void {
+    if (isCacheFixInstalled) return;
+    isCacheFixInstalled = true;
+
+    const addToCache = Cache.add.bind(Cache);
+
+    Cache.add = (key: string, file: unknown): void => {
+        const isPendingImageBitmap =
+            key.startsWith(IMAGE_BITMAP_KEY_PREFIX) && file instanceof Promise;
+        addToCache(key, isPendingImageBitmap ? file.then(() => Cache.get(key)) : file);
+    };
+
+    Cache.enabled = true;
+}
+
+export function createGltfLoader(renderer: WebGLRenderer): GLTFLoader {
+    installImageBitmapCacheFix();
+
+    if (!ktx2Loader) ktx2Loader = new KTX2Loader().setTranscoderPath(TRANSCODER_PATH);
+    ktx2Loader.detectSupport(renderer);
+
+    return new GLTFLoader().setKTX2Loader(ktx2Loader).setMeshoptDecoder(MeshoptDecoder);
 }
 
 const asArray = <T>(value: T | T[]): T[] => (Array.isArray(value) ? value : [value]);
@@ -199,10 +246,6 @@ export function prepareSkinnedModel(
     };
 }
 
-const ROOT_POSITION_TRACK = "root.position";
-const PELVIS_POSITION_TRACK = `${SKELETON_BONES.pelvis}.position`;
-const PELVIS_RATIO_EPSILON = 1e-4;
-
 function scalePelvisMotion(clip: AnimationClip, ratio: number): AnimationClip {
     if (Math.abs(ratio - 1) < PELVIS_RATIO_EPSILON) return clip;
     return new AnimationClip(
@@ -219,8 +262,6 @@ function scaleTrack(track: KeyframeTrack, scaleFactor: number): KeyframeTrack {
     for (let index = 0; index < scaled.values.length; index++) scaled.values[index] *= scaleFactor;
     return scaled;
 }
-
-const POSITION_VARIANCE_EPSILON = 1e-4;
 
 function hasVaryingValues(track: KeyframeTrack): boolean {
     const values = track.values;
