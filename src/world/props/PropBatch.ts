@@ -5,7 +5,7 @@ import { Entity } from "@/entities/Entity";
 import { PROP_TRANSFORM_STRIDE, PropLayer } from "@/types/theme";
 import type { IPropGroup } from "@/types/theme";
 import type { IModelTemplate, IWorldContext, IWorldEntity } from "@/types/world";
-import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
+import { FOLIAGE_LAYER } from "@/world/postProcessing/PostProcessPasses";
 import { PROP_FIELD } from "@/constants/placement";
 import { createSeededRandom, hashString, lerp } from "@/lib/helpers";
 

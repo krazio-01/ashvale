@@ -17,7 +17,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { flattenForInstancing, prepareSkinnedModel } from "@/world/assets/AssetLibrary";
 import { createGltfLoader } from "@/world/assets/GltfLoaderFactory";
 import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
-import { FOLIAGE_LAYER } from "@/world/effects/FoliageMaskPass";
+import { FOLIAGE_LAYER } from "@/world/postProcessing/PostProcessPasses";
 import { FractalNoise } from "@/lib/noise";
 import { blendColors, createSeededRandom, FULL_TURN } from "@/lib/helpers";
 import { ISLAND, LANDING_CHARACTER, LANDING_PROPS } from "@/constants/presentation";

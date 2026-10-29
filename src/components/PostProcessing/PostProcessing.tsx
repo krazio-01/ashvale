@@ -13,9 +13,11 @@ import {
 import { ToneMappingMode } from "postprocessing";
 import { Vector2 } from "three";
 import type { Texture, WebGLRenderer } from "three";
-import { AtmosphereEffect } from "@/world/effects/AtmosphereEffect";
-import { FoliageMaskPass } from "@/world/effects/FoliageMaskPass";
-import { OutlineEffect } from "@/world/effects/OutlineEffect";
+import {
+    AtmosphereEffect,
+    FoliageMaskPass,
+    OutlineEffect,
+} from "@/world/postProcessing/PostProcessPasses";
 import type { IThemeEnvironment } from "@/types/theme";
 import { POST_PROCESSING, RENDER } from "@/constants/rendering";
 import { useSettings } from "@/settings/SettingsStore";

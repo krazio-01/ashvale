@@ -1,10 +1,9 @@
 "use client";
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import type { DirectionalLight } from "three";
-import type { Vector3Tuple } from "three";
+import type { DirectionalLight, Vector3Tuple } from "three";
 import { sunDirectionOf } from "@/themes/ThemeManifests";
-import { SCENE_LIGHT_LAYERS } from "@/world/effects/FoliageMaskPass";
+import { SCENE_LIGHT_LAYERS } from "@/world/postProcessing/PostProcessPasses";
 import type { IThemeEnvironment } from "@/types/theme";
 import { LIGHT } from "@/constants/rendering";
 import { useSettings } from "@/settings/SettingsStore";
