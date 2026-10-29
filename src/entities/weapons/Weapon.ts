@@ -2,7 +2,7 @@ import { Box3, Euler, Group, Mesh, Object3D, Quaternion, Vector3 } from "three";
 import { BLADE_THICKNESS_SLICES, GRIP } from "@/constants/combat";
 import { axisVector, degrees, measureBladeAxes } from "@/lib/helpers";
 import type { Axis, IBladeAxes } from "@/lib/helpers";
-import { SlashTrail } from "@/world/effects/combat/SlashTrail";
+import { SlashTrail } from "@/systems/effects/Effects";
 import type { IStrikeSegment } from "@/types/combat";
 import type {
     ICarryRig,
