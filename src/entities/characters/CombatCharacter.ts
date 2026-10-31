@@ -1,23 +1,36 @@
-import { ActionMachine } from "@/systems/combat/actions/MoveStateMachine";
-import type { IMachineOutput, IMachineInput } from "@/systems/combat/actions/MoveStateMachine";
+import { Group, Mesh, SkinnedMesh, Vector3 } from "three";
+import type { Object3D, Skeleton, Vector3Tuple } from "three";
+import { clone as cloneSkinnedModel } from "three/examples/jsm/utils/SkeletonUtils.js";
+import { MoveStateMachine } from "@/systems/combat/actions/MoveStateMachine";
+import type { IMoveStateInput, IMoveStateOutput } from "@/systems/combat/actions/MoveStateMachine";
+import { CharacterMotor } from "@/systems/combat/CharacterMotor";
+import { AttackExecutor } from "@/systems/combat/hit/AttackExecutor";
+import type { IAttackOwner } from "@/systems/combat/hit/AttackExecutor";
+import type {
+    IFinisherParticipant,
+    FinisherRole,
+} from "@/systems/combat/finishers/FinisherSequence";
+import { reactionFor, resolveDefense } from "@/systems/combat/hit/HitResolver";
+import type { IDefenderSnapshot } from "@/systems/combat/hit/HitResolver";
 import {
-    firstStrikeAt,
     hasCrossed,
     isWithin,
     isStrikeMove,
-    telegraphDanger,
-    telegraphTime,
+    attackWarningDanger,
+    attackWarningTime,
 } from "@/systems/combat/actions/MoveTimeline";
+import type { ICombatEventMap } from "@/events/CombatEvents";
+import { Vitals } from "@/systems/combat/Vitals";
 import type {
-    IAttackThreat,
-    IHitWindow,
-    IMoveDefinition,
+    IVitalsSpec,
     AwarenessState,
     HitShape,
+    IAttackThreat,
     ICapsule,
     ICombatant,
     IHitOutcome,
     IHitPayload,
+    IMoveDefinition,
     IParryResult,
     IProjectileLaunch,
     IMoveSet,
@@ -25,7 +38,6 @@ import type {
     SwingDirection,
     Team,
     VictimRig,
-    IStrikeSegment,
     DodgeSide,
     Stance,
     Handedness,
@@ -33,36 +45,43 @@ import type {
     IHandRig,
     WeaponDefinition,
 } from "@/types/combat";
-import { Group, Mesh, MeshBasicMaterial, SkinnedMesh, Vector3 } from "three";
-import type { Material, Object3D, Skeleton, Vector3Tuple } from "three";
-import { clone as cloneSkinnedModel } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { CharacterMotor } from "@/systems/combat/CharacterMotor";
-import type { IMotorSpec } from "@/systems/combat/CharacterMotor";
-import { AttackExecutor } from "@/systems/combat/hit/AttackExecutor";
-import type { IAttackOwner } from "@/systems/combat/hit/AttackExecutor";
-import type { IPairedParticipant, PairedRole } from "@/systems/combat/finishers/FinisherSequence";
-import { reactionFor, resolveDefense } from "@/systems/combat/hit/HitResolver";
-import type { IDefenderSnapshot } from "@/systems/combat/hit/HitResolver";
-import type { ICombatEventMap } from "@/events/CombatEvents";
-import { Vitals } from "@/systems/combat/Vitals";
-import type { IVitalsSpec } from "@/systems/combat/Vitals";
 import { CharacterAnimator } from "@/entities/characters/CharacterAnimator";
+import { ProceduralRig } from "@/entities/characters/ProceduralRig";
 import type {
     IFreeLocomotion,
     IOneShotOptions,
     IStrafeLocomotion,
     LocomotionDefinition,
 } from "@/entities/characters/CharacterAnimator";
-import { ProceduralRig } from "@/entities/characters/ProceduralRig";
 import { createWeapon } from "@/entities/weapons/Weapon";
+import { EffectSet } from "@/systems/effects/Effects";
+import type { MaterialEffectId } from "@/systems/effects/Effects";
 import type { Weapon } from "@/entities/weapons/Weapon";
-import { HAND_BONES, PROCEDURAL } from "@/constants/characters";
+import { HAND_BONES, PROCEDURAL_ANIMATION } from "@/constants/characters";
 import { PHYSICS } from "@/constants/physics";
-import { COMBAT_TIMING, CONTACT, FOCUS, MOVEMENT, PARRY, SLOW_MOTION } from "@/constants/combat";
-import { BoneMath } from "@/lib/boneMath";
-import { angleDelta, clamp, pickRandom, yawTowards } from "@/lib/helpers";
-import type { IBladeSource, IProceduralFrame } from "@/types/characters";
+import {
+    COMBAT_TIMING,
+    BODY_CONTACT,
+    FOCUS,
+    COMBAT_MOVEMENT,
+    PARRY,
+    SLOW_MOTION,
+} from "@/constants/combat";
+import {
+    shortestAngleBetween,
+    clamp,
+    pickRandom,
+    yawTowards,
+    smoothingFactor,
+    yawFromDirection,
+    forwardFromYaw,
+    horizontalLength,
+    horizontalDirection,
+} from "@/lib/helpers";
+import type { IBladeSource, IProceduralFrame, ProceduralDetail } from "@/types/characters";
 import type { ISkinnedModel, IWorldContext, IWorldEntity } from "@/types/world";
+import type { IMotorSpec, PhysicsDetail } from "@/types/physics";
+import { ERRORS } from "@/constants/strings";
 
 interface ICombatCharacterConfig {
     id: string;
@@ -73,39 +92,45 @@ interface ICombatCharacterConfig {
     vitals: IVitalsSpec;
     moveSet: IMoveSet;
     freeLocomotion: IFreeLocomotion;
-    strafeLocomotion: IStrafeLocomotion | null;
+    strafeLocomotion: IStrafeLocomotion;
     sheathedLocomotion?: IFreeLocomotion;
     victimRig: VictimRig;
     turnSmoothing: number;
     modelYawOffset: number;
     spawnPosition: Vector3Tuple;
     spawnYaw: number;
-    flashesOnHit: boolean;
+    hitEffect: MaterialEffectId | null;
     reactionLockout?: Partial<Record<ReactionTier, number>>;
     ignoredReactions?: readonly ReactionTier[];
     reactionDodgeCancelSeconds?: number;
 }
 
 export abstract class CombatCharacter
-    implements IWorldEntity, IAttackOwner, IPairedParticipant, IBladeSource
+    implements IWorldEntity, IAttackOwner, IFinisherParticipant, IBladeSource
 {
     private static readonly STAGGER_PLAYBACK: IOneShotOptions = {
         fadeSeconds: 0.08,
         loop: true,
-        driven: false,
-        rate: 1,
+        timeSetByCaller: false,
     };
 
-    private static readonly flashMaterial = new MeshBasicMaterial({
-        color: 0xffffff,
-        toneMapped: false,
-    });
+    private static readonly ZERO_VELOCITY = new Vector3();
 
-    private static readonly STILL = new Vector3();
+    private static readonly MIN_MOVING_SPEED = 0.15;
 
-    private static readonly MOVING_SPEED = 0.15;
+    private static readonly WEAPON_LOOK_POINT_BLADE_FRACTION = 0.6;
 
-    private static readonly WEAPON_GAZE_ALONG_BLADE = 0.6;
+    private static readonly ANIMATION_DETAILS: readonly [
+        ProceduralDetail,
+        ProceduralDetail,
+        ProceduralDetail,
+    ] = ["full", "impact", "none"];
+
+    private static readonly PHYSICS_DETAILS: readonly [
+        PhysicsDetail,
+        PhysicsDetail,
+        PhysicsDetail,
+    ] = ["full", "reduced", "frozen"];
 
     private static readonly scratchRootMotion = new Vector3();
 
@@ -122,8 +147,7 @@ export abstract class CombatCharacter
     private static readonly REACTION_PLAYBACK: IOneShotOptions = {
         fadeSeconds: COMBAT_TIMING.reactionFade,
         loop: false,
-        driven: false,
-        rate: 1,
+        timeSetByCaller: false,
     };
 
     private static readonly PARRIED_PLAYBACK: IOneShotOptions = {
@@ -134,49 +158,56 @@ export abstract class CombatCharacter
     private static readonly DEATH_PLAYBACK: IOneShotOptions = {
         fadeSeconds: COMBAT_TIMING.deathFade,
         loop: false,
-        driven: false,
-        rate: 1,
+        timeSetByCaller: false,
     };
 
-    private static readonly PAIRED_PLAYBACK: IOneShotOptions = {
+    private static readonly FINISHER_PLAYBACK: IOneShotOptions = {
         fadeSeconds: 0.1,
         loop: false,
-        driven: true,
-        rate: 1,
+        timeSetByCaller: true,
     };
 
-    private static readonly PAIRED_LOOP_PLAYBACK: IOneShotOptions = {
+    private static readonly FINISHER_LOOP_PLAYBACK: IOneShotOptions = {
         fadeSeconds: 0.12,
         loop: true,
-        driven: false,
-        rate: 1,
+        timeSetByCaller: false,
     };
 
-    private static readonly PAIRED_RETURN_FADE = 0.25;
+    private static readonly FINISHER_RETURN_FADE = 0.25;
+
+    private static detailForDistance<Detail extends string>(
+        distance: number,
+        fullMetres: number,
+        reducedMetres: number,
+        labels: readonly [Detail, Detail, Detail]
+    ): Detail {
+        if (distance <= fullMetres) return labels[0];
+        return distance <= reducedMetres ? labels[1] : labels[2];
+    }
 
     readonly id: string;
     readonly team: Team;
     readonly victimRig: VictimRig;
     readonly sceneObject = new Group();
     readonly vitals: Vitals;
-    readonly machine: ActionMachine;
+    readonly moveStateMachine: MoveStateMachine;
     readonly hurtboxes: readonly ICapsule[];
-    readonly broadRadius: number;
+    readonly boundingRadius: number;
 
     protected readonly context: IWorldContext;
     protected readonly motor: CharacterMotor;
     protected readonly animator: CharacterAnimator;
     private readonly gazeHilt = new Vector3();
     private readonly gazeTip = new Vector3();
-    protected readonly procedural: ProceduralRig;
-    private wasPaired = false;
+    protected readonly proceduralRig: ProceduralRig;
+    private wasInFinisher = false;
     private physicsFreezeSeconds = 0;
     private readonly proceduralFrame: IProceduralFrame = {
         deltaSeconds: 0,
         detail: "full",
         physicsDetail: "full",
         weaponHand: "right",
-        gripWeight: 0,
+        twoHandGripWeight: 0,
         grounded: false,
         plantFeet: false,
         lookTarget: null,
@@ -184,7 +215,7 @@ export abstract class CombatCharacter
     protected readonly modelInstance: Object3D;
     protected readonly moveSet: IMoveSet;
     protected readonly desiredVelocity = new Vector3();
-    protected readonly executor: AttackExecutor;
+    protected readonly attackExecutor: AttackExecutor;
     protected weapon: Weapon | null = null;
     protected target: ICombatant | null = null;
     protected facingYaw: number;
@@ -197,22 +228,22 @@ export abstract class CombatCharacter
     protected locomotionOverride: LocomotionDefinition | null = null;
 
     private readonly hurtbox: ICapsule;
-    private readonly guardBox: ICapsule;
+    private readonly parryCapsule: ICapsule;
     private readonly bodyHeight: number;
     private readonly turnSmoothing: number;
     private readonly freeLocomotion: IFreeLocomotion;
-    private readonly strafeLocomotion: IStrafeLocomotion | null;
+    private readonly strafeLocomotion: IStrafeLocomotion;
     private readonly sheathedLocomotion: IFreeLocomotion | null;
-    private readonly flashesOnHit: boolean;
+    private readonly hitEffect: MaterialEffectId | null;
+    private readonly effects: EffectSet;
     private readonly reactionLockout: Partial<Record<ReactionTier, number>>;
     private readonly ignoredReactions: readonly ReactionTier[];
     private readonly reactionDodgeCancelSeconds: number;
     private readonly reactionClipsByTier: Record<ReactionTier, readonly string[]>;
     private readonly skeletons: Skeleton[] = [];
-    private readonly meshes: Mesh[] = [];
-    private readonly bonesByName = new Map<string, Object3D>();
-    private readonly machineInput: IMachineInput;
-    private readonly defender: IDefenderSnapshot = {
+    private readonly bonesByName = new Map<string, Object3D | null>();
+    private readonly moveStateInput: IMoveStateInput;
+    private readonly defenderSnapshot: IDefenderSnapshot = {
         isDead: false,
         isUntouchable: false,
         isInvulnerable: false,
@@ -222,14 +253,14 @@ export abstract class CombatCharacter
         isArmored: false,
         isStaggered: false,
     };
-    private readonly threat: IAttackThreat = {
+    private readonly reusableAttackThreat: IAttackThreat = {
         moveSerial: 0,
         secondsUntilHit: 0,
         parryable: false,
-        perilous: false,
+        dodgeOnly: false,
         impact: "light",
     };
-    private readonly telegraphEvent: ICombatEventMap["telegraph"] = {
+    private readonly attackWarningEvent: ICombatEventMap["attackWarning"] = {
         combatant: this,
         moveId: "",
         danger: "parryable",
@@ -240,29 +271,24 @@ export abstract class CombatCharacter
         bone: "",
         radius: 0,
     };
-    private readonly flashOriginals: (Material | Material[])[] = [];
-    private isFlashing = false;
     private momentumSpeed = 0;
     private isRootMotionBlocked = false;
     private previousFacingYaw: number;
     private readonly moveVelocity = new Vector3();
-    private flashRemaining = 0;
     private pendingStaggerClip: string | null = null;
     private pendingStaggerIsParried = false;
-    private pendingReactionClip: string | null = null;
+    private pendingReactionClip = "";
     private deathClip: string | null = null;
     private deathClipTime = 0;
     private deathElapsed = 0;
     private deathHoldSeconds = 0;
-    private pairedClip: string | null = null;
-    private pairedTime = 0;
+    private finisherClip: string | null = null;
+    private finisherClipTime = 0;
     private readonly rootMotionAccumulator = new Vector3();
-    private readonly telegraphTimeByMove = new Map<string, number | null>();
     private readonly movePlayback: IOneShotOptions = {
         fadeSeconds: 0,
         loop: false,
-        driven: true,
-        rate: 1,
+        timeSetByCaller: true,
     };
     private isDisposed = false;
 
@@ -285,7 +311,7 @@ export abstract class CombatCharacter
         this.freeLocomotion = config.freeLocomotion;
         this.strafeLocomotion = config.strafeLocomotion;
         this.sheathedLocomotion = config.sheathedLocomotion ?? null;
-        this.flashesOnHit = config.flashesOnHit;
+        this.hitEffect = config.hitEffect;
         this.reactionLockout = config.reactionLockout ?? {};
         this.ignoredReactions = config.ignoredReactions ?? [];
         this.reactionDodgeCancelSeconds =
@@ -303,9 +329,10 @@ export abstract class CombatCharacter
         this.modelInstance.rotation.y = config.modelYawOffset;
         this.sceneObject.add(this.modelInstance);
 
+        const meshes: Mesh[] = [];
         this.modelInstance.traverse((object) => {
             if (!(object instanceof Mesh)) return;
-            this.meshes.push(object);
+            meshes.push(object);
             if (!(object instanceof SkinnedMesh)) return;
             const own = object.skeleton;
             const shared = this.skeletons.find(
@@ -319,6 +346,7 @@ export abstract class CombatCharacter
             if (shared) object.skeleton = shared;
             else this.skeletons.push(own);
         });
+        this.effects = new EffectSet(config.hitEffect ? [config.hitEffect] : [], { meshes });
         this.animator = new CharacterAnimator(
             this.modelInstance,
             config.model.animations,
@@ -331,10 +359,12 @@ export abstract class CombatCharacter
             config.motor,
             config.spawnPosition
         );
-        this.procedural = new ProceduralRig(this.modelInstance, this.sceneObject, this.motor);
+        this.proceduralRig = new ProceduralRig(this.modelInstance, this.sceneObject, this.motor);
         this.vitals = new Vitals(config.vitals);
-        this.machine = new ActionMachine(config.moveSet, (clip) => this.animator.durationOf(clip));
-        this.machineInput = {
+        this.moveStateMachine = new MoveStateMachine(config.moveSet, (clip) =>
+            this.animator.durationOf(clip)
+        );
+        this.moveStateInput = {
             deltaSeconds: 0,
             realDeltaSeconds: 0,
             heavyHeld: false,
@@ -346,12 +376,12 @@ export abstract class CombatCharacter
             stance: "drawn",
             spendStamina: (cost) => this.vitals.trySpendStamina(cost),
         };
-        this.executor = new AttackExecutor(this, config.context);
+        this.attackExecutor = new AttackExecutor(this, config.context);
 
         this.hurtbox = { start: new Vector3(), end: new Vector3(), radius: config.motor.radius };
-        this.guardBox = { start: new Vector3(), end: new Vector3(), radius: 0 };
-        this.hurtboxes = [this.hurtbox, this.guardBox];
-        this.broadRadius = config.motor.height / 2 + config.motor.radius;
+        this.parryCapsule = { start: new Vector3(), end: new Vector3(), radius: 0 };
+        this.hurtboxes = [this.hurtbox, this.parryCapsule];
+        this.boundingRadius = config.motor.height / 2 + config.motor.radius;
         this.updateHurtbox(this.sceneObject.position);
 
         config.context.combatRegistry.register(this);
@@ -364,15 +394,18 @@ export abstract class CombatCharacter
     }
 
     get isStaggered(): boolean {
-        return this.machine.state === "staggered";
+        return this.moveStateMachine.state === "staggered";
     }
 
     get isReeling(): boolean {
-        return this.machine.state === "reaction" || this.machine.state === "staggered";
+        return (
+            this.moveStateMachine.state === "reaction" ||
+            this.moveStateMachine.state === "staggered"
+        );
     }
 
     get isAttacking(): boolean {
-        const move = this.machine.activeMove;
+        const move = this.moveStateMachine.activeMove;
         return move !== null && isStrikeMove(move);
     }
 
@@ -396,28 +429,33 @@ export abstract class CombatCharacter
         return this.motor.position;
     }
 
-    get isPaired(): boolean {
-        return this.machine.state === "paired";
+    get isInFinisher(): boolean {
+        return this.moveStateMachine.state === "finisher";
     }
 
     get activeMoveId(): string | null {
-        return this.machine.activeMove?.id ?? null;
+        return this.moveStateMachine.activeMove?.id ?? null;
     }
 
     protected get isJumping(): boolean {
-        return this.machine.output.move?.tags.includes("jump") === true;
+        return this.moveStateMachine.output.move?.tags.includes("jump") === true;
     }
 
-    private get steersFreely(): boolean {
-        return this.machine.output.allowsLocomotion || this.isJumping;
+    private get canTurnFreely(): boolean {
+        return this.moveStateMachine.output.allowsLocomotion || this.isJumping;
     }
 
     get currentTarget(): ICombatant | null {
         return this.target;
     }
 
+    protected get liveTarget(): ICombatant | null {
+        const target = this.target;
+        return target && !target.isDead ? target : null;
+    }
+
     get attackThreat(): IAttackThreat | null {
-        return attackThreatFor(this.machine.activeMove, this.machine.output, this.threat);
+        return this.moveStateMachine.attackThreat(this.reusableAttackThreat);
     }
 
     get disposed(): boolean {
@@ -441,23 +479,10 @@ export abstract class CombatCharacter
     }
 
     receiveHit(payload: IHitPayload): IHitOutcome {
-        const output = this.machine.output;
-        const inMove = this.machine.state === "move";
-        const defender = this.defender;
-
-        defender.isDead = this.vitals.isDead;
-        defender.isUntouchable = this.machine.state === "paired";
-        defender.isInvulnerable = inMove && output.isInvulnerable;
-        defender.isDodging = inMove && output.move !== null && output.move.tags.includes("dodge");
-        defender.invulnerableSeconds = output.invulnerableSeconds;
-        defender.isParrying = inMove && output.isParrying;
-        defender.isArmored = inMove && output.isArmored;
-        defender.isStaggered = this.isStaggered;
-
         const defense = resolveDefense(
-            defender,
+            this.snapshotDefender(),
             payload.parryable,
-            payload.perilous,
+            payload.dodgeOnly,
             COMBAT_TIMING.perfectDodgeSeconds
         );
 
@@ -465,51 +490,44 @@ export abstract class CombatCharacter
             return { kind: defense, reaction: "none", damageDealt: 0 };
 
         if (defense === "perfectEvaded") {
-            this.onPerfectEvade(payload.attacker);
+            this.onPerfectEvade();
             return { kind: defense, reaction: "none", damageDealt: 0 };
         }
 
-        if (defense === "parried") {
-            const parry = this.resolveParry(output.elapsedSeconds);
-            this.vitals.gainFocus(FOCUS.perParry);
-            this.context.combatEvents.emit("parried", {
-                attacker: payload.attacker,
-                defender: this,
-            });
-            this.procedural.impact(
-                this.pushDirectionAwayFrom(payload.attacker.sceneObject.position),
-                parry.tier === "perfect" ? "parryPerfect" : "parry"
-            );
-            if (!payload.ranged && payload.attacker instanceof CombatCharacter) {
-                this.procedural.beginBladeContact(
-                    this,
-                    payload.attacker,
-                    this.weaponHand(),
-                    PROCEDURAL.bladeContact.maxCorrection
-                );
-                payload.attacker.procedural.beginBladeContact(
-                    payload.attacker,
-                    this,
-                    payload.attacker.weaponHand(),
-                    PROCEDURAL.bladeContact.attackerMaxCorrection
-                );
-            }
-            if (!payload.ranged) this.onParrySucceeded(payload.attacker, parry, payload.swing);
-            return { kind: "parried", reaction: "none", damageDealt: 0, parry };
-        }
+        if (defense === "parried") return this.handleParry(payload);
+        return this.applyHitReaction(payload);
+    }
 
+    protected handleParry(payload: IHitPayload): IHitOutcome {
+        const parry = this.resolveParry(this.moveStateMachine.output.elapsedSeconds);
+        this.vitals.gainFocus(FOCUS.perParry);
+        this.context.events.emit("parried", {
+            attacker: payload.attacker,
+            defender: this,
+        });
+        this.proceduralRig.applyImpact(
+            this.pushDirectionAwayFrom(payload.attacker.sceneObject.position),
+            parry.tier === "perfect" ? "parryPerfect" : "parry"
+        );
+        if (!payload.ranged && payload.attacker instanceof CombatCharacter)
+            this.beginMutualBladeContact(payload.attacker);
+        if (!payload.ranged) this.onParrySucceeded(payload.attacker, parry, payload.swing);
+        return { kind: "parried", reaction: "none", damageDealt: 0, parry };
+    }
+
+    protected applyHitReaction(payload: IHitPayload): IHitOutcome {
         const result = this.vitals.applyDamage(
             payload.damage,
             payload.poiseDamage,
             this.isStaggered
         );
         const dealt = result.dealt;
-        this.applyKnockback(payload);
-        this.procedural.impact(
+        this.knockBackFrom(payload.origin, payload.knockback);
+        this.proceduralRig.applyImpact(
             this.pushDirectionAwayFrom(payload.origin),
             payload.impact === "light" ? "hitLight" : "hitHeavy"
         );
-        this.flash();
+        if (this.hitEffect) this.effects.get(this.hitEffect).play();
 
         if (result.killed) {
             this.die(payload.attacker, true);
@@ -517,18 +535,17 @@ export abstract class CombatCharacter
         }
 
         if (result.poiseBroken) {
-            this.machine.stagger(this.vitals.staggerSeconds);
-            this.context.combatEvents.emit("staggered", { combatant: this });
+            this.moveStateMachine.stagger(this.vitals.spec.staggerSeconds);
             this.onDamaged(payload, "stagger");
             return { kind: "staggered", reaction: "stagger", damageDealt: dealt };
         }
 
-        const rawReaction = reactionFor(payload.impact, defender);
+        const rawReaction = reactionFor(payload.impact, this.defenderSnapshot);
         const reaction = this.ignoredReactions.includes(rawReaction) ? "none" : rawReaction;
         if (reaction !== "none") {
             this.pendingReactionClip = this.pickReactionClip(reaction);
             const clipSeconds = this.animator.durationOf(this.pendingReactionClip);
-            this.machine.react(
+            this.moveStateMachine.react(
                 reaction,
                 Math.min(clipSeconds, this.reactionLockout[reaction] ?? clipSeconds),
                 this.reactionDodgeCancelSeconds
@@ -538,8 +555,38 @@ export abstract class CombatCharacter
         return { kind: "damaged", reaction, damageDealt: dealt };
     }
 
-    sampleHitShape(shape: HitShape, segment: IStrikeSegment): boolean {
-        if (shape.kind === "weapon") return this.weapon?.sampleStrike(segment) ?? false;
+    private snapshotDefender(): IDefenderSnapshot {
+        const output = this.moveStateMachine.output;
+        const inMove = this.moveStateMachine.state === "move";
+        const defender = this.defenderSnapshot;
+        defender.isDead = this.vitals.isDead;
+        defender.isUntouchable = this.isInFinisher;
+        defender.isInvulnerable = inMove && output.isInvulnerable;
+        defender.isDodging = inMove && output.move !== null && output.move.tags.includes("dodge");
+        defender.invulnerableSeconds = output.invulnerableSeconds;
+        defender.isParrying = inMove && output.isParrying;
+        defender.isArmored = inMove && output.isArmored;
+        defender.isStaggered = this.isStaggered;
+        return defender;
+    }
+
+    private beginMutualBladeContact(attacker: CombatCharacter): void {
+        this.proceduralRig.beginBladeContact(
+            this,
+            attacker,
+            this.weaponHand(),
+            PROCEDURAL_ANIMATION.bladeContact.maxCorrection
+        );
+        attacker.proceduralRig.beginBladeContact(
+            attacker,
+            this,
+            attacker.weaponHand(),
+            PROCEDURAL_ANIMATION.bladeContact.attackerMaxCorrection
+        );
+    }
+
+    sampleHitShape(shape: HitShape, segment: ICapsule): boolean {
+        if (shape.kind === "weapon") return this.weapon?.getStrikeCapsule(segment) ?? false;
 
         const bone = this.boneNamed(shape.bone);
         if (!bone) return false;
@@ -552,12 +599,12 @@ export abstract class CombatCharacter
 
     protected equipWeapon(definition: WeaponDefinition): void {
         const template = this.context.assetLibrary.getTemplate(definition.modelPath);
-        if (!template) throw new Error(`weapon model not loaded: ${definition.modelPath}`);
+        if (!template) throw new Error(ERRORS.modelNotLoaded("weapon", definition.modelPath));
 
         const boneNames = HAND_BONES[definition.gripHand];
         const requireBone = (name: string): Object3D => {
             const bone = this.boneNamed(name);
-            if (!bone) throw new Error(`no ${name} bone on ${this.id}`);
+            if (!bone) throw new Error(ERRORS.missingBone(name, this.id));
             return bone;
         };
         const handRig: IHandRig = {
@@ -582,68 +629,61 @@ export abstract class CombatCharacter
     }
 
     onAttackParried(defender: ICombatant, parry: IParryResult, swing: SwingDirection): void {
-        this.procedural.impact(
+        this.proceduralRig.applyImpact(
             this.pushDirectionAwayFrom(defender.sceneObject.position),
             parry.tier === "perfect" ? "guardBroken" : "recoil"
         );
         this.pendingStaggerClip = this.moveSet.reactions.parried[parry.tier][swing];
         this.pendingStaggerIsParried = true;
         this.vitals.breakPoise();
-        this.machine.stagger(parry.staggerSeconds);
-        if (parry.knockback === 0 || this.machine.state === "paired") return;
+        this.moveStateMachine.stagger(parry.staggerSeconds);
+        if (parry.knockback === 0 || this.isInFinisher) return;
 
-        const dx = this.sceneObject.position.x - defender.sceneObject.position.x;
-        const dz = this.sceneObject.position.z - defender.sceneObject.position.z;
-        const length = Math.hypot(dx, dz);
-        if (length > 1e-4) this.motor.addKnockback(dx / length, dz / length, parry.knockback);
+        this.knockBackFrom(defender.sceneObject.position, parry.knockback);
     }
 
-    beginPaired(role: PairedRole): void {
-        this.machine.enterPaired();
+    beginFinisher(role: FinisherRole): void {
+        this.moveStateMachine.enterFinisher();
         this.motor.stop();
         if (role === "victim") this.motor.disableCollision();
-        this.pairedClip = null;
-        this.pairedTime = 0;
+        this.setFinisherClip(null);
         this.rootMotionAccumulator.set(0, 0, 0);
     }
 
-    playPairedLoop(clip: string, yaw: number): void {
+    playFinisherLoop(clip: string, yaw: number): void {
         this.faceImmediately(yaw);
-        this.pairedClip = null;
-        this.pairedTime = 0;
-        this.animator.playOneShot(clip, CombatCharacter.PAIRED_LOOP_PLAYBACK);
+        this.setFinisherClip(null);
+        this.animator.playOneShot(clip, CombatCharacter.FINISHER_LOOP_PLAYBACK);
     }
 
-    playPaired(
+    playFinisherClip(
         clip: string,
         yaw: number,
-        blendInSeconds = CombatCharacter.PAIRED_PLAYBACK.fadeSeconds
+        blendInSeconds = CombatCharacter.FINISHER_PLAYBACK.fadeSeconds
     ): void {
         this.faceImmediately(yaw);
-        this.pairedClip = clip;
-        this.pairedTime = 0;
+        this.setFinisherClip(clip);
         this.animator.playOneShot(clip, {
-            ...CombatCharacter.PAIRED_PLAYBACK,
+            ...CombatCharacter.FINISHER_PLAYBACK,
             fadeSeconds: blendInSeconds,
         });
     }
 
-    drivePaired(clipSeconds: number): void {
-        const clip = this.pairedClip;
+    setFinisherClipTime(clipSeconds: number): void {
+        const clip = this.finisherClip;
         if (!clip) return;
 
-        const time = Math.min(clipSeconds, this.animator.durationOf(clip));
-        this.animator.driveOneShot(time);
-        this.accumulateRootMotion(clip, this.pairedTime, time);
-        this.pairedTime = time;
+        const time = this.accumulateRootMotion(clip, this.finisherClipTime, clipSeconds);
+        this.animator.setOneShotTime(time);
+        this.finisherClipTime = time;
     }
 
-    movePaired(delta: Vector3): void {
+    moveInFinisher(delta: Vector3): void {
         this.rootMotionAccumulator.x += delta.x;
         this.rootMotionAccumulator.z += delta.z;
     }
 
-    setPairedYaw(yaw: number): void {
+    setFinisherYaw(yaw: number): void {
         this.faceImmediately(yaw);
     }
 
@@ -653,20 +693,20 @@ export abstract class CombatCharacter
         this.faceImmediately(yaw);
     }
 
-    endPaired(): void {
-        this.pairedClip = null;
-        if (this.machine.state !== "paired") return;
+    endFinisher(): void {
+        this.finisherClip = null;
+        if (!this.isInFinisher) return;
 
-        this.machine.exitPaired();
+        this.moveStateMachine.exitFinisher();
         this.motor.enableCollision();
-        this.animator.returnToLocomotion(CombatCharacter.PAIRED_RETURN_FADE);
+        this.animator.returnToLocomotion(CombatCharacter.FINISHER_RETURN_FADE);
     }
 
     finishOff(killer: ICombatant, deathClip?: string): void {
         if (this.isDead) return;
         this.die(
             killer,
-            this.pairedClip === null,
+            this.finisherClip === null,
             deathClip ?? this.moveSet.reactions.finisherDeath
         );
     }
@@ -677,10 +717,10 @@ export abstract class CombatCharacter
 
     fixedUpdate(fixedTimestep: number): void {
         this.previousFacingYaw = this.facingYaw;
-        const deltaSeconds = fixedTimestep * this.context.timeDilation.localScale(this);
+        const deltaSeconds = fixedTimestep * this.context.timeDilation.hitstopTimeScale(this);
 
-        if (this.machine.state === "paired") {
-            this.tickPaired(deltaSeconds);
+        if (this.isInFinisher) {
+            this.tickFinisher(deltaSeconds);
             this.commitAccumulatedMotion(deltaSeconds, false);
             return;
         }
@@ -695,12 +735,12 @@ export abstract class CombatCharacter
 
         this.vitals.tick(deltaSeconds, this.isStaggered);
         this.desiredVelocity.set(0, 0, 0);
-        this.think(deltaSeconds);
+        this.decideActions(deltaSeconds);
 
-        const input = this.machineInput;
+        const input = this.moveStateInput;
         input.deltaSeconds = deltaSeconds;
         input.realDeltaSeconds =
-            fixedTimestep / Math.max(this.context.timeDilation.globalScale, 1e-3);
+            fixedTimestep / Math.max(this.context.timeDilation.slowMotionTimeScale, 1e-3);
         input.isGrounded = this.motor.isGrounded;
         input.stance = this.stance;
         input.heavyHeld = this.heavyHeld;
@@ -711,133 +751,148 @@ export abstract class CombatCharacter
 
         if (
             !this.motor.isGrounded &&
-            this.motor.groundGap(MOVEMENT.ledgeSnapDistance) === Number.POSITIVE_INFINITY
+            this.motor.distanceToGround(COMBAT_MOVEMENT.ledgeSnapDistance) ===
+                Number.POSITIVE_INFINITY
         )
-            this.machine.fall();
+            this.moveStateMachine.fall();
 
         const wasStaggered = this.isStaggered;
-        const output = this.machine.tick(input);
+        const output = this.moveStateMachine.tick(input);
         if (wasStaggered && !this.isStaggered) this.vitals.refillPoise();
-        this.applyMachineOutput(output, deltaSeconds);
+        this.applyMoveStateOutput(output, deltaSeconds);
     }
 
     private advanceDeathRootMotion(deltaSeconds: number): void {
         const clip = this.deathClip;
         if (!clip) return;
 
-        const next = Math.min(this.deathClipTime + deltaSeconds, this.animator.durationOf(clip));
-        this.accumulateRootMotion(clip, this.deathClipTime, next);
-        this.deathClipTime = next;
+        this.deathClipTime = this.accumulateRootMotion(
+            clip,
+            this.deathClipTime,
+            this.deathClipTime + deltaSeconds
+        );
     }
 
-    private accumulateRootMotion(clip: string, fromSeconds: number, toSeconds: number): void {
+    private accumulateRootMotion(clip: string, fromSeconds: number, toSeconds: number): number {
+        const clampedToSeconds = Math.min(toSeconds, this.animator.durationOf(clip));
         this.animator.sampleRootMotion(
             clip,
             fromSeconds,
-            toSeconds,
+            clampedToSeconds,
             this.facingYaw,
             CombatCharacter.scratchRootMotion
         );
         CombatCharacter.scratchRootMotion.y = 0;
         this.rootMotionAccumulator.add(CombatCharacter.scratchRootMotion);
+        return clampedToSeconds;
+    }
+
+    private setFinisherClip(clip: string | null): void {
+        this.finisherClip = clip;
+        this.finisherClipTime = 0;
     }
 
     private commitAccumulatedMotion(deltaSeconds: number, followsGround: boolean): void {
         const displacement = this.rootMotionAccumulator;
         if (this.motor.isCollidable)
-            this.motor.step(deltaSeconds, CombatCharacter.STILL, displacement);
-        else if (displacement.lengthSq() === 0) this.motor.hold();
+            this.motor.step(deltaSeconds, CombatCharacter.ZERO_VELOCITY, displacement);
+        else if (displacement.lengthSq() === 0) this.motor.holdPosition();
         else if (followsGround) this.motor.translateOnGround(displacement);
         else this.motor.translate(displacement);
         displacement.set(0, 0, 0);
     }
 
-    postStep(): void {
-        this.motor.postStep();
+    afterPhysicsStep(): void {
+        this.motor.syncPositionFromPhysics();
     }
 
     update(deltaSeconds: number, interpolationAlpha: number): void {
-        const scale = this.context.timeDilation.localScale(this);
+        const scale = this.context.timeDilation.hitstopTimeScale(this);
         const position = this.motor.interpolate(interpolationAlpha);
         this.sceneObject.position.copy(position);
+        const isInFinisher = this.isInFinisher;
+        const resolvedSpeed = horizontalLength(this.motor.contact.resolvedVelocity);
 
-        if (!this.isDead && this.machine.state !== "paired") {
-            if (this.machine.state === "move" && !this.steersFreely) {
+        if (!this.isDead && !isInFinisher) {
+            if (this.moveStateMachine.state === "move" && !this.canTurnFreely) {
                 this.sceneObject.rotation.y =
                     this.previousFacingYaw +
-                    angleDelta(this.previousFacingYaw, this.facingYaw) * interpolationAlpha;
+                    shortestAngleBetween(this.previousFacingYaw, this.facingYaw) *
+                        interpolationAlpha;
             } else {
-                const turn = 1 - Math.exp(-this.turnSmoothing * deltaSeconds * scale);
+                const turn = smoothingFactor(this.turnSmoothing * deltaSeconds, scale);
                 this.sceneObject.rotation.y +=
-                    angleDelta(this.sceneObject.rotation.y, this.facingYaw) * turn;
+                    shortestAngleBetween(this.sceneObject.rotation.y, this.facingYaw) * turn;
             }
-            this.feedLocomotion();
+            this.updateLocomotionAnimation(resolvedSpeed);
         }
 
-        this.procedural.restore();
+        this.proceduralRig.restoreAnimatedPose();
         this.animator.update(deltaSeconds * scale, interpolationAlpha);
         const frame = this.proceduralFrame;
         frame.deltaSeconds = deltaSeconds * scale;
+        const detailDistance = this.sceneObject.position.distanceTo(
+            this.context.combatRegistry.detailCentre
+        );
         frame.detail =
-            this.isDead || this.machine.state === "paired"
+            this.isDead || isInFinisher
                 ? "none"
-                : this.detailByDistance(PROCEDURAL.lod.fullMetres, PROCEDURAL.lod.impactMetres, [
-                      "full",
-                      "impact",
-                      "none",
-                  ]);
-        frame.physicsDetail = this.detailByDistance(
+                : CombatCharacter.detailForDistance(
+                      detailDistance,
+                      PROCEDURAL_ANIMATION.lod.fullMetres,
+                      PROCEDURAL_ANIMATION.lod.impactMetres,
+                      CombatCharacter.ANIMATION_DETAILS
+                  );
+        frame.physicsDetail = CombatCharacter.detailForDistance(
+            detailDistance,
             PHYSICS.lod.fullMetres,
             PHYSICS.lod.reducedMetres,
-            ["full", "reduced", "frozen"]
+            CombatCharacter.PHYSICS_DETAILS
         );
         if (this.physicsFreezeSeconds > 0) {
             this.physicsFreezeSeconds -= deltaSeconds;
             frame.physicsDetail = "frozen";
         }
-        const isPaired = this.machine.state === "paired";
-        if (isPaired && !this.wasPaired) this.procedural.resetPhysics();
-        this.wasPaired = isPaired;
+        if (isInFinisher && !this.wasInFinisher) this.proceduralRig.resetPhysics();
+        this.wasInFinisher = isInFinisher;
         frame.weaponHand = this.weaponHand();
-        frame.gripWeight = this.gripWeight();
+        frame.twoHandGripWeight = this.twoHandGripWeight();
         frame.grounded = this.motor.isGrounded;
-        frame.plantFeet = !this.isTranslating();
-        frame.lookTarget =
-            this.target && !this.target.isDead ? this.target.position : this.weaponGazePoint();
-        this.procedural.update(frame);
+        frame.plantFeet = !(resolvedSpeed > CombatCharacter.MIN_MOVING_SPEED);
+        frame.lookTarget = this.liveTarget?.position ?? this.weaponGazePoint();
+        this.proceduralRig.update(frame);
         this.updateHurtbox(position);
-        this.updateFlash(deltaSeconds);
+        this.effects.update(deltaSeconds);
         this.weapon?.update(
             deltaSeconds,
-            this.executor.isWeaponStriking && this.machine.state === "move"
+            this.attackExecutor.isWeaponStriking && this.moveStateMachine.state === "move"
         );
     }
 
     dispose(): void {
         this.isDisposed = true;
         this.context.combatRegistry.unregister(this);
-        this.context.timeDilation.release(this);
+        this.context.timeDilation.clearHitstop(this);
         this.weapon?.dispose();
-        this.restoreFlash();
+        this.effects.dispose();
         this.animator.dispose();
         for (const skeleton of this.skeletons) skeleton.dispose();
-        this.procedural.dispose();
+        this.proceduralRig.dispose();
         this.motor.dispose();
     }
 
-    protected abstract think(deltaSeconds: number): void;
+    protected abstract decideActions(deltaSeconds: number): void;
 
     protected onMoveStarted(_move: IMoveDefinition): void {}
 
     private weaponGazePoint(): Vector3 | null {
-        if (!this.animator.gazesAtWeapon || !this.bladeSegment(this.gazeHilt, this.gazeTip))
+        if (!this.animator.isLookingAtWeapon || !this.getBladeSegment(this.gazeHilt, this.gazeTip))
             return null;
-        return this.gazeHilt.lerp(this.gazeTip, CombatCharacter.WEAPON_GAZE_ALONG_BLADE);
+        return this.gazeHilt.lerp(this.gazeTip, CombatCharacter.WEAPON_LOOK_POINT_BLADE_FRACTION);
     }
 
-    bladeSegment(hilt: Vector3, tip: Vector3): boolean {
-        if (!this.weapon) return false;
-        return this.weapon.bladeSegment(hilt, tip);
+    getBladeSegment(hilt: Vector3, tip: Vector3): boolean {
+        return this.weapon?.getBladeSegment(hilt, tip) ?? false;
     }
 
     protected weaponHand(): Handedness {
@@ -848,38 +903,21 @@ export abstract class CombatCharacter
         const position = this.sceneObject.position;
         CombatCharacter.scratchPush.set(position.x - source.x, 0, position.z - source.z);
         if (CombatCharacter.scratchPush.lengthSq() < 1e-8)
-            BoneMath.forwardFromYaw(this.facingYaw, CombatCharacter.scratchPush);
+            forwardFromYaw(this.facingYaw, CombatCharacter.scratchPush);
         return CombatCharacter.scratchPush.normalize();
     }
 
-    private isTranslating(): boolean {
-        const resolved = this.motor.contact.resolvedVelocity;
-        return Math.hypot(resolved.x, resolved.z) > CombatCharacter.MOVING_SPEED;
-    }
-
-    private gripWeight(): number {
-        if (this.machine.state !== "move") return 0;
-        const output = this.machine.output;
+    private twoHandGripWeight(): number {
+        if (this.moveStateMachine.state !== "move") return 0;
+        const output = this.moveStateMachine.output;
         const grip = output.move?.procedural?.grip;
         if (!grip) return 0;
-        const outside = Math.max(
+        const secondsOutsideGripWindow = Math.max(
             grip.from * output.moveSeconds - output.elapsedSeconds,
             output.elapsedSeconds - grip.to * output.moveSeconds,
             0
         );
-        return clamp(1 - outside / PROCEDURAL.grip.rampSeconds, 0, 1);
-    }
-
-    private detailByDistance<Detail extends string>(
-        fullMetres: number,
-        reducedMetres: number,
-        labels: readonly [Detail, Detail, Detail]
-    ): Detail {
-        const distance = this.sceneObject.position.distanceTo(
-            this.context.combatRegistry.lodOrigin
-        );
-        if (distance <= fullMetres) return labels[0];
-        return distance <= reducedMetres ? labels[1] : labels[2];
+        return clamp(1 - secondsOutsideGripWindow / PROCEDURAL_ANIMATION.grip.rampSeconds, 0, 1);
     }
 
     protected onDamaged(_payload: IHitPayload, _reaction: ReactionTier): void {}
@@ -898,15 +936,14 @@ export abstract class CombatCharacter
 
     protected onDeadTick(_elapsed: number, _holdSeconds: number): void {}
 
-    protected freezePhysics(seconds: number): void {
+    protected freezeBonePhysics(seconds: number): void {
         this.physicsFreezeSeconds = seconds;
     }
 
-    protected tickPaired(_deltaSeconds: number): void {}
+    protected tickFinisher(_deltaSeconds: number): void {}
 
-    protected onPerfectEvade(attacker: ICombatant): void {
+    protected onPerfectEvade(): void {
         this.vitals.gainFocus(FOCUS.perPerfectDodge);
-        this.context.combatEvents.emit("perfectDodge", { dodger: this, attacker });
         if (this.team === "player")
             this.context.timeDilation.requestSlowMotion(SLOW_MOTION.perfectDodge);
     }
@@ -918,10 +955,10 @@ export abstract class CombatCharacter
     }
 
     protected die(killer: ICombatant | null, playDeathClip: boolean, deathClip?: string): void {
-        if (this.machine.state === "dead") return;
+        if (this.moveStateMachine.state === "dead") return;
 
         this.vitals.kill();
-        this.machine.die();
+        this.moveStateMachine.die();
         this.motor.stop();
         this.motor.disableCollision();
         this.deathElapsed = 0;
@@ -934,23 +971,19 @@ export abstract class CombatCharacter
             this.deathClipTime = 0;
         } else {
             this.deathClip = null;
-            this.deathHoldSeconds = this.pairedClip
-                ? Math.max(0, this.animator.durationOf(this.pairedClip) - this.pairedTime)
+            this.deathHoldSeconds = this.finisherClip
+                ? Math.max(0, this.animator.durationOf(this.finisherClip) - this.finisherClipTime)
                 : 0;
         }
 
-        this.context.combatEvents.emit("killed", { combatant: this, killer });
+        this.context.events.emit("killed", { combatant: this, killer });
         this.onKilled(killer);
     }
 
-    private applyMachineOutput(output: IMachineOutput, deltaSeconds: number): void {
+    private applyMoveStateOutput(output: IMoveStateOutput, deltaSeconds: number): void {
         if (output.moveStarted && output.move) this.beginMove(output.move);
         if (output.reactionStarted) {
-            this.animator.playOneShot(
-                this.pendingReactionClip ?? this.pickReactionClip(output.reactionStarted),
-                CombatCharacter.REACTION_PLAYBACK
-            );
-            this.pendingReactionClip = null;
+            this.animator.playOneShot(this.pendingReactionClip, CombatCharacter.REACTION_PLAYBACK);
         }
 
         if (output.staggerStarted) {
@@ -971,40 +1004,38 @@ export abstract class CombatCharacter
 
         let displacement: Vector3 | null = null;
         const move = output.move;
-        if (!move) this.handMomentumToMotor();
-
-        if (move) {
+        if (!move) this.transferMomentumToMotor();
+        else {
             const clipSeconds = this.animator.durationOf(move.clip);
-            if (!move.loop) this.animator.driveOneShot(output.time * clipSeconds);
+            if (!move.loop) this.animator.setOneShotTime(output.progress * clipSeconds);
 
-            let telegraphAt = this.telegraphTimeByMove.get(move.id);
-            if (telegraphAt === undefined) {
-                telegraphAt = telegraphTime(move, output.windupUnitSeconds);
-                this.telegraphTimeByMove.set(move.id, telegraphAt);
-            }
+            const attackWarningAt = attackWarningTime(move, output.moveSecondsDuringWindup);
             if (
-                telegraphAt !== null &&
-                ((output.moveStarted && telegraphAt === 0) ||
-                    hasCrossed(telegraphAt, output.previousTime, output.time))
+                attackWarningAt !== null &&
+                ((output.moveStarted && attackWarningAt === 0) ||
+                    hasCrossed(attackWarningAt, output.previousProgress, output.progress))
             )
-                this.emitTelegraph(move);
+                this.emitAttackWarning(move);
 
-            this.executor.process(move, output);
-            if (this.machine.state === "paired" || this.isDead) return;
+            this.attackExecutor.checkHitWindows(move, output);
+            if (this.isInFinisher || this.isDead) return;
 
-            if (this.machine.activeMove === move) {
+            if (this.moveStateMachine.activeMove === move) {
                 const projectile = move.projectile;
-                if (projectile && hasCrossed(projectile.at, output.previousTime, output.time))
+                if (
+                    projectile &&
+                    hasCrossed(projectile.at, output.previousProgress, output.progress)
+                )
                     this.launchProjectile(projectile);
 
-                this.applyTracking(move, output.time, deltaSeconds);
+                this.turnTowardsTargetDuringMove(move, output.progress, deltaSeconds);
                 displacement = this.moveDisplacement(move, output, clipSeconds, deltaSeconds);
             }
         }
 
-        const velocity = this.moveDesiredVelocity(move, output);
+        const velocity = this.velocityForCurrentMove(move, output);
         this.updateFacing(velocity);
-        this.motor.setAutostep(this.machine.state === "locomotion");
+        this.motor.setAutostep(this.moveStateMachine.state === "locomotion");
         this.motor.step(
             deltaSeconds,
             velocity,
@@ -1019,7 +1050,7 @@ export abstract class CombatCharacter
 
     private moveDisplacement(
         move: IMoveDefinition,
-        output: IMachineOutput,
+        output: IMoveStateOutput,
         clipSeconds: number,
         deltaSeconds: number
     ): Vector3 | null {
@@ -1027,22 +1058,22 @@ export abstract class CombatCharacter
 
         const displacement = CombatCharacter.scratchRootMotion.set(0, 0, 0);
         const contact = this.motor.contact;
-        const isBlockedHeadOn = output.previousTime > 0 && contact.isHeadOn;
+        const isBlockedHeadOn = output.previousProgress > 0 && contact.isHeadOn;
         if (move.motion === "rootMotion") {
             if (
                 !this.isRootMotionBlocked &&
                 move.tags.includes("dodge") &&
                 isBlockedHeadOn &&
-                contact.movedFraction < CONTACT.stalledFraction
+                contact.movedFraction < BODY_CONTACT.stalledFraction
             ) {
                 this.isRootMotionBlocked = true;
-                this.machine.openCancels();
+                this.moveStateMachine.forceCancelsOpen();
             }
             if (!this.isRootMotionBlocked) {
                 this.animator.sampleRootMotion(
                     move.clip,
-                    output.previousTime * clipSeconds,
-                    output.time * clipSeconds,
+                    output.previousProgress * clipSeconds,
+                    output.progress * clipSeconds,
                     this.facingYaw,
                     displacement
                 );
@@ -1050,15 +1081,15 @@ export abstract class CombatCharacter
                 displacement.multiplyScalar(move.rootMotionScale);
             }
         } else if (this.momentumSpeed > 0 && output.allowsLocomotion && this.hasDirectionalInput) {
-            this.handMomentumToMotor();
+            this.transferMomentumToMotor();
         } else if (this.momentumSpeed > 0) {
             const reach = move.momentum?.poseReach;
             if (isBlockedHeadOn || (reach !== undefined && this.isLowObstacleAhead(reach))) {
                 this.momentumSpeed = 0;
-                if (move.blockedInto) this.machine.forceMove(move.blockedInto);
+                if (move.blockedInto) this.moveStateMachine.startMove(move.blockedInto, true);
             } else {
-                const glide = this.momentumSpeed * deltaSeconds;
-                BoneMath.forwardFromYaw(this.facingYaw, displacement, glide);
+                const glideDistance = this.momentumSpeed * deltaSeconds;
+                forwardFromYaw(this.facingYaw, displacement, glideDistance);
                 this.momentumSpeed = Math.max(
                     0,
                     this.momentumSpeed - (move.momentum?.deceleration ?? 0) * deltaSeconds
@@ -1066,102 +1097,126 @@ export abstract class CombatCharacter
             }
         }
 
-        this.executor.applyWarp(move, output.previousTime, output.time, displacement, deltaSeconds);
+        this.attackExecutor.applyGapClose(
+            move,
+            output.previousProgress,
+            output.progress,
+            displacement,
+            deltaSeconds
+        );
         return displacement;
     }
 
     protected isLowObstacleAhead(reach: number): boolean {
-        BoneMath.forwardFromYaw(this.facingYaw, CombatCharacter.scratchForward);
-        return this.motor.isWorldBlockedAhead(
+        forwardFromYaw(this.facingYaw, CombatCharacter.scratchForward);
+        return this.motor.isWallAhead(
             CombatCharacter.scratchForward.x,
             CombatCharacter.scratchForward.z,
-            reach + CONTACT.lowProbeMargin,
-            CONTACT.lowProbeHeightFraction
+            reach + BODY_CONTACT.lowProbeMargin,
+            BODY_CONTACT.lowProbeHeightFraction
         );
     }
 
-    private handMomentumToMotor(): void {
+    private transferMomentumToMotor(): void {
         if (this.momentumSpeed <= 0) return;
-        BoneMath.forwardFromYaw(this.facingYaw, this.motor.velocity, this.momentumSpeed);
+        forwardFromYaw(this.facingYaw, this.motor.velocity, this.momentumSpeed);
         this.momentumSpeed = 0;
     }
 
-    private moveDesiredVelocity(move: IMoveDefinition | null, output: IMachineOutput): Vector3 {
+    private velocityForCurrentMove(
+        move: IMoveDefinition | null,
+        output: IMoveStateOutput
+    ): Vector3 {
         if (output.allowsLocomotion) return this.desiredVelocity;
-        if (!move || move.motion !== "physics") return CombatCharacter.STILL;
+        if (!move || move.motion !== "physics") return CombatCharacter.ZERO_VELOCITY;
 
         const velocity = this.motor.velocity;
-        const inputSpeed = Math.hypot(this.desiredVelocity.x, this.desiredVelocity.z);
-        if (!this.hasDirectionalInput || inputSpeed < 1e-4) {
-            if (this.motor.isGrounded && move.launch === undefined) return CombatCharacter.STILL;
+        const inputSpeed = horizontalLength(this.desiredVelocity);
+        if (!this.hasDirectionalInput || inputSpeed < COMBAT_MOVEMENT.minimumPlanarLength) {
+            if (this.motor.isGrounded && move.launch === undefined)
+                return CombatCharacter.ZERO_VELOCITY;
             return CombatCharacter.scratchDesired.set(velocity.x, 0, velocity.z);
         }
 
-        const speed = Math.max(Math.hypot(velocity.x, velocity.z), inputSpeed);
+        const speed = Math.max(horizontalLength(velocity), inputSpeed);
         return CombatCharacter.scratchDesired
             .copy(this.desiredVelocity)
             .multiplyScalar(speed / inputSpeed);
     }
 
     private beginMove(move: IMoveDefinition): void {
-        const handover = this.moveVelocity.lengthSq() > 0 ? this.moveVelocity : this.motor.velocity;
-        const handoverX = handover.x;
-        const handoverZ = handover.z;
+        const carriedVelocity =
+            this.moveVelocity.lengthSq() > 0 ? this.moveVelocity : this.motor.velocity;
+        const carriedVelocityX = carriedVelocity.x;
+        const carriedVelocityZ = carriedVelocity.z;
 
-        if (move.motion === "physics") this.motor.velocity.set(handoverX, 0, handoverZ);
+        if (move.motion === "physics")
+            this.motor.velocity.set(carriedVelocityX, 0, carriedVelocityZ);
         else this.motor.velocity.set(0, 0, 0);
-        this.momentumSpeed = move.motion === "momentum" ? Math.hypot(handoverX, handoverZ) : 0;
+        this.momentumSpeed =
+            move.motion === "momentum" ? Math.hypot(carriedVelocityX, carriedVelocityZ) : 0;
         this.isRootMotionBlocked = false;
         if (move.launch !== undefined) this.motor.jump(move.launch);
 
         this.previousFacingYaw = this.sceneObject.rotation.y;
         this.onMoveStarted(move);
-        this.executor.begin(move, this.target, move.spendsFocus ? this.vitals.spendFocus() : 0);
+        this.attackExecutor.begin(
+            move,
+            this.target,
+            move.spendsFocus ? this.vitals.spendFocus() : 0
+        );
         const playback = this.movePlayback;
         playback.fadeSeconds = move.fadeSeconds;
         playback.loop = move.loop ?? false;
-        playback.driven = !move.loop;
+        playback.timeSetByCaller = !move.loop;
         this.animator.playOneShot(move.clip, playback);
     }
 
-    private applyTracking(move: IMoveDefinition, time: number, deltaSeconds: number): void {
-        const target = this.target;
-        if (!target || target.isDead || !move.tracking || !isWithin(move.tracking, time)) return;
+    private turnTowardsTargetDuringMove(
+        move: IMoveDefinition,
+        time: number,
+        deltaSeconds: number
+    ): void {
+        const target = this.liveTarget;
+        if (!target || !move.tracking || !isWithin(move.tracking, time)) return;
 
         const desired = yawTowards(this.sceneObject.position, target.position);
         const step = Math.min(1, move.tracking.turnRate * deltaSeconds);
-        this.facingYaw += angleDelta(this.facingYaw, desired) * step;
+        this.facingYaw += shortestAngleBetween(this.facingYaw, desired) * step;
     }
 
     private updateFacing(velocity: Vector3): void {
-        if (!this.steersFreely) return;
+        if (!this.canTurnFreely) return;
 
-        if (this.facesTarget && this.target && !this.target.isDead) {
-            this.facingYaw = yawTowards(this.sceneObject.position, this.target.position);
+        const target = this.liveTarget;
+        if (this.facesTarget && target) {
+            this.facingYaw = yawTowards(this.sceneObject.position, target.position);
             return;
         }
 
-        if (Math.hypot(velocity.x, velocity.z) > CombatCharacter.MOVING_SPEED)
-            this.facingYaw = Math.atan2(velocity.x, velocity.z);
+        if (horizontalLength(velocity) > CombatCharacter.MIN_MOVING_SPEED)
+            this.facingYaw = yawFromDirection(velocity.x, velocity.z);
     }
 
-    private feedLocomotion(): void {
+    private updateLocomotionAnimation(resolvedSpeed: number): void {
         const velocity = this.motor.velocity;
-        const resolved = this.motor.contact.resolvedVelocity;
-        const intendedSpeed = Math.hypot(velocity.x, velocity.z);
-        const speed = Math.min(intendedSpeed, Math.hypot(resolved.x, resolved.z));
+        const intendedSpeed = horizontalLength(velocity);
+        const speed = Math.min(intendedSpeed, resolvedSpeed);
         const scale = intendedSpeed > 0 ? speed / intendedSpeed : 0;
         const yaw = this.sceneObject.rotation.y;
         const cosine = Math.cos(yaw);
         const sine = Math.sin(yaw);
         const forward = (velocity.x * sine + velocity.z * cosine) * scale;
         const right = (-velocity.x * cosine + velocity.z * sine) * scale;
-        const unarmed = this.stance === "sheathed" ? this.sheathedLocomotion : null;
+        const sheathedLocomotionChoice =
+            this.stance === "sheathed" ? this.sheathedLocomotion : null;
         const strafe =
-            this.facesTarget && !this.isSprinting && !unarmed ? this.strafeLocomotion : null;
+            this.facesTarget && !this.isSprinting && !sheathedLocomotionChoice
+                ? this.strafeLocomotion
+                : null;
 
         this.animator.setLocomotion(
-            this.locomotionOverride ?? strafe ?? unarmed ?? this.freeLocomotion
+            this.locomotionOverride ?? strafe ?? sheathedLocomotionChoice ?? this.freeLocomotion
         );
         this.animator.setLocomotionInput(right, forward, speed);
     }
@@ -1171,13 +1226,13 @@ export abstract class CombatCharacter
         if (socket) socket.getWorldPosition(CombatCharacter.scratchLaunchOrigin);
         else CombatCharacter.scratchLaunchOrigin.copy(this.position);
 
-        const hurtbox = this.target && !this.target.isDead ? this.target.hurtboxes[0] : undefined;
+        const hurtbox = this.liveTarget?.hurtboxes[0];
         if (hurtbox)
             CombatCharacter.scratchLaunchAim
                 .addVectors(hurtbox.start, hurtbox.end)
                 .multiplyScalar(0.5);
         else
-            BoneMath.forwardFromYaw(this.facingYaw, CombatCharacter.scratchLaunchAim).add(
+            forwardFromYaw(this.facingYaw, CombatCharacter.scratchLaunchAim).add(
                 CombatCharacter.scratchLaunchOrigin
             );
 
@@ -1189,17 +1244,17 @@ export abstract class CombatCharacter
         );
     }
 
-    private emitTelegraph(move: IMoveDefinition): void {
-        const event = this.telegraphEvent;
+    private emitAttackWarning(move: IMoveDefinition): void {
+        const event = this.attackWarningEvent;
         event.moveId = move.id;
-        event.danger = telegraphDanger(move);
+        event.danger = attackWarningDanger(move);
         const firstHit = move.hits[0];
         if (firstHit) event.shape = firstHit.shape;
         else if (move.projectile) {
             this.projectileSocketShape.bone = move.projectile.socket;
             event.shape = this.projectileSocketShape;
         }
-        this.context.combatEvents.emit("telegraph", event);
+        this.context.events.emit("attackWarning", event);
     }
 
     private pickReactionClip(tier: ReactionTier): string {
@@ -1207,13 +1262,19 @@ export abstract class CombatCharacter
         return clips.length > 0 ? pickRandom(clips) : this.moveSet.reactions.stagger;
     }
 
-    private applyKnockback(payload: IHitPayload): void {
-        const dx = this.sceneObject.position.x - payload.origin.x;
-        const dz = this.sceneObject.position.z - payload.origin.z;
-        const length = Math.hypot(dx, dz);
-        if (length < 1e-4) return;
+    private knockBackFrom(source: Vector3, strength: number): void {
+        const length = horizontalDirection(
+            source,
+            this.sceneObject.position,
+            CombatCharacter.scratchPush
+        );
+        if (length < COMBAT_MOVEMENT.minimumPlanarLength) return;
 
-        this.motor.addKnockback(dx / length, dz / length, payload.knockback);
+        this.motor.addKnockback(
+            CombatCharacter.scratchPush.x,
+            CombatCharacter.scratchPush.z,
+            strength
+        );
     }
 
     private updateHurtbox(position: Vector3): void {
@@ -1222,84 +1283,23 @@ export abstract class CombatCharacter
         this.hurtbox.end.set(position.x, position.y + halfSpan, position.z);
 
         const guarding =
-            this.machine.state === "move" &&
-            this.machine.output.isParrying &&
-            this.bladeSegment(this.guardBox.start, this.guardBox.end);
-        if (guarding) this.guardBox.radius = PARRY.guardRadius;
+            this.moveStateMachine.state === "move" &&
+            this.moveStateMachine.output.isParrying &&
+            this.getBladeSegment(this.parryCapsule.start, this.parryCapsule.end);
+        if (guarding) this.parryCapsule.radius = PARRY.guardRadius;
         else {
-            this.guardBox.start.copy(position);
-            this.guardBox.end.copy(position);
-            this.guardBox.radius = 0;
+            this.parryCapsule.start.copy(position);
+            this.parryCapsule.end.copy(position);
+            this.parryCapsule.radius = 0;
         }
     }
 
     private boneNamed(name: string): Object3D | null {
         const cached = this.bonesByName.get(name);
-        if (cached) return cached;
+        if (cached !== undefined) return cached;
 
         const bone = this.modelInstance.getObjectByName(name) ?? null;
-        if (bone) this.bonesByName.set(name, bone);
+        this.bonesByName.set(name, bone);
         return bone;
     }
-
-    private flash(): void {
-        if (!this.flashesOnHit) return;
-
-        this.flashRemaining = COMBAT_TIMING.hitFlashSeconds;
-        if (this.isFlashing) return;
-
-        const originals = this.flashOriginals;
-        for (let index = 0; index < this.meshes.length; index += 1) {
-            const mesh = this.meshes[index];
-            if (!mesh) continue;
-            originals[index] = mesh.material;
-            mesh.material = CombatCharacter.flashMaterial;
-        }
-        this.isFlashing = true;
-    }
-
-    private updateFlash(deltaSeconds: number): void {
-        if (this.flashRemaining <= 0) return;
-
-        this.flashRemaining = Math.max(0, this.flashRemaining - deltaSeconds);
-        if (this.flashRemaining === 0) this.restoreFlash();
-    }
-
-    private restoreFlash(): void {
-        if (!this.isFlashing) return;
-
-        const originals = this.flashOriginals;
-        for (let index = 0; index < this.meshes.length; index += 1) {
-            const mesh = this.meshes[index];
-            const original = originals[index];
-            if (mesh && original) mesh.material = original;
-        }
-        this.isFlashing = false;
-    }
-}
-
-export function attackThreatFor(
-    move: IMoveDefinition | null,
-    output: IMachineOutput,
-    out: IAttackThreat
-): IAttackThreat | null {
-    if (!move) return null;
-
-    let window: IHitWindow | undefined;
-    for (let index = 0; index < move.hits.length && !window; index += 1) {
-        const hit = move.hits[index];
-        if (hit && hit.from > output.time) window = hit;
-    }
-    if (!window) return null;
-
-    out.moveSerial = output.moveSerial;
-    const windupEnd = Math.min(window.from, firstStrikeAt(move) ?? window.from);
-    const windupLeft = Math.max(0, windupEnd - output.time);
-    out.secondsUntilHit =
-        windupLeft * output.windupUnitSeconds +
-        (window.from - output.time - windupLeft) * output.moveSeconds;
-    out.parryable = window.parryable;
-    out.perilous = window.perilous;
-    out.impact = window.impact;
-    return out;
 }

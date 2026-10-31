@@ -1,17 +1,22 @@
 import { Bone, Quaternion, Vector3 } from "three";
 import type { Object3D } from "three";
-import { PROCEDURAL, PROCEDURAL_DETAIL_RANK, SKELETON_BONES } from "@/constants/characters";
+import {
+    PROCEDURAL_ANIMATION,
+    PROCEDURAL_DETAIL_RANK,
+    SKELETON_BONES,
+} from "@/constants/characters";
 import type { ImpactProfileName } from "@/constants/characters";
 import { PHYSICS } from "@/constants/physics";
+import { BoneMath } from "@/lib/boneMath";
 import {
-    AmbientLayer,
+    BreathingAndLookLayer,
     BladeContactLayer,
-    FootLayer,
-    GripLayer,
+    FootPlantingLayer,
+    OffHandGripLayer,
     ImpactSpringLayer,
+    type ProceduralLayer,
 } from "@/entities/characters/ProceduralLayers";
-import type { ProceduralLayer } from "@/entities/characters/ProceduralLayers";
-import { PhysicsLayer } from "@/systems/physics/ClothSimulation";
+import { ClothSimulation } from "@/systems/physics/ClothSimulation";
 import type { ICapsuleSource } from "@/types/physics";
 import type { IBladeSource, IGroundProbe, IProceduralFrame } from "@/types/characters";
 import type { Handedness } from "@/types/combat";
@@ -22,7 +27,7 @@ export class ProceduralRig {
     private readonly impactSprings: ImpactSpringLayer;
     private readonly bladeContact: BladeContactLayer | null;
     private readonly layers: ProceduralLayer[];
-    private readonly physics: PhysicsLayer | null;
+    private readonly cloth: ClothSimulation | null;
     private readonly activeLayers: ProceduralLayer[] = [];
     private readonly bones: Bone[] = [];
     private readonly animatedRotations: Quaternion[] = [];
@@ -40,21 +45,23 @@ export class ProceduralRig {
         });
         this.pelvis = model.getObjectByName(SKELETON_BONES.pelvis) ?? null;
         this.impactSprings = new ImpactSpringLayer(model);
-        this.bladeContact = BladeContactLayer.create(model);
+        const bladeArms = BoneMath.findLimbs(model, SKELETON_BONES.arms);
+        this.bladeContact = bladeArms ? new BladeContactLayer(bladeArms) : null;
+        const gripArms = BoneMath.findLimbs(model, SKELETON_BONES.arms);
         const layers: (ProceduralLayer | null)[] = [
             this.impactSprings,
-            new AmbientLayer(model, body),
-            FootLayer.create(model, probe),
+            new BreathingAndLookLayer(model, body),
+            FootPlantingLayer.create(model, probe),
             this.bladeContact,
-            GripLayer.create(model),
+            gripArms ? new OffHandGripLayer(gripArms) : null,
         ];
         this.layers = layers.filter((layer): layer is ProceduralLayer => layer !== null);
-        this.physics = PhysicsLayer.create(model, body, probe);
+        this.cloth = ClothSimulation.create(model, body, probe);
     }
 
-    impact(push: Vector3, profile: ImpactProfileName): void {
-        this.impactSprings.kick(push, profile);
-        this.physics?.impact(push, PROCEDURAL.impacts[profile].strength);
+    applyImpact(push: Vector3, profile: ImpactProfileName): void {
+        this.impactSprings.addImpulse(push, profile);
+        this.cloth?.applyHitImpulse(push, PROCEDURAL_ANIMATION.impacts[profile].strength);
     }
 
     beginBladeContact(
@@ -66,7 +73,7 @@ export class ProceduralRig {
         this.bladeContact?.begin(own, other, hand, maxCorrection);
     }
 
-    restore(): void {
+    restoreAnimatedPose(): void {
         if (!this.isPoseModified) return;
         for (let index = 0; index < this.bones.length; index++)
             this.bones[index].quaternion.copy(this.animatedRotations[index]);
@@ -78,20 +85,21 @@ export class ProceduralRig {
         const rank = PROCEDURAL_DETAIL_RANK[frame.detail];
         const previousRank = this.previousRank;
         this.previousRank = rank;
-        if (rank !== PROCEDURAL_DETAIL_RANK.none) this.updatePose(frame, rank, previousRank);
-        this.physics?.update(frame.deltaSeconds, frame.physicsDetail);
+        const isPoseCurrent = rank !== PROCEDURAL_DETAIL_RANK.none;
+        if (isPoseCurrent) this.updatePose(frame, rank, previousRank);
+        this.cloth?.update(frame.deltaSeconds, frame.physicsDetail, isPoseCurrent);
     }
 
-    attachCapsule(slot: number, source: ICapsuleSource | null): void {
-        this.physics?.attachCapsule(slot, source);
+    attachCapsule(slot: number, source: ICapsuleSource): void {
+        this.cloth?.attachCapsule(slot, source);
     }
 
     resetPhysics(): void {
-        this.physics?.reset();
+        this.cloth?.reset();
     }
 
     dispose(): void {
-        this.physics?.dispose();
+        this.cloth?.dispose();
     }
 
     private updatePose(frame: IProceduralFrame, rank: number, previousRank: number): void {
