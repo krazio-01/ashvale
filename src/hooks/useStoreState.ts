@@ -1,13 +1,14 @@
 "use client";
-
 import { useSyncExternalStore } from "react";
-import { store } from "@/store/store";
-import type { IStoreState } from "@/types/store";
+import type { IStoreApi } from "@/types/store";
 
-export function useStore<Selected>(selector: (state: IStoreState) => Selected): Selected {
+export function useStoreState<State, Selected>(
+    storeApi: IStoreApi<State>,
+    selector: (state: State) => Selected
+): Selected {
     return useSyncExternalStore(
-        store.subscribe,
-        () => selector(store.getState()),
-        () => selector(store.getInitialState())
+        storeApi.subscribe,
+        () => selector(storeApi.getState()),
+        () => selector(storeApi.getInitialState())
     );
 }

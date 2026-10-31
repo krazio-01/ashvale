@@ -1,18 +1,11 @@
 "use client";
-import { useMemo } from "react";
 import { RENDER } from "@/constants/world";
-import { useSettings } from "@/store/settingsSlice";
+import { useStoreState } from "@/hooks/useStoreState";
+import { store } from "@/store/store";
+import { clamp } from "@/lib/helpers";
 
 export function useRenderPixelRatio(): number {
-    const { resolutionScale } = useSettings();
+    const { resolutionScale } = useStoreState(store, (state) => state.settings.values);
 
-    return useMemo(() => {
-        const [minimumRatio, maximumRatio] = RENDER.pixelRatioRange;
-        if (typeof window === "undefined") return minimumRatio;
-
-        const scaled = (window.devicePixelRatio || 1) * resolutionScale;
-        return Math.min(Math.max(scaled, minimumRatio), maximumRatio);
-    }, [resolutionScale]);
+    return clamp(window.devicePixelRatio * resolutionScale, ...RENDER.pixelRatioRange);
 }
-
-export default useRenderPixelRatio;

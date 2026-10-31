@@ -1,32 +1,6 @@
 import { HUD } from "@/constants/ui";
-import type { IHudAlertMarker, IHudDamageNumber, IHudSlice } from "@/types/ui";
+import type { IHudAlertMarker, IHudSlice } from "@/types/ui";
 import type { GetState, IStoreState, SetState } from "@/types/store";
-
-function createDamageNumberPool(): IHudDamageNumber[] {
-    return Array.from({ length: HUD.damageNumberPool }, () => ({
-        active: false,
-        worldX: 0,
-        worldY: 0,
-        worldZ: 0,
-        screenX: 0,
-        screenY: 0,
-        onScreen: false,
-        value: 0,
-        age: 0,
-        emphasis: false,
-        serial: 0,
-    }));
-}
-
-function createAlertMarkerPool(): IHudAlertMarker[] {
-    return Array.from({ length: HUD.alertMarkerPool }, (): IHudAlertMarker => ({
-        active: false,
-        kind: "suspicious",
-        fill: 0,
-        screenX: 0,
-        screenY: 0,
-    }));
-}
 
 export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreState>): IHudSlice {
     let damageCursor = 0;
@@ -36,37 +10,44 @@ export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreS
         isPlayerAlive: true,
         prompt: null,
         frame: {
-            vitals: {
+            meters: {
                 health: { current: 0, maximum: 0 },
                 stamina: { current: 0, maximum: 0 },
+                focus: { current: 0, maximum: 0 },
             },
-            focus: { current: 0, maximum: 0 },
             target: { visible: false, label: "", health: 0, poise: 0 },
-            damageNumbers: createDamageNumberPool(),
+            damageNumbers: Array.from({ length: HUD.damageNumberPool }, () => ({
+                active: false,
+                worldX: 0,
+                worldY: 0,
+                worldZ: 0,
+                screenX: 0,
+                screenY: 0,
+                onScreen: false,
+                value: 0,
+                age: 0,
+                emphasis: false,
+                spawnId: 0,
+            })),
             activeDamageNumbers: 0,
-            alertMarkers: createAlertMarkerPool(),
+            alertMarkers: Array.from({ length: HUD.alertMarkerPool }, (): IHudAlertMarker => ({
+                active: false,
+                kind: "suspicious",
+                fill: 0,
+                screenX: 0,
+                screenY: 0,
+            })),
             activeAlertMarkers: 0,
         },
 
-        setPlayerAlive(isPlayerAlive) {
-            if (get().hud.isPlayerAlive !== isPlayerAlive)
-                set((state) => ({ hud: { ...state.hud, isPlayerAlive } }));
+        setHudValue(key, value) {
+            if (get().hud[key] !== value) set((state) => ({ hud: { ...state.hud, [key]: value } }));
         },
 
-        setPrompt(prompt) {
-            if (get().hud.prompt !== prompt) set((state) => ({ hud: { ...state.hud, prompt } }));
-        },
-
-        setVital(id, current, maximum) {
-            const vital = get().hud.frame.vitals[id];
-            vital.current = current;
-            vital.maximum = maximum;
-        },
-
-        setFocus(current, maximum) {
-            const focus = get().hud.frame.focus;
-            focus.current = current;
-            focus.maximum = maximum;
+        setMeter(id, current, maximum) {
+            const meter = get().hud.frame.meters[id];
+            meter.current = current;
+            meter.maximum = maximum;
         },
 
         setTarget(visible, label, health, poise) {
@@ -81,7 +62,6 @@ export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreS
             const frame = get().hud.frame;
             const slot = frame.damageNumbers[damageCursor];
             damageCursor = (damageCursor + 1) % frame.damageNumbers.length;
-            if (!slot) return;
 
             if (!slot.active) frame.activeDamageNumbers += 1;
             damageSerial += 1;
@@ -93,7 +73,7 @@ export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreS
             slot.value = value;
             slot.age = 0;
             slot.emphasis = emphasis;
-            slot.serial = damageSerial;
+            slot.spawnId = damageSerial;
         },
 
         ageDamageNumbers(deltaSeconds) {
@@ -115,7 +95,6 @@ export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreS
         showAlertMarker(slot, kind, fill, screenX, screenY) {
             const frame = get().hud.frame;
             const marker = frame.alertMarkers[slot];
-            if (!marker) return;
 
             marker.active = true;
             marker.kind = kind;
@@ -128,8 +107,7 @@ export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreS
         hideAlertMarkersFrom(slot) {
             const frame = get().hud.frame;
             for (let index = slot; index < frame.activeAlertMarkers; index += 1) {
-                const marker = frame.alertMarkers[index];
-                if (marker) marker.active = false;
+                frame.alertMarkers[index].active = false;
             }
             frame.activeAlertMarkers = Math.min(frame.activeAlertMarkers, slot);
         },

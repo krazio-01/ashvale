@@ -1,25 +1,23 @@
 "use client";
-import { useContext, useEffect, useRef } from "react";
-import { AnimationFrameContext } from "@/context/FrameCallbacksContext";
+import { useContext, useEffect } from "react";
+import { useLatestRef } from "@/hooks/useLatestRef";
+import { FrameCallbacksContext } from "@/context/FrameCallbacksContext";
 import type { AnimationFrameCallback } from "@/types/store";
+import { ERRORS } from "@/constants/strings";
 
 export function useAnimationFrame(callback: AnimationFrameCallback): void {
-    const callbacks = useContext(AnimationFrameContext);
-    if (!callbacks) throw new Error("useAnimationFrame must be used inside AnimationFrameLoop");
-    const callbackRef = useRef(callback);
+    const callbacks = useContext(FrameCallbacksContext);
+    if (!callbacks) throw new Error(ERRORS.animationFrameOutsideLoop);
+    const callbackRef = useLatestRef(callback);
 
     useEffect(() => {
-        callbackRef.current = callback;
-    });
-
-    useEffect(() => {
-        const stable: AnimationFrameCallback = (state, deltaSeconds) =>
+        const forwardToLatest: AnimationFrameCallback = (state, deltaSeconds) =>
             callbackRef.current(state, deltaSeconds);
-        callbacks.push(stable);
+        callbacks.push(forwardToLatest);
 
         return () => {
-            const index = callbacks.indexOf(stable);
+            const index = callbacks.indexOf(forwardToLatest);
             if (index >= 0) callbacks.splice(index, 1);
         };
-    }, [callbacks]);
+    }, [callbacks, callbackRef]);
 }
