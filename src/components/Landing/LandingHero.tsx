@@ -1,7 +1,7 @@
 "use client";
-import { useCallback, useRef } from "react";
-import type { FormEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
+import type { FormEvent } from "react";
 import { InlineLoader } from "generative-loaders";
+import { APP_TEXT, LANDING_TEXT } from "@/constants/strings";
 
 const PortalIcon = () => (
     <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -28,7 +28,6 @@ const DiceIcon = () => (
 );
 
 const LandingHero = ({
-    heroRef,
     repoInputValue,
     onRepoInputChange,
     validationError,
@@ -37,7 +36,6 @@ const LandingHero = ({
     onRepoSubmit,
     onQuickPlay,
 }: {
-    heroRef: RefObject<HTMLDivElement | null>;
     repoInputValue: string;
     onRepoInputChange: (value: string) => void;
     validationError: string | null;
@@ -46,63 +44,23 @@ const LandingHero = ({
     onRepoSubmit: (event: FormEvent) => void;
     onQuickPlay: () => void;
 }) => {
-    const isHeroPressedRef = useRef(false);
-
-    const handleHeroPointerMove = useCallback(
-        (event: ReactPointerEvent<HTMLDivElement>) => {
-            const hero = heroRef.current;
-            if (!hero || isHeroPressedRef.current) return;
-
-            const bounds = hero.getBoundingClientRect();
-            const offsetX = (event.clientX - bounds.left) / bounds.width - 0.5;
-            const offsetY = (event.clientY - bounds.top) / bounds.height - 0.5;
-
-            hero.style.transition = "none";
-            hero.style.transform = `perspective(1100px) rotateX(${offsetY * -4}deg) rotateY(${offsetX * 4}deg)`;
-        },
-        [heroRef]
-    );
-
-    const handleHeroPointerLeave = useCallback(() => {
-        const hero = heroRef.current;
-        if (!hero) return;
-
-        hero.style.transition = "";
-        hero.style.transform = "";
-    }, [heroRef]);
-
-    const handleHeroPointerDown = useCallback(() => {
-        isHeroPressedRef.current = true;
-    }, []);
-
-    const handleHeroPointerUp = useCallback(() => {
-        isHeroPressedRef.current = false;
-    }, []);
-
     return (
-        <div
-            className="landing-hero"
-            ref={heroRef}
-            onPointerMove={handleHeroPointerMove}
-            onPointerLeave={handleHeroPointerLeave}
-            onPointerDown={handleHeroPointerDown}
-            onPointerUp={handleHeroPointerUp}
-        >
+        <div className="landing-hero">
             <div className="landing-heading">
-                <h1>Ashvale</h1>
-                <p>any public repository, rendered as a realm to explore</p>
+                <h1>{APP_TEXT.title}</h1>
+                <p>{LANDING_TEXT.tagline}</p>
             </div>
 
             <form className="landing-repo-form" onSubmit={onRepoSubmit}>
                 <div className="landing-repo-field">
-                    <span className="landing-repo-prefix">realm/</span>
+                    <span className="landing-repo-prefix">{LANDING_TEXT.repoPrefix}</span>
                     <input
                         type="text"
                         value={repoInputValue}
                         onChange={(event) => onRepoInputChange(event.target.value)}
-                        placeholder="owner/repo"
+                        placeholder={LANDING_TEXT.repoPlaceholder}
                         disabled={isInteractionLocked}
-                        aria-label="GitHub repository"
+                        aria-label={LANDING_TEXT.repoInputLabel}
                     />
                     {repoInputValue && !isInteractionLocked && (
                         <kbd className="landing-repo-kbd">↵</kbd>

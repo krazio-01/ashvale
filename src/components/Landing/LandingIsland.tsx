@@ -1,5 +1,6 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
     AnimationMixer,
     Box3,
@@ -9,7 +10,6 @@ import {
     Group,
     LoopOnce,
     LoopRepeat,
-    SkinnedMesh,
 } from "three";
 import type { AnimationAction } from "three";
 import { useFrame, useThree } from "@react-three/fiber";
@@ -18,15 +18,25 @@ import {
     flattenForInstancing,
     prepareSkinnedModel,
     createGltfLoader,
+    disposeModelTemplate,
+    disposeSkinnedModel,
 } from "@/world/assets/AssetLibrary";
 import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
-import { FOLIAGE_LAYER } from "@/world/postProcessing/PostProcessPasses";
+import { FOLIAGE_LAYER } from "@/constants/world";
 import { FractalNoise } from "@/lib/noise";
-import { blendColors, createSeededRandom, FULL_TURN } from "@/lib/helpers";
-import { ISLAND, LANDING_CHARACTER, LANDING_PROPS } from "@/constants/ui";
-import { CHARACTER, CLIP } from "@/constants/characters";
+import {
+    blendColors,
+    createSeededRandom,
+    FULL_TURN,
+    pickRandom,
+    randomPointInDisc,
+    valueInRange,
+} from "@/lib/helpers";
+import { LANDING_ISLAND, LANDING_CHARACTER, LANDING_PROPS } from "@/constants/ui";
+import { PLAYER_ASSETS, CLIP } from "@/constants/characters";
 import { PLAYER } from "@/constants/player";
 import type { IThemeEnvironment, IModelTemplate, ISkinnedModel } from "@/types/world";
+import type { IVector3 } from "@/types/physics";
 
 interface IPropSlot {
     modelPath: string;
@@ -41,6 +51,11 @@ interface IIslandScene {
     characterPosition: [number, number, number];
 }
 
+export interface ILandingRing {
+    points: readonly IVector3[];
+    color?: Color;
+}
+
 const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
     const renderer = useThree((state) => state.gl);
     const islandScene = useMemo(() => buildIslandScene(environment), [environment]);
@@ -52,6 +67,7 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
         const loader = createGltfLoader(renderer);
         let isCancelled = false;
         let loadedTemplates: Map<string, IModelTemplate> | null = null;
+        let loadedModel: ISkinnedModel | null = null;
 
         const loadProps = async () => {
             const uniquePaths = [...new Set(LANDING_PROPS.modelPaths)];
@@ -61,49 +77,27 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
                     return [modelPath, flattenForInstancing(gltf.scene, materialLibrary)] as const;
                 })
             );
-
-            const templates = new Map(loaded);
-            if (isCancelled) {
-                disposeTemplates(templates);
-                return;
-            }
-
-            loadedTemplates = templates;
-            setPropTemplates(templates);
+            loadedTemplates = new Map(loaded);
+            if (isCancelled) loadedTemplates.forEach(disposeModelTemplate);
+            else setPropTemplates(loadedTemplates);
         };
-
-        void loadProps();
-
-        return () => {
-            isCancelled = true;
-            if (loadedTemplates) disposeTemplates(loadedTemplates);
-        };
-    }, [materialLibrary, renderer]);
-
-    useEffect(() => {
-        const loader = createGltfLoader(renderer);
-        let isCancelled = false;
-        let loadedModel: ISkinnedModel | null = null;
 
         const loadCharacter = async () => {
             const [gltf, clipLibraries] = await Promise.all([
-                loader.loadAsync(CHARACTER.modelPath),
-                Promise.all(CHARACTER.clipLibraryPaths.map((path) => loader.loadAsync(path))),
+                loader.loadAsync(PLAYER_ASSETS.modelPath),
+                Promise.all(PLAYER_ASSETS.clipLibraryPaths.map((path) => loader.loadAsync(path))),
             ]);
-            const model = prepareSkinnedModel(gltf, clipLibraries, materialLibrary);
-            if (isCancelled) {
-                disposeSkinnedModel(model);
-                return;
-            }
-
-            loadedModel = model;
-            setCharacterModel(model);
+            loadedModel = prepareSkinnedModel(gltf, clipLibraries, materialLibrary);
+            if (isCancelled) disposeSkinnedModel(loadedModel);
+            else setCharacterModel(loadedModel);
         };
 
+        void loadProps();
         void loadCharacter();
 
         return () => {
             isCancelled = true;
+            loadedTemplates?.forEach(disposeModelTemplate);
             if (loadedModel) disposeSkinnedModel(loadedModel);
         };
     }, [materialLibrary, renderer]);
@@ -122,12 +116,13 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
 
             {propTemplates && (
                 <group>
-                    {islandScene.propSlots.map((slot, index) => {
-                        const template = propTemplates.get(slot.modelPath);
-                        if (!template) return null;
-
-                        return <PropInstance key={index} slot={slot} template={template} />;
-                    })}
+                    {islandScene.propSlots.map((slot, index) => (
+                        <PropInstance
+                            key={index}
+                            slot={slot}
+                            template={propTemplates.get(slot.modelPath)!}
+                        />
+                    ))}
                 </group>
             )}
 
@@ -169,7 +164,7 @@ const LandingCharacterMesh = ({
     const mixerRef = useRef<AnimationMixer | null>(null);
     const idleActionRef = useRef<AnimationAction | null>(null);
     const [isHovered, setIsHovered] = useState(false);
-    const [isReacting, setIsReacting] = useState(false);
+    const isReactingRef = useRef(false);
     const scale = model.height > 0 ? PLAYER.height / model.height : 1;
     const groundOffset = useMemo(
         () => -new Box3().setFromObject(model.scene).min.y * scale,
@@ -197,18 +192,19 @@ const LandingCharacterMesh = ({
     }, [model]);
 
     useEffect(() => {
-        if (!isReacting) return;
+        document.documentElement.classList.toggle("landing-character-hovered", isHovered);
+        return () => document.documentElement.classList.remove("landing-character-hovered");
+    }, [isHovered]);
 
+    const handleClick = (event: ThreeEvent<MouseEvent>) => {
+        event.stopPropagation();
         const mixer = mixerRef.current;
         const reactionClip = model.animations.find(
             (clip) => clip.name === LANDING_CHARACTER.reactionClipName
         );
+        if (isReactingRef.current || !mixer || !reactionClip) return;
 
-        if (!mixer || !reactionClip) {
-            setIsReacting(false);
-            return;
-        }
-
+        isReactingRef.current = true;
         const reactionAction = mixer.clipAction(reactionClip);
         reactionAction.reset();
         reactionAction.setLoop(LoopOnce, 1);
@@ -217,35 +213,20 @@ const LandingCharacterMesh = ({
         reactionAction.fadeIn(LANDING_CHARACTER.reactionFadeSeconds).play();
 
         const handleFinished = () => {
+            mixer.removeEventListener("finished", handleFinished);
             reactionAction.fadeOut(LANDING_CHARACTER.reactionFadeSeconds);
             idleActionRef.current?.reset().fadeIn(LANDING_CHARACTER.reactionFadeSeconds).play();
-            setIsReacting(false);
+            isReactingRef.current = false;
         };
-
         mixer.addEventListener("finished", handleFinished);
-        return () => mixer.removeEventListener("finished", handleFinished);
-    }, [isReacting, model]);
+    };
 
-    useEffect(() => {
-        document.documentElement.classList.toggle("landing-character-hovered", isHovered);
-        return () => document.documentElement.classList.remove("landing-character-hovered");
-    }, [isHovered]);
-
-    const handleClick = useCallback(
-        (event: ThreeEvent<MouseEvent>) => {
-            event.stopPropagation();
-            if (isReacting) return;
-            setIsReacting(true);
-        },
-        [isReacting]
-    );
-
-    const handlePointerOver = useCallback((event: ThreeEvent<PointerEvent>) => {
+    const handlePointerOver = (event: ThreeEvent<PointerEvent>) => {
         event.stopPropagation();
         setIsHovered(true);
-    }, []);
+    };
 
-    const handlePointerOut = useCallback(() => setIsHovered(false), []);
+    const handlePointerOut = () => setIsHovered(false);
 
     useFrame((_, deltaSeconds) => {
         mixerRef.current?.update(deltaSeconds);
@@ -262,7 +243,7 @@ const LandingCharacterMesh = ({
     });
 
     return (
-        <group position={position} rotation={[0, LANDING_CHARACTER.rotationY, 0]}>
+        <group position={position}>
             <group
                 ref={bounceGroupRef}
                 onClick={handleClick}
@@ -275,23 +256,17 @@ const LandingCharacterMesh = ({
     );
 };
 
-function disposeTemplates(templates: Map<string, IModelTemplate>): void {
-    for (const template of templates.values())
-        for (const part of template.parts) part.geometry.dispose();
-}
-
-function disposeSkinnedModel(model: ISkinnedModel): void {
-    model.scene.traverse((object) => {
-        if (object instanceof SkinnedMesh) object.geometry.dispose();
-    });
-}
-
 function buildIslandScene(environment: IThemeEnvironment): IIslandScene {
-    const noise = new FractalNoise(ISLAND.noiseSeed);
+    const noise = new FractalNoise(LANDING_ISLAND.noiseSeed);
     const topSurfaceHeightAt = (x: number, z: number): number =>
-        noise.sample(x * ISLAND.surfaceNoiseScale, z * ISLAND.surfaceNoiseScale, 3, 0.5) *
-            ISLAND.surfaceNoiseAmplitude -
-        ISLAND.surfaceNoiseAmplitude / 2;
+        noise.sample(
+            x * LANDING_ISLAND.surfaceNoiseScale,
+            z * LANDING_ISLAND.surfaceNoiseScale,
+            3,
+            0.5
+        ) *
+            LANDING_ISLAND.surfaceNoiseAmplitude -
+        LANDING_ISLAND.surfaceNoiseAmplitude / 2;
 
     const geometry = buildIslandGeometry(environment, noise, topSurfaceHeightAt);
 
@@ -302,9 +277,7 @@ function buildIslandScene(environment: IThemeEnvironment): IIslandScene {
         characterZ,
     ];
 
-    const propSlots = scatterProps(topSurfaceHeightAt, [
-        { x: characterX, z: characterZ, clearance: LANDING_CHARACTER.reservedClearance },
-    ]);
+    const propSlots = scatterProps(topSurfaceHeightAt);
 
     return { geometry, propSlots, characterPosition };
 }
@@ -316,19 +289,19 @@ function buildIslandGeometry(
 ): BufferGeometry {
     const { terrain } = environment;
     const ringColors = [
-        terrain.wildColor,
+        terrain.grassColor,
         terrain.soilColor,
         blendColors(terrain.soilColor, terrain.rockColor, 0.6),
         terrain.rockColor,
     ];
 
-    const rings = ISLAND.ringRadiusRatios.map((radiusRatio, ringIndex) => {
-        const baseRadius = ISLAND.topRadius * radiusRatio;
-        const y = -(ISLAND.ringDepths[ringIndex] ?? 0);
-        const color = new Color(ringColors[ringIndex] ?? terrain.rockColor);
+    const rings = LANDING_ISLAND.ringRadiusRatios.map((radiusRatio, ringIndex) => {
+        const baseRadius = LANDING_ISLAND.topRadius * radiusRatio;
+        const y = -LANDING_ISLAND.ringDepths[ringIndex];
+        const color = new Color(ringColors[ringIndex]);
 
-        const points = Array.from({ length: ISLAND.radialSegments }, (_, segment) => {
-            const angle = (segment / ISLAND.radialSegments) * FULL_TURN;
+        const points = Array.from({ length: LANDING_ISLAND.radialSegments }, (_, segment) => {
+            const angle = (segment / LANDING_ISLAND.radialSegments) * FULL_TURN;
             const radius =
                 ringIndex === 0 ? baseRadius : jitteredRadius(baseRadius, angle, ringIndex, noise);
             const x = Math.cos(angle) * radius;
@@ -345,9 +318,9 @@ function buildIslandGeometry(
     const colors: number[] = [];
 
     const pushTriangle = (
-        a: { x: number; y: number; z: number },
-        b: { x: number; y: number; z: number },
-        c: { x: number; y: number; z: number },
+        a: IVector3,
+        b: IVector3,
+        c: IVector3,
         colorA: Color,
         colorB: Color,
         colorC: Color
@@ -367,62 +340,28 @@ function buildIslandGeometry(
     };
 
     const capCenter = { x: 0, y: topSurfaceHeightAt(0, 0), z: 0 };
-    const capColor = new Color(ringColors[0] ?? terrain.wildColor);
+    const capColor = new Color(ringColors[0]);
     const rimRing = rings[0];
 
-    if (rimRing)
-        for (let segment = 0; segment < ISLAND.radialSegments; segment += 1) {
-            const current = rimRing.points[segment];
-            const next = rimRing.points[(segment + 1) % ISLAND.radialSegments];
-            if (!current || !next) continue;
+    for (let segment = 0; segment < LANDING_ISLAND.radialSegments; segment += 1) {
+        const current = rimRing.points[segment];
+        const next = rimRing.points[(segment + 1) % LANDING_ISLAND.radialSegments];
 
-            pushTriangle(capCenter, next, current, capColor, rimRing.color, rimRing.color);
-        }
-
-    for (let ringIndex = 0; ringIndex < rings.length - 1; ringIndex += 1) {
-        const upperRing = rings[ringIndex];
-        const lowerRing = rings[ringIndex + 1];
-        if (!upperRing || !lowerRing) continue;
-
-        for (let segment = 0; segment < ISLAND.radialSegments; segment += 1) {
-            const nextSegment = (segment + 1) % ISLAND.radialSegments;
-            const upperCurrent = upperRing.points[segment];
-            const upperNext = upperRing.points[nextSegment];
-            const lowerCurrent = lowerRing.points[segment];
-            const lowerNext = lowerRing.points[nextSegment];
-            if (!upperCurrent || !upperNext || !lowerCurrent || !lowerNext) continue;
-
-            pushTriangle(
-                upperCurrent,
-                lowerNext,
-                lowerCurrent,
-                upperRing.color,
-                lowerRing.color,
-                lowerRing.color
-            );
-            pushTriangle(
-                upperCurrent,
-                upperNext,
-                lowerNext,
-                upperRing.color,
-                upperRing.color,
-                lowerRing.color
-            );
-        }
+        pushTriangle(capCenter, next, current, capColor, rimRing.color, rimRing.color);
     }
 
+    stitchRings(rings, positions, colors);
+
     const finalRing = rings[rings.length - 1];
-    const apex = { x: 0, y: -ISLAND.apexDepth, z: 0 };
+    const apex = { x: 0, y: -LANDING_ISLAND.apexDepth, z: 0 };
     const apexColor = new Color(terrain.rockColor);
 
-    if (finalRing)
-        for (let segment = 0; segment < ISLAND.radialSegments; segment += 1) {
-            const current = finalRing.points[segment];
-            const next = finalRing.points[(segment + 1) % ISLAND.radialSegments];
-            if (!current || !next) continue;
+    for (let segment = 0; segment < LANDING_ISLAND.radialSegments; segment += 1) {
+        const current = finalRing.points[segment];
+        const next = finalRing.points[(segment + 1) % LANDING_ISLAND.radialSegments];
 
-            pushTriangle(current, next, apex, finalRing.color, finalRing.color, apexColor);
-        }
+        pushTriangle(current, next, apex, finalRing.color, finalRing.color, apexColor);
+    }
 
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
@@ -433,30 +372,47 @@ function buildIslandGeometry(
     return geometry;
 }
 
+export function stitchRings(
+    rings: readonly ILandingRing[],
+    positions: number[],
+    colors: number[]
+): void {
+    const pushCorner = (ring: ILandingRing, segment: number): void => {
+        const point = ring.points[segment % ring.points.length]!;
+        positions.push(point.x, point.y, point.z);
+        if (ring.color) colors.push(ring.color.r, ring.color.g, ring.color.b);
+    };
+
+    for (let ringIndex = 0; ringIndex < rings.length - 1; ringIndex += 1) {
+        const upper = rings[ringIndex]!;
+        const lower = rings[ringIndex + 1]!;
+        for (let segment = 0; segment < upper.points.length; segment += 1) {
+            pushCorner(upper, segment);
+            pushCorner(lower, segment + 1);
+            pushCorner(lower, segment);
+            pushCorner(upper, segment);
+            pushCorner(upper, segment + 1);
+            pushCorner(lower, segment + 1);
+        }
+    }
+}
+
 function jitteredRadius(
     baseRadius: number,
     angle: number,
     ringIndex: number,
     noise: FractalNoise
 ): number {
-    const noiseX = Math.cos(angle) * ISLAND.edgeNoiseScale + ringIndex * 11.7;
-    const noiseZ = Math.sin(angle) * ISLAND.edgeNoiseScale + ringIndex * 5.3;
+    const noiseX = Math.cos(angle) * LANDING_ISLAND.edgeNoiseScale + ringIndex * 11.7;
+    const noiseZ = Math.sin(angle) * LANDING_ISLAND.edgeNoiseScale + ringIndex * 5.3;
     const noiseValue = noise.sample(noiseX, noiseZ, 2, 0.5);
-    const jitterStrength = ISLAND.edgeJitterRatio + ringIndex * ISLAND.craggingGrowthPerRing;
+    const jitterStrength =
+        LANDING_ISLAND.edgeJitterRatio + ringIndex * LANDING_ISLAND.craggingGrowthPerRing;
 
     return baseRadius * (1 + (noiseValue - 0.5) * 2 * jitterStrength);
 }
 
-interface IReservedSpot {
-    x: number;
-    z: number;
-    clearance: number;
-}
-
-function scatterProps(
-    topSurfaceHeightAt: (x: number, z: number) => number,
-    reservedSpots: IReservedSpot[]
-): IPropSlot[] {
+function scatterProps(topSurfaceHeightAt: (x: number, z: number) => number): IPropSlot[] {
     const nextRandom = createSeededRandom(LANDING_PROPS.seed);
     const slots: IPropSlot[] = [];
 
@@ -465,30 +421,24 @@ function scatterProps(
         attempt < LANDING_PROPS.placementAttempts && slots.length < LANDING_PROPS.instanceCount;
         attempt += 1
     ) {
-        const angle = nextRandom() * FULL_TURN;
-        const radius = Math.sqrt(nextRandom()) * LANDING_PROPS.scatterRadius;
-        const x = Math.cos(angle) * radius;
-        const z = Math.sin(angle) * radius;
+        const [x, z] = randomPointInDisc(nextRandom, LANDING_PROPS.scatterRadius);
 
         const isFarEnoughFromProps = slots.every(
             (slot) =>
                 Math.hypot(slot.position[0] - x, slot.position[2] - z) >= LANDING_PROPS.minSpacing
         );
-        const isFarEnoughFromReserved = reservedSpots.every(
-            (spot) => Math.hypot(spot.x - x, spot.z - z) >= spot.clearance
-        );
-        if (!isFarEnoughFromProps || !isFarEnoughFromReserved) continue;
+        const isFarEnoughFromCharacter =
+            Math.hypot(LANDING_CHARACTER.position[0] - x, LANDING_CHARACTER.position[2] - z) >=
+            LANDING_CHARACTER.reservedClearance;
+        if (!isFarEnoughFromProps || !isFarEnoughFromCharacter) continue;
 
-        const [minimumScale, maximumScale] = LANDING_PROPS.scaleRange;
-        const modelPath =
-            LANDING_PROPS.modelPaths[Math.floor(nextRandom() * LANDING_PROPS.modelPaths.length)];
-        if (!modelPath) continue;
+        const modelPath = pickRandom(LANDING_PROPS.modelPaths, nextRandom);
 
         slots.push({
             modelPath,
             position: [x, topSurfaceHeightAt(x, z), z],
             rotationY: nextRandom() * FULL_TURN,
-            scale: minimumScale + nextRandom() * (maximumScale - minimumScale),
+            scale: valueInRange(LANDING_PROPS.scaleRange, nextRandom()),
         });
     }
 

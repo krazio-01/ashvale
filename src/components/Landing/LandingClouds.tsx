@@ -2,10 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Group, IcosahedronGeometry, MeshBasicMaterial } from "three";
 import { useFrame } from "@react-three/fiber";
-import { createSeededRandom, FULL_TURN, lerp } from "@/lib/helpers";
+import { createSeededRandom, FULL_TURN, lerp, randomOffset } from "@/lib/helpers";
 import { LANDING_CLOUDS } from "@/constants/ui";
 interface ICloudPuff {
-    id: number;
     x: number;
     y: number;
     z: number;
@@ -15,7 +14,6 @@ interface ICloudPuff {
 function buildPuffs(): ICloudPuff[] {
     const nextRandom = createSeededRandom(LANDING_CLOUDS.seed);
     const puffs: ICloudPuff[] = [];
-    let nextId = 0;
 
     for (let cluster = 0; cluster < LANDING_CLOUDS.count; cluster += 1) {
         const azimuth = nextRandom() * FULL_TURN;
@@ -40,9 +38,10 @@ function buildPuffs(): ICloudPuff[] {
             const spread = nextRandom() * LANDING_CLOUDS.clusterSpread;
 
             puffs.push({
-                id: nextId++,
                 x: centerX + Math.cos(spreadAngle) * spread,
-                y: clusterHeight + (nextRandom() - 0.5) * LANDING_CLOUDS.clusterSpread * 0.35,
+                y:
+                    clusterHeight +
+                    randomOffset(nextRandom, LANDING_CLOUDS.clusterSpread / 2) * 0.35,
                 z: centerZ + Math.sin(spreadAngle) * spread,
                 scale: lerp(
                     LANDING_CLOUDS.puffRadiusMin,
@@ -73,17 +72,14 @@ const LandingClouds = () => {
     useEffect(() => () => material.dispose(), [material]);
 
     useFrame((_, deltaSeconds) => {
-        const group = groupRef.current;
-        if (!group) return;
-
-        group.rotation.y += LANDING_CLOUDS.driftSpeed * deltaSeconds;
+        groupRef.current!.rotation.y += LANDING_CLOUDS.driftSpeed * deltaSeconds;
     });
 
     return (
         <group ref={groupRef}>
-            {puffs.map((puff) => (
+            {puffs.map((puff, index) => (
                 <mesh
-                    key={puff.id}
+                    key={index}
                     position={[puff.x, puff.y, puff.z]}
                     scale={puff.scale}
                     geometry={geometry}
