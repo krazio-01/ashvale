@@ -1,17 +1,19 @@
-import type { Vector3 } from "three";
+import { Vector3 } from "three";
 import type {
     HitShape,
     ICombatant,
     IFinisherDefinition,
     IHitOutcome,
+    IHitPayload,
     ImpactTier,
-    IStrikeSegment,
-    TelegraphDanger,
+    ICapsule,
+    AttackWarningDanger,
 } from "@/types/combat";
+import type { GameEvents } from "@/events/EventEmitter";
 
-export interface ITelegraphSource extends ICombatant {
+export interface IAttackWarningSource extends ICombatant {
     readonly activeMoveId: string | null;
-    sampleHitShape(shape: HitShape, segment: IStrikeSegment): boolean;
+    sampleHitShape(shape: HitShape, segment: ICapsule): boolean;
 }
 
 export interface ICombatEventMap {
@@ -23,24 +25,48 @@ export interface ICombatEventMap {
         point: Vector3;
     };
     parried: { attacker: ICombatant; defender: ICombatant };
-    perfectDodge: { dodger: ICombatant; attacker: ICombatant };
-    staggered: { combatant: ICombatant };
     killed: { combatant: ICombatant; killer: ICombatant | null };
     finisherStarted: { attacker: ICombatant; victim: ICombatant; finisher: IFinisherDefinition };
     finisherImpact: { attacker: ICombatant; victim: ICombatant };
     finisherKill: { attacker: ICombatant; victim: ICombatant };
-    telegraph: {
-        combatant: ITelegraphSource;
+    attackWarning: {
+        combatant: IAttackWarningSource;
         moveId: string;
-        danger: TelegraphDanger;
+        danger: AttackWarningDanger;
         shape: HitShape;
     };
     noise: { position: Vector3; radius: number };
     alarmRaised: { raiser: ICombatant; position: Vector3 };
 }
 
+export function createHitPayload(attacker: ICombatant, isRanged: boolean): IHitPayload {
+    return {
+        attacker,
+        moveId: "",
+        damage: 0,
+        poiseDamage: 0,
+        impact: "light",
+        knockback: 0,
+        parryable: false,
+        dodgeOnly: false,
+        ranged: isRanged,
+        swing: "side",
+        origin: new Vector3(),
+    };
+}
+
+export function createHitEvent(attacker: ICombatant): ICombatEventMap["hitLanded"] {
+    return {
+        attacker,
+        defender: attacker,
+        outcome: { kind: "damaged", reaction: "none", damageDealt: 0 },
+        impact: "light",
+        point: new Vector3(),
+    };
+}
+
 export function emitHitLanded(
-    events: CombatEvents,
+    events: GameEvents,
     event: ICombatEventMap["hitLanded"],
     defender: ICombatant,
     outcome: IHitOutcome,
@@ -52,43 +78,4 @@ export function emitHitLanded(
     event.impact = impact;
     event.point.copy(point);
     events.emit("hitLanded", event);
-}
-
-type Listener<T> = (event: T) => void;
-type ListenerSets = { [K in keyof ICombatEventMap]: Set<Listener<ICombatEventMap[K]>> };
-
-export class CombatEvents {
-    private readonly listeners: ListenerSets = {
-        hitLanded: new Set(),
-        parried: new Set(),
-        perfectDodge: new Set(),
-        staggered: new Set(),
-        killed: new Set(),
-        finisherStarted: new Set(),
-        finisherImpact: new Set(),
-        finisherKill: new Set(),
-        telegraph: new Set(),
-        noise: new Set(),
-        alarmRaised: new Set(),
-    };
-
-    on<K extends keyof ICombatEventMap>(
-        type: K,
-        listener: Listener<ICombatEventMap[K]>
-    ): () => void {
-        const listeners = this.listeners[type];
-        listeners.add(listener);
-
-        return () => {
-            listeners.delete(listener);
-        };
-    }
-
-    emit<K extends keyof ICombatEventMap>(type: K, event: ICombatEventMap[K]): void {
-        for (const listener of this.listeners[type]) listener(event);
-    }
-
-    clear(): void {
-        for (const listeners of Object.values(this.listeners)) listeners.clear();
-    }
 }
