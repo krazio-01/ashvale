@@ -1,5 +1,5 @@
 import { CLIP, SKELETON_BONES } from "@/constants/characters";
-import { degrees, metres } from "@/lib/helpers";
+import { degreesToRadians, metresToUnits } from "@/lib/helpers";
 import type {
     ImpactTier,
     IParryResult,
@@ -7,7 +7,10 @@ import type {
     ParryTier,
     ProjectileKind,
     WeaponDefinition,
+    IClipMarks,
+    IProjectileSpec,
 } from "@/types/combat";
+import type { EffectSpec } from "@/types/world";
 
 export const COMBAT_TIMING = {
     inputBufferSeconds: 0.3,
@@ -15,17 +18,17 @@ export const COMBAT_TIMING = {
     perfectDodgeSeconds: 0.12,
     maxChargeSeconds: 1.2,
     chargeDamageBonus: 0.8,
-    streakWindowSeconds: 1.6,
-    hitFlashSeconds: 0.12,
+    chainKillWindowSeconds: 1.6,
     respawnDelaySeconds: 2.5,
     locomotionReturnFade: 0.18,
     reactionFade: 0.05,
     deathFade: 0.1,
 };
 
-export const MOVEMENT = {
-    warpMaxSpeed: metres(8),
-    ledgeSnapDistance: metres(0.4),
+export const COMBAT_MOVEMENT = {
+    gapCloseMaxSpeed: metresToUnits(8),
+    ledgeSnapDistance: metresToUnits(0.4),
+    minimumPlanarLength: 1e-4,
 };
 
 export const HITSTOP = {
@@ -47,52 +50,41 @@ export const SLOW_MOTION = {
 export const FOCUS = {
     perPerfectDodge: 1,
     perParry: 1,
-    damagePerPip: 0.35,
-    poisePerPip: 0.6,
+    damagePerFocusPoint: 0.35,
+    poisePerFocusPoint: 0.6,
 };
 
 export const TARGETING = {
-    softRange: metres(7),
-    softMinDot: Math.cos(degrees(75)),
-    lockRange: metres(20),
-    lockBreakRange: metres(24),
-    lockMinDot: Math.cos(degrees(40)),
+    autoAimRange: metresToUnits(7),
+    autoAimMinFacingDot: Math.cos(degreesToRadians(75)),
+    lockRange: metresToUnits(20),
+    lockBreakRange: metresToUnits(24),
+    lockMinDot: Math.cos(degreesToRadians(40)),
     angleWeight: 1,
     distanceWeight: 0.6,
     threatBonus: 0.25,
-    gapCloseMinDistance: metres(5.5),
-    gapCloseMaxDistance: metres(9),
+    gapCloseMinDistance: metresToUnits(5.5),
+    gapCloseMaxDistance: metresToUnits(9),
 };
 
 export const FINISHER_RULES = {
-    backstabReach: metres(1.2),
-    backstabConeCos: Math.cos(degrees(35)),
-    executionReach: metres(1.2),
-    streakReach: metres(3.5),
+    backstabReach: metresToUnits(1.2),
+    backstabConeCos: Math.cos(degreesToRadians(35)),
+    executionReach: metresToUnits(1.2),
+    chainKillReach: metresToUnits(3.5),
     basicExecutionHealthFraction: 0.5,
     toughExecutionHealthFraction: 0.25,
-    contactGap: metres(0.05),
+    contactGap: metresToUnits(0.05),
     syncSeconds: 0.2,
-    syncMaxShift: metres(0.35),
-    approachSpeed: metres(9),
+    syncMaxShift: metresToUnits(0.35),
+    approachSpeed: metresToUnits(9),
     approachMaxSeconds: 0.45,
-    recoverAt: 0.82,
+    recoverAtFraction: 0.82,
 };
 
 export const KNOCKBACK_DECAY = 10;
 
-export const TELEGRAPH = { minimumWindupSeconds: 0.38, flashLeadSeconds: 0.3 };
-
-interface IParryTierFeel extends IParryResult {
-    hitstopFrames: number;
-    trauma: number;
-    slowMotion: ISlowMotionProfile | null;
-}
-
-export interface IClipMarks {
-    marks: Readonly<Record<string, number>>;
-    grip: { from: number; to: number } | null;
-}
+export const ATTACK_WARNING = { minimumWindupSeconds: 0.38, flashLeadSeconds: 0.3 };
 
 const DEFLECT_MARKS: IClipMarks = {
     marks: { idle: 0.706, lowering: 0.529, out: 0.176 },
@@ -126,7 +118,7 @@ export const PARRY = {
     perfectSeconds: 0.12,
     guardFadeSeconds: 0.03,
     reguardFadeSeconds: 0.08,
-    guardRadius: metres(0.1),
+    guardRadius: metresToUnits(0.1),
     enemyParryResult: { tier: "parry", staggerSeconds: 1.1, knockback: 0 } satisfies IParryResult,
     tiers: {
         parry: {
@@ -134,7 +126,7 @@ export const PARRY = {
             staggerSeconds: 0.6,
             knockback: 2,
             hitstopFrames: 4,
-            trauma: 0.25,
+            shakeAmount: 0.25,
             slowMotion: null,
         },
         perfect: {
@@ -142,52 +134,40 @@ export const PARRY = {
             staggerSeconds: 1.4,
             knockback: 3,
             hitstopFrames: 6,
-            trauma: 0.4,
+            shakeAmount: 0.4,
             slowMotion: SLOW_MOTION.perfectParry,
         },
-    } satisfies Record<ParryTier, IParryTierFeel>,
+    } satisfies Record<ParryTier, IParryTierEffects>,
 };
 
-export const CONTACT = {
+export const BODY_CONTACT = {
     headOnDot: -0.7,
     stalledFraction: 0.3,
-    lowProbeMargin: metres(0.15),
+    lowProbeMargin: metresToUnits(0.15),
     lowProbeHeightFraction: 0.38,
 };
 
-export interface IProjectileSpec {
-    speed: number;
-    radius: number;
-    damageScale: number;
-    poiseDamage: number;
-    impact: ImpactTier;
-    knockback: number;
-    parryable: boolean;
-    perilous: boolean;
-    color: string;
-}
-
 export const PROJECTILES: Record<ProjectileKind, IProjectileSpec> = {
     bolt: {
-        speed: metres(14),
-        radius: metres(0.18),
+        speed: metresToUnits(14),
+        radius: metresToUnits(0.18),
         damageScale: 1,
         poiseDamage: 12,
         impact: "light",
         knockback: 3,
         parryable: true,
-        perilous: false,
+        dodgeOnly: false,
         color: "#b9a8ff",
     },
     blast: {
-        speed: metres(10),
-        radius: metres(0.4),
+        speed: metresToUnits(10),
+        radius: metresToUnits(0.4),
         damageScale: 2,
         poiseDamage: 40,
         impact: "heavy",
         knockback: 8,
         parryable: false,
-        perilous: true,
+        dodgeOnly: true,
         color: "#ff5a3c",
     },
 };
@@ -202,14 +182,14 @@ export const WEAPONS = {
         gripHand: "right",
         handleCentreFraction: 0.145,
         gripRoll: 0,
-        worldLength: metres(1.05),
+        worldLength: metresToUnits(1.05),
         guardFraction: 0.18,
-        bladeRadius: metres(0.09),
+        bladeRadius: metresToUnits(0.09),
         damage: 14,
         trailColor: "#ffe2b0",
         carry: {
             bone: SKELETON_BONES.chest,
-            position: [metres(-0.276), metres(0.456), metres(-0.176)],
+            position: [metresToUnits(-0.276), metresToUnits(0.456), metresToUnits(-0.176)],
             rotationDegrees: [92.6, -64, -93.3],
         },
     },
@@ -220,9 +200,9 @@ export const WEAPONS = {
         gripHand: "right",
         handleCentreFraction: 0.14,
         gripRoll: 0,
-        worldLength: metres(1.05),
+        worldLength: metresToUnits(1.05),
         guardFraction: 0.28,
-        bladeRadius: metres(0.09),
+        bladeRadius: metresToUnits(0.09),
         damage: 14,
         trailColor: "#ffe2b0",
     },
@@ -233,9 +213,9 @@ export const WEAPONS = {
         gripHand: "right",
         handleCentreFraction: 0.17,
         gripRoll: 0,
-        worldLength: metres(0.45),
+        worldLength: metresToUnits(0.45),
         guardFraction: 0.35,
-        bladeRadius: metres(0.06),
+        bladeRadius: metresToUnits(0.06),
         damage: 6,
         trailColor: "#ffd0c0",
     },
@@ -246,9 +226,9 @@ export const WEAPONS = {
         gripHand: "right",
         handleCentreFraction: 0.12,
         gripRoll: 0,
-        worldLength: metres(1.6),
+        worldLength: metresToUnits(1.6),
         guardFraction: 0.25,
-        bladeRadius: metres(0.12),
+        bladeRadius: metresToUnits(0.12),
         damage: 22,
         trailColor: "#ffc080",
     },
@@ -259,9 +239,9 @@ export const WEAPONS = {
         gripHand: "right",
         handleCentreFraction: 0.2,
         gripRoll: 0,
-        worldLength: metres(0.95),
+        worldLength: metresToUnits(0.95),
         guardFraction: 0.7,
-        bladeRadius: metres(0.14),
+        bladeRadius: metresToUnits(0.14),
         damage: 20,
         trailColor: "#ffb070",
     },
@@ -269,24 +249,53 @@ export const WEAPONS = {
 
 export const BLADE_THICKNESS_SLICES = 16;
 
-export const GRIP = {
+export const HAND_GRIP = {
     knuckleReach: 0.9,
     palmDepth: 1.1,
 };
 
-export const TELEGRAPH_FLARES = {
-    poolSize: 8,
-    seconds: 0.45,
-    parryableColor: "#f2f0ff",
-    perilousColor: "#ff3b24",
-    parryableSize: metres(0.6),
-    perilousSize: metres(1.1),
-};
+export const EFFECTS = {
+    hitFlash: { kind: "materialFlash", color: 0xffffff, seconds: 0.12 },
+    hitSparks: {
+        kind: "particleBurst",
+        trigger: "hitLanded",
+        capacity: 256,
+        lifetimeSeconds: 0.42,
+        burstSize: { light: 10, heavy: 18, finisher: 28 },
+        speedMetres: { light: 5, heavy: 7, finisher: 7 },
+        spreadFraction: 0.5,
+        liftFraction: 0.8,
+        gravityMetres: 9,
+        sizeMetres: 0.12,
+        colorCycle: ["#ff6a3a", "#ffd9a0", "#ffd9a0"],
+        renderOrder: 11,
+    },
+    attackWarningFlares: {
+        kind: "attackWarningFlare",
+        trigger: "attackWarning",
+        ignoreTeam: "player",
+        poolSize: 8,
+        seconds: 0.45,
+        colors: { parryable: "#f2f0ff", dodgeOnly: "#ff3b24" },
+        sizes: { parryable: metresToUnits(0.6), dodgeOnly: metresToUnits(1.1) },
+        textureSize: 32,
+        renderOrder: 12,
+    },
+    slashTrail: {
+        kind: "ribbonTrail",
+        maxSamples: 24,
+        subdivisions: 6,
+        sampleLifetime: 0.22,
+        releaseFadeRate: 9,
+        innerEdgeFraction: 0.45,
+        renderOrder: 10,
+    },
+} satisfies Record<string, EffectSpec>;
 
-export const HIT_SPARKS = {
-    capacity: 256,
-    lifetimeSeconds: 0.42,
-    burstSize: { light: 10, heavy: 18, finisher: 28 } satisfies Record<ImpactTier, number>,
-    sparkColor: "#ffd9a0",
-    emberColor: "#ff6a3a",
-};
+interface IParryTierEffects extends IParryResult {
+    hitstopFrames: number;
+    shakeAmount: number;
+    slowMotion: ISlowMotionProfile | null;
+}
+
+export type EffectId = keyof typeof EFFECTS;

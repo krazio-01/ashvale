@@ -1,3 +1,6 @@
+import { range } from "@/lib/helpers";
+import type { IChapterTier, IChapterArcEntry, IRepoReference } from "@/types/realm";
+import { CHAPTER_TEXT } from "@/constants/strings";
 export const CHAPTER_DESIGN = {
     minChapters: 3,
     maxChapters: 7,
@@ -20,13 +23,11 @@ export const CHAPTER_TIERS_BY_DIRECTORY_COUNT: IChapterTier[] = [
 ];
 
 export const REGION_DESIGN = {
-    minFootprint: 40,
-    maxFootprint: 140,
+    footprintRange: range(40, 140),
     aspectJitter: 0.3,
-    minWallHeight: 5,
-    maxWallHeight: 16,
+    wallHeightRange: range(5, 16),
     regionGap: 45,
-    objectiveFootprintRatio: 0.5,
+    bossRegionMinSizeRatio: 0.5,
     spawnSizeRatio: 0.25,
 };
 
@@ -59,7 +60,7 @@ export const SMALL_REPOSITORY_FILE_LIMIT = 400;
 
 export const FEATURED_REALM_LIMIT = 12;
 
-export const QUICK_PLAY_FALLBACK_REPOS: IRepoIdentity[] = [
+export const QUICK_PLAY_FALLBACK_REPOS: IRepoReference[] = [
     { owner: "expressjs", name: "express" },
     { owner: "chalk", name: "chalk" },
     { owner: "axios", name: "axios" },
@@ -68,32 +69,6 @@ export const QUICK_PLAY_FALLBACK_REPOS: IRepoIdentity[] = [
     { owner: "pallets", name: "flask" },
 ];
 
-export const CHAPTER_ARC: IChapterArcEntry[] = [
-    { title: "The Founding", artifactName: "Ember of Origin" },
-    { title: "The First Expansion", artifactName: "Shard of Ascent" },
-    { title: "The Long Climb", artifactName: "Sigil of Endurance" },
-    { title: "The Reckoning", artifactName: "Crown of Reckoning" },
-    { title: "The Great Refactor", artifactName: "Kernel of Renewal" },
-    { title: "The Widening", artifactName: "Lens of Expanse" },
-    { title: "The Present Day", artifactName: "Heart of the Living Repo" },
-];
+export const CHAPTER_TITLES: IChapterArcEntry[] = CHAPTER_TEXT.arc;
 
-export const FALLBACK_CHAPTER_ARC: IChapterArcEntry = {
-    title: "The Untold Era",
-    artifactName: "Fragment of the Deep Log",
-};
-
-export interface IChapterTier {
-    upperBound: number;
-    chapterCount: number;
-}
-
-export interface IChapterArcEntry {
-    title: string;
-    artifactName: string;
-}
-
-interface IRepoIdentity {
-    owner: string;
-    name: string;
-}
+export const FALLBACK_CHAPTER_TITLE: IChapterArcEntry = CHAPTER_TEXT.fallback;

@@ -1,38 +1,43 @@
 import { TRAIL, VIEW_DISTANCE, WORLD_EDGE } from "@/constants/world";
-import { pair } from "@/lib/helpers";
+import { range } from "@/lib/helpers";
+import { PropLayer } from "@/types/world";
+
+export const PROP_TRANSFORM_STRIDE = 5;
+
+export const DEFAULT_FAMILY = "default";
 
 const PROP_ACTIVATION_VIEW_RATIO = 0.5;
 
 const WORLD_EDGE_FADE_WIDTH = 14;
 
+export const PROP_LAYER_RULES: Record<
+    PropLayer,
+    { castsShadow: boolean; collidesByDefault: boolean; softEdged: boolean }
+> = {
+    [PropLayer.Canopy]: { castsShadow: true, collidesByDefault: true, softEdged: false },
+    [PropLayer.Rock]: { castsShadow: true, collidesByDefault: true, softEdged: false },
+    [PropLayer.Understory]: { castsShadow: true, collidesByDefault: false, softEdged: true },
+    [PropLayer.Groundcover]: { castsShadow: false, collidesByDefault: false, softEdged: true },
+    [PropLayer.Debris]: { castsShadow: false, collidesByDefault: false, softEdged: false },
+};
+
 export const GRASS = {
-    levelRadii: [15, 45, 150],
+    detailLevelRadii: [15, 45, 150],
     tuftSpacing: 0.38,
     tuftSpreadRatio: 0.35,
     bladesPerTuft: 5,
-    bladeHeightRange: pair(0.32, 0.62),
+    bladeHeightRange: range(0.32, 0.62),
     bladeWidth: 0.1,
     bladeTaperExponent: 0.6,
     bladeCurvature: 0.6,
-    leanRange: pair(0.35, 0.95),
-    steepGroundBand: pair(0.58, 0.9),
-    worldEdgeFadeWidth: WORLD_EDGE_FADE_WIDTH,
+    leanRange: range(0.35, 0.95),
     growth: {
         crushedHeightRatio: 0.4,
         crushedExtraLean: 0.7,
     },
-    wind: {
-        heading: 0.95,
-        bendSpread: 1.1,
-        waveLength: 14,
-        waveSpeed: 1.1,
-        sway: 0.45,
-        flutter: 0.15,
-        flutterSpeed: 5.5,
-    },
     tone: {
         tuftToneWeight: 0.45,
-        tintRange: pair(0.82, 1.1),
+        tintRange: range(0.82, 1.1),
         lushHueShift: 0.03,
         dryHueShift: -0.05,
         tipLightnessGain: 0.18,
@@ -47,7 +52,7 @@ export const GRASS = {
     },
 };
 
-export const LEDGE = {
+export const LEDGE_STEPS = {
     stepRiseOfJumpApex: 0.7,
     maxAlongCorridorRatio: 0.3,
     safeRiseOfJumpApex: 0.95,
@@ -60,16 +65,16 @@ export const LEDGE = {
     buriedDepth: 1.5,
 };
 
-export const PROP_FIELD = {
+export const PROP_SCATTER = {
     activationRadius: VIEW_DISTANCE * PROP_ACTIVATION_VIEW_RATIO,
     activationJitter: 0.1,
     deactivationMargin: 15,
     occupancyCellSize: 6,
     collidingPropBudget: 900,
-    groundBite: 0.02,
+    sinkIntoGround: 0.02,
     placementAttempts: 8,
     typicalFileCount: 20,
-    richnessRange: pair(0.5, 2),
+    densityScaleRange: range(0.5, 2),
 
     softEdges: {
         trailClearance: 8.0,
@@ -91,7 +96,7 @@ export const PROP_FIELD = {
         maskGain: 0.5,
         forestThreshold: 0.46,
         outcropThreshold: 0.6,
-        radiusRange: pair(12, 24),
+        radiusRange: range(12, 24),
         canopySpeciesPerClump: 2,
         understorySpeciesPerClump: 3,
         groundcoverSpeciesPerClump: 4,
@@ -100,19 +105,19 @@ export const PROP_FIELD = {
     distantTreeline: {
         candidateSpacing: 14,
         maskWavelength: 70,
-        innerReach: WORLD_EDGE.groundApron + WORLD_EDGE.lipWidth * WORLD_EDGE.barrierLipRatio,
+        innerReach: WORLD_EDGE.flatBorderWidth + WORLD_EDGE.lipWidth * WORLD_EDGE.barrierLipRatio,
         extraReach: 8,
         innerDensity: 0.08,
         outerDensity: 0.4,
         slopeLimit: 2.5,
-        scaleBoost: pair(1.1, 1.6),
+        scaleBoost: range(1.1, 1.6),
     },
 
     biomeRegion: {
         wavelength: 200,
         octaves: 2,
         gain: 0.5,
-        equalizeBand: pair(0.1, 0.9),
+        equalizeBand: range(0.1, 0.9),
         transitionWidth: 0.4,
     },
 
@@ -121,7 +126,7 @@ export const PROP_FIELD = {
         centreBias: 0.8,
         spacingGap: 1.4,
         slopeLimit: 0.7,
-        scaleBoost: pair(1.1, 1.7),
+        scaleBoost: range(1.1, 1.7),
     },
 
     rock: {
@@ -129,18 +134,18 @@ export const PROP_FIELD = {
         centreBias: 0.6,
         spacingGap: 0.7,
         slopeLimit: 1.1,
-        scaleBoost: pair(0.9, 1.6),
+        scaleBoost: range(0.9, 1.6),
     },
 
     understory: {
         density: 0.008,
-        huddleRatio: 0.7,
-        huddleRadius: 2.6,
-        huddleCentreBias: 1.4,
+        clusterChance: 0.7,
+        clusterRadius: 2.6,
+        clusterCentreBias: 1.4,
         centreBias: 0.6,
         spacingGap: 0.15,
         slopeLimit: 1.1,
-        scaleBoost: pair(0.9, 1.25),
+        scaleBoost: range(0.9, 1.25),
     },
 
     groundcover: {
@@ -148,15 +153,15 @@ export const PROP_FIELD = {
         centreBias: 0.5,
         spacingGap: 0.05,
         slopeLimit: 0.9,
-        scaleBoost: pair(0.9, 1.2),
+        scaleBoost: range(0.9, 1.2),
     },
 
     groundcoverPatch: {
         spacing: 42,
         maskWavelength: 86,
         maskThreshold: 0.5,
-        radiusRange: pair(2.4, 5.0),
-        countRange: pair(16, 38),
+        radiusRange: range(2.4, 5.0),
+        countRange: range(16, 38),
         coreBias: 0.8,
         rimWavelength: 6,
         rimStrength: 0.5,
@@ -166,14 +171,14 @@ export const PROP_FIELD = {
     debris: {
         density: 0.0014,
         trailShoulderRatio: 0.45,
-        shoulderOffsetRatio: pair(0.25, 0.7),
+        shoulderOffsetRatio: 0.25,
         centreBias: 0.5,
         spacingGap: 0,
         slopeLimit: 1.2,
-        scaleBoost: pair(0.9, 1.15),
+        scaleBoost: range(0.9, 1.15),
     },
 
-    embedding: {
+    clutterAroundProps: {
         minimumCount: 2,
         maximumCount: 6,
         countPerFootprintMetre: 2.6,
@@ -183,7 +188,7 @@ export const PROP_FIELD = {
         rules: {
             density: 0,
             slopeLimit: 1.1,
-            scaleBoost: pair(0.7, 1.05),
+            scaleBoost: range(0.7, 1.05),
             centreBias: 0.7,
             spacingGap: 0.02,
         },
@@ -191,26 +196,26 @@ export const PROP_FIELD = {
 };
 
 export const GROUND_COVER = {
-    steepGroundBand: pair(0.58, 0.9),
+    steepGroundBand: range(0.58, 0.9),
     worldEdgeFadeWidth: WORLD_EDGE_FADE_WIDTH,
-    coverTrailBand: pair(TRAIL.halfWidth, TRAIL.halfWidth + TRAIL.wearFalloffWidth),
+    coverTrailBand: range(TRAIL.halfWidth, TRAIL.halfWidth + TRAIL.wearFalloffWidth),
 };
 
-export const BLOOM = {
-    levelRadii: [20, 52],
+export const FLOWER_PATCHES = {
+    detailLevelRadii: [20, 52],
     cellSpacing: 1.15,
     petalsPerBloom: 5,
-    stemHeightRange: pair(0.17, 0.29),
+    stemHeightRange: range(0.17, 0.29),
     petalLength: 0.11,
     petalWidth: 0.07,
     petalRise: 0.55,
-    scaleRange: pair(0.75, 1.2),
+    scaleRange: range(0.75, 1.2),
     coverage: 0.9,
     swayStrength: 0.16,
 
     patch: {
         spacing: 9,
-        radiusRange: pair(2.4, 5.2),
+        radiusRange: range(2.4, 5.2),
         chance: 0.42,
         coreRatio: 0.32,
         edgeWavelength: 4.5,
@@ -237,18 +242,18 @@ export const WATER_EDGE = {
     stoneScaleJitter: 0.15,
     springPlantCount: 10,
     springPlantCrossSpread: 1.8,
-    springPlantBackRange: pair(0.2, 1.1),
-    plantScaleRange: pair(0.85, 1.3),
+    springPlantBackRange: range(0.2, 1.1),
+    plantScaleRange: range(0.85, 1.3),
     outflowStoneOffset: 2,
-    outflowStoneScaleRange: pair(1.3, 1.8),
+    outflowStoneScaleRange: range(1.3, 1.8),
     mudholeStoneCount: 6,
     mudholeStoneAngleJitter: 0.4,
-    mudholeStoneOffsetRange: pair(0.3, 1.7),
-    mudholeStoneScaleRange: pair(0.8, 1.3),
+    mudholeStoneOffsetRange: range(0.3, 1.7),
+    mudholeStoneScaleRange: range(0.8, 1.3),
     mudholeStoneSink: 0.2,
     mudholePlantCount: 14,
-    mudholePlantOffsetRange: pair(0.2, 2),
+    mudholePlantOffsetRange: range(0.2, 2),
     mudholeTreePoolRadius: 4,
-    mudholeTreeOffsetRange: pair(3, 5),
-    mudholeTreeScaleRange: pair(0.9, 1.2),
+    mudholeTreeOffsetRange: range(3, 5),
+    mudholeTreeScaleRange: range(0.9, 1.2),
 };

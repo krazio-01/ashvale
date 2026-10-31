@@ -1,24 +1,32 @@
-import { metres } from "@/lib/helpers";
-import type { ProceduralDetail } from "@/types/characters";
+import { metresToUnits } from "@/lib/helpers";
+import { PHYSICS } from "@/constants/physics";
+import type { ProceduralDetail, ColliderGroup, ISkeletonDescriptor } from "@/types/characters";
 import type { Handedness } from "@/types/combat";
 
-export const STRIDE = {
+const suffixed = (baseNames: readonly string[], side: string): string[] =>
+    baseNames.map((baseName) => `${baseName}_${side}`);
+
+const namesPerSide = (baseNames: readonly string[]): string[] =>
+    baseNames.flatMap((baseName) => SIDE_LIST.map((side) => `${baseName}_${side}`));
+
+const forEachSide = <Item>(build: (side: string) => readonly Item[]): Item[] =>
+    SIDE_LIST.flatMap(build);
+
+const toParentChildPairs = (names: readonly string[]): [string, string][] =>
+    names.slice(1).map((name, index) => [names[index], name]);
+
+const limbSegments = (
+    baseNames: readonly string[],
+    radii: readonly number[],
+    side: string
+): [string, number][] => suffixed(baseNames, side).map((name, index) => [name, radii[index]]);
+
+export const GAIT_SPEED_PER_HEIGHT = {
     walk: 1.25,
     strafe: 1.45,
 };
 
-export const PALETTE = {
-    haze: "#4a3f63",
-    stoneDark: "#5a4f52",
-    stone: "#8a7a6d",
-    stoneLight: "#c2ad91",
-    moss: "#6f7d55",
-    ember: "#ff7a3c",
-    playerBody: "#c1503c",
-    gold: "#d4af37",
-};
-
-export const CHARACTER = {
+export const PLAYER_ASSETS = {
     modelPath: "/models/characters/Player.gltf",
     clipLibraryPaths: [
         "/models/characters/UAL1_Standard.glb",
@@ -32,97 +40,20 @@ export const IDLE_VARIATION = {
     delayJitter: 0.4,
 };
 
-export function jitteredIdleDelay(baseSeconds: number, random: () => number): number {
-    return (
-        baseSeconds * (1 - IDLE_VARIATION.delayJitter + random() * 2 * IDLE_VARIATION.delayJitter)
-    );
-}
-
-export const CREATURE = {
+export const CREATURE_MODELS = {
     impModelPath: "/models/characters/Imp.gltf",
     puglinModelPath: "/models/characters/Puglin.gltf",
 };
 
 const SIDE_SUFFIXES = { left: "l", right: "r" } as const;
+
 const SIDE_LIST = Object.values(SIDE_SUFFIXES);
+
 const FINGERS = ["index", "middle", "ring", "pinky", "thumb"] as const;
+
 const TORSO_CHAIN_UP = ["spine_03", "spine_02", "spine_01", "pelvis"] as const;
 
-const suffixed = (baseNames: readonly string[], side: string): string[] =>
-    baseNames.map((baseName) => `${baseName}_${side}`);
-const namesPerSide = (baseNames: readonly string[]): string[] =>
-    baseNames.flatMap((baseName) => SIDE_LIST.map((side) => `${baseName}_${side}`));
-const forEachSide = <Item>(build: (side: string) => readonly Item[]): Item[] =>
-    SIDE_LIST.flatMap(build);
-const chainLinks = (names: readonly string[]): [string, string][] =>
-    names.slice(1).map((name, index) => [names[index], name]);
-const limbSegments = (
-    baseNames: readonly string[],
-    radii: readonly number[],
-    side: string
-): [string, number][] => suffixed(baseNames, side).map((name, index) => [name, radii[index]]);
-
-function handBones(side: string) {
-    return {
-        hand: `hand_${side}`,
-        indexBase: `index_01_${side}`,
-        middleBase: `middle_01_${side}`,
-        ringBase: `ring_01_${side}`,
-        pinkyBase: `pinky_01_${side}`,
-        thumbBase: `thumb_01_${side}`,
-    };
-}
-
 export const HAND_BONES = { right: handBones("r"), left: handBones("l") };
-
-export type SkeletonSide = "left" | "right";
-export type ColliderGroup = "torso" | "upperArm" | "lowerArm" | "thigh" | "calf";
-export type MirrorRegion = "torso" | "neck" | "head";
-
-export interface ISkeletonDescriptor {
-    sides: Record<SkeletonSide, string>;
-    sideSigns: Record<SkeletonSide, number>;
-    bones: {
-        pelvis: string;
-        chest: string;
-        neck: string;
-        head: string;
-        headTop: string;
-        root: string;
-        spine: readonly string[];
-        clavicles: Record<SkeletonSide, string>;
-        arms: Record<SkeletonSide, readonly string[]>;
-        legs: Record<SkeletonSide, readonly string[]>;
-        feet: Record<SkeletonSide, readonly string[]>;
-        handTips: Record<SkeletonSide, string>;
-    };
-    chains: Record<string, string>;
-    limbs: Record<
-        string,
-        {
-            segments: readonly (readonly [string, number])[];
-            bones: readonly string[];
-            distal: readonly string[];
-            zone?: string;
-        }
-    >;
-    regions: Record<string, readonly string[]>;
-    rig: {
-        coreBones: readonly string[];
-        dampedBones: readonly string[];
-        torsoAnchors: readonly string[];
-    };
-    spineCurve: readonly (readonly [string, MirrorRegion])[];
-    placedJoints: readonly string[];
-    segmentTails: Record<string, string>;
-    hiddenBoneParts: readonly string[];
-    propAnchors: readonly string[];
-    colliderSegments: readonly (readonly [string, string, string, ColliderGroup])[];
-    fingerBones: readonly string[];
-    leafMarker: string;
-    previewClips: Record<"standard" | "extreme", readonly (readonly [string, number])[]>;
-    measuredJoints: readonly string[];
-}
 
 export const SKELETONS = {
     ual: {
@@ -149,10 +80,12 @@ export const SKELETONS = {
             handTips: { left: "middle_01_l", right: "middle_01_r" },
         },
         chains: Object.fromEntries([
-            ...forEachSide((side) => chainLinks(suffixed(["thigh", "calf", "foot", "ball"], side))),
-            ...chainLinks(["spine_01", "spine_02", "spine_03", "neck_01", "Head"]),
             ...forEachSide((side) =>
-                chainLinks(
+                toParentChildPairs(suffixed(["thigh", "calf", "foot", "ball"], side))
+            ),
+            ...toParentChildPairs(["spine_01", "spine_02", "spine_03", "neck_01", "Head"]),
+            ...forEachSide((side) =>
+                toParentChildPairs(
                     suffixed(["clavicle", "upperarm", "lowerarm", "hand", "middle_01"], side)
                 )
             ),
@@ -211,7 +144,6 @@ export const SKELETONS = {
                 ]),
             ],
             dampedBones: namesPerSide(["calf", "foot", "ball", "upperarm", "lowerarm", "hand"]),
-            torsoAnchors: TORSO_CHAIN_UP,
         },
         spineCurve: [
             ["pelvis", "torso"],
@@ -225,6 +157,7 @@ export const SKELETONS = {
         segmentTails: { pelvis: "spine_01", Head: "head_top" },
         fingerBones: FINGERS,
         leafMarker: "_leaf",
+        physicsBonePrefix: PHYSICS.boneNamePrefix,
         previewClips: {
             standard: [
                 ["Combat_Idle", 0.5],
@@ -243,7 +176,7 @@ export const SKELETONS = {
                 ["Slide_Hold", 0.5],
             ],
         },
-        hiddenBoneParts: [...FINGERS, "leaf", "phys_"],
+        hiddenBoneParts: [...FINGERS, "leaf", PHYSICS.boneNamePrefix],
         propAnchors: TORSO_CHAIN_UP,
         colliderSegments: [
             ["spine_01", "pelvis", "spine_03", "torso"],
@@ -270,7 +203,6 @@ export const SKELETONS = {
     },
 } as const satisfies Record<string, ISkeletonDescriptor>;
 
-export type SkeletonName = keyof typeof SKELETONS;
 export const SKELETON_BONES = SKELETONS.ual.bones;
 
 export const CLIP = {
@@ -346,7 +278,7 @@ export const CLIP = {
     enemyCleave: "Enemy_Cleave",
     enemyRisingCut: "Enemy_Rising_Cut",
     enemyBackhand: "Enemy_Backhand",
-    swordDash: "Enemy_Lunge",
+    enemyLunge: "Enemy_Lunge",
     enemyThrust: "Enemy_Thrust",
     enemyGreatCleave: "Enemy_Great_Cleave",
     enemyLowSweep: "Enemy_Low_Sweep",
@@ -361,59 +293,42 @@ export const CLIP = {
     idleFidgetLookAround: "Idle_Fidget_LookAround",
 } as const;
 
-export type ClipName = (typeof CLIP)[keyof typeof CLIP];
-
-export type ImpactProfileName =
-    "parry" | "parryPerfect" | "recoil" | "guardBroken" | "hitLight" | "hitHeavy";
-
-interface IImpactLink {
-    bone: string;
-    gain: number;
-}
-
-interface IImpactProfile {
-    strength: number;
-    stiffness: number;
-    damping: number;
-    chain: readonly IImpactLink[];
-}
-
 const SWORD_ARM_INWARD: readonly IImpactLink[] = [
-    { bone: "hand_r", gain: 0.3 },
-    { bone: "lowerarm_r", gain: 0.3 },
-    { bone: "upperarm_r", gain: 0.25 },
-    { bone: "clavicle_r", gain: 0.2 },
-    { bone: "spine_03", gain: 0.4 },
-    { bone: "spine_02", gain: 0.35 },
-    { bone: "spine_01", gain: 0.25 },
-    { bone: "pelvis", gain: 0.15 },
-    { bone: "Head", gain: -0.15 },
+    { bone: "hand_r", weight: 0.3 },
+    { bone: "lowerarm_r", weight: 0.3 },
+    { bone: "upperarm_r", weight: 0.25 },
+    { bone: "clavicle_r", weight: 0.2 },
+    { bone: "spine_03", weight: 0.4 },
+    { bone: "spine_02", weight: 0.35 },
+    { bone: "spine_01", weight: 0.25 },
+    { bone: "pelvis", weight: 0.15 },
+    { bone: "Head", weight: -0.15 },
 ];
 
 const WEAPON_ARM_THROWN: readonly IImpactLink[] = [
-    { bone: "hand_r", gain: 0.6 },
-    { bone: "lowerarm_r", gain: 0.5 },
-    { bone: "upperarm_r", gain: 0.55 },
-    { bone: "clavicle_r", gain: 0.3 },
-    { bone: "spine_03", gain: 0.45 },
-    { bone: "spine_02", gain: 0.3 },
-    { bone: "spine_01", gain: 0.2 },
-    { bone: "pelvis", gain: 0.1 },
-    { bone: "Head", gain: 0.25 },
+    { bone: "hand_r", weight: 0.6 },
+    { bone: "lowerarm_r", weight: 0.5 },
+    { bone: "upperarm_r", weight: 0.55 },
+    { bone: "clavicle_r", weight: 0.3 },
+    { bone: "spine_03", weight: 0.45 },
+    { bone: "spine_02", weight: 0.3 },
+    { bone: "spine_01", weight: 0.2 },
+    { bone: "pelvis", weight: 0.1 },
+    { bone: "Head", weight: 0.25 },
 ];
 
 const TORSO_STRUCK: readonly IImpactLink[] = [
-    { bone: "spine_03", gain: 0.4 },
-    { bone: "clavicle_l", gain: 0.15 },
-    { bone: "clavicle_r", gain: 0.15 },
-    { bone: "spine_02", gain: 0.3 },
-    { bone: "spine_01", gain: 0.2 },
-    { bone: "pelvis", gain: 0.1 },
-    { bone: "Head", gain: 0.3 },
+    { bone: "spine_03", weight: 0.4 },
+    { bone: "clavicle_l", weight: 0.15 },
+    { bone: "clavicle_r", weight: 0.15 },
+    { bone: "spine_02", weight: 0.3 },
+    { bone: "spine_01", weight: 0.2 },
+    { bone: "pelvis", weight: 0.1 },
+    { bone: "Head", weight: 0.3 },
 ];
 
-export const PROCEDURAL = {
-    lod: { fullMetres: metres(15), impactMetres: metres(40) },
+export const PROCEDURAL_ANIMATION = {
+    lod: { fullMetres: metresToUnits(15), impactMetres: metresToUnits(40) },
     ik: { reachLimit: 0.999 },
     springs: { maxRadians: 0.6, maxStepSeconds: 1 / 30, maxSubsteps: 4, linkDelaySeconds: 1 / 60 },
     impacts: {
@@ -454,7 +369,7 @@ export const PROCEDURAL = {
             chain: TORSO_STRUCK,
         },
     } satisfies Record<ImpactProfileName, IImpactProfile>,
-    ambient: {
+    breathingAndLook: {
         leanGain: 0.02,
         leanMaxRadians: 0.1,
         leanResponse: 6,
@@ -473,19 +388,19 @@ export const PROCEDURAL = {
         headShare: 0.6,
     },
     feet: {
-        liftHeight: metres(0.06),
-        maxDrift: metres(0.12),
+        liftHeight: metresToUnits(0.06),
+        maxDrift: metresToUnits(0.12),
         blendSeconds: 0.08,
         correctionSeconds: 0.08,
-        probeAbove: metres(0.6),
-        floorRise: metres(0.25),
-        maxPelvisDrop: metres(0.25),
-        maxRaise: metres(0.35),
+        probeAbove: metresToUnits(0.6),
+        floorRise: metresToUnits(0.25),
+        maxPelvisDrop: metresToUnits(0.25),
+        maxRaise: metresToUnits(0.35),
     },
     bladeContact: {
         seconds: 0.12,
-        maxCorrection: metres(0.06),
-        attackerMaxCorrection: metres(0.2),
+        maxCorrection: metresToUnits(0.06),
+        attackerMaxCorrection: metresToUnits(0.2),
     },
     grip: { rampSeconds: 0.08 },
 };
@@ -506,3 +421,33 @@ export const PROCEDURAL_EPSILON = {
     degenerateLengthSquared: 1e-8,
     springRestSquared: 1e-8,
 };
+
+type FingerBaseKey = `${(typeof FINGERS)[number]}Base`;
+
+export type SkeletonName = keyof typeof SKELETONS;
+
+export type ClipName = (typeof CLIP)[keyof typeof CLIP];
+
+export type ImpactProfileName =
+    "parry" | "parryPerfect" | "recoil" | "guardBroken" | "hitLight" | "hitHeavy";
+
+interface IImpactLink {
+    bone: string;
+    weight: number;
+}
+
+interface IImpactProfile {
+    strength: number;
+    stiffness: number;
+    damping: number;
+    chain: readonly IImpactLink[];
+}
+
+function handBones(side: string): { hand: string } & Record<FingerBaseKey, string> {
+    return {
+        hand: `hand_${side}`,
+        ...(Object.fromEntries(
+            FINGERS.map((finger) => [`${finger}Base`, `${finger}_01_${side}`])
+        ) as Record<FingerBaseKey, string>),
+    };
+}
