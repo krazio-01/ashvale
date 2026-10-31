@@ -38,7 +38,6 @@
     .health-track,
     .poise-track {
         @include hud-bar-track;
-        width: 100%;
         background: rgba(0, 0, 0, 0.4);
     }
 

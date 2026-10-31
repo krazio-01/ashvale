@@ -2,14 +2,13 @@
 import { useEffect, useRef } from "react";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
 import { HUD } from "@/constants/ui";
-import { roundForStyle, vitalFraction } from "@/lib/hud";
+import { roundForCss, meterFillRatio, hudWriter } from "@/lib/hud";
 import "./damageVignette.scss";
 
 export const DamageVignette = () => {
     const vignetteRef = useRef<HTMLDivElement>(null);
     const previousFraction = useRef(-1);
     const intensity = useRef(0);
-    const appliedOpacity = useRef(-1);
     const prefersReducedMotion = useRef(false);
 
     useEffect(() => {
@@ -23,8 +22,8 @@ export const DamageVignette = () => {
     }, []);
 
     useAnimationFrame(({ hud: { frame } }, deltaSeconds) => {
-        const vital = frame.vitals.health;
-        const fraction = vitalFraction(vital);
+        const vital = frame.meters.health;
+        const fraction = meterFillRatio(vital);
 
         if (previousFraction.current < 0) previousFraction.current = fraction;
 
@@ -42,12 +41,7 @@ export const DamageVignette = () => {
                 : 0;
 
         const opacity = Math.min(1, intensity.current + lowPressure * HUD.vignetteLowStrength);
-        const rounded = roundForStyle(opacity);
-
-        if (rounded !== appliedOpacity.current) {
-            appliedOpacity.current = rounded;
-            if (vignetteRef.current) vignetteRef.current.style.opacity = `${rounded}`;
-        }
+        hudWriter.opacity(vignetteRef.current, roundForCss(opacity));
     });
 
     return <div className="damage-vignette" ref={vignetteRef} />;

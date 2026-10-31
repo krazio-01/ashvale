@@ -2,7 +2,7 @@
 import { useRef } from "react";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
 import { HUD } from "@/constants/ui";
-import { roundForStyle, screenAnchorTransform } from "@/lib/hud";
+import { roundForCss, screenPositionTransform, hudWriter } from "@/lib/hud";
 import type { AlertMarkerKind } from "@/types/ui";
 import "./alertMarkers.scss";
 
@@ -12,9 +12,6 @@ export const AlertMarkers = () => {
     const markers = useRef<(HTMLSpanElement | null)[]>([]);
     const glyphs = useRef<(HTMLSpanElement | null)[]>([]);
     const fills = useRef<(HTMLSpanElement | null)[]>([]);
-    const shownKinds = useRef<(AlertMarkerKind | null)[]>([]);
-    const appliedTransforms = useRef<string[]>([]);
-    const appliedFills = useRef<number[]>([]);
     const previousActiveCount = useRef(0);
 
     useAnimationFrame(({ hud: { frame } }) => {
@@ -23,29 +20,18 @@ export const AlertMarkers = () => {
         for (let index = 0; index < scanCount; index += 1) {
             const marker = frame.alertMarkers[index];
             const element = markers.current[index];
-            if (!marker || !element) continue;
+            if (!element) continue;
 
             const kind = marker.active ? marker.kind : null;
-            if (shownKinds.current[index] !== kind) {
-                shownKinds.current[index] = kind;
-                element.dataset.kind = kind ?? "hidden";
-                const glyph = glyphs.current[index];
-                if (glyph && kind) glyph.textContent = GLYPHS[kind];
-            }
+            hudWriter.data(element, "kind", kind ?? "hidden");
             if (!kind) continue;
 
-            const transform = screenAnchorTransform(marker.screenX, marker.screenY, "-50%, -100%");
-            if (appliedTransforms.current[index] !== transform) {
-                appliedTransforms.current[index] = transform;
-                element.style.transform = transform;
-            }
-
-            const fill = roundForStyle(marker.fill);
-            if (appliedFills.current[index] !== fill) {
-                appliedFills.current[index] = fill;
-                const fillElement = fills.current[index];
-                if (fillElement) fillElement.style.transform = `scaleY(${fill})`;
-            }
+            hudWriter.text(glyphs.current[index], GLYPHS[kind]);
+            hudWriter.transform(
+                element,
+                screenPositionTransform(marker.screenX, marker.screenY, "-50%, -100%")
+            );
+            hudWriter.scale(fills.current[index], "Y", roundForCss(marker.fill));
         }
     });
 

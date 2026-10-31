@@ -1,12 +1,14 @@
 "use client";
-import { INPUT_BINDINGS, keyLabel } from "@/constants/player";
-import { useStore } from "@/hooks/useStoreState";
+import { INPUT_BINDINGS } from "@/constants/player";
+import { keyLabel } from "@/lib/helpers";
+import { useStoreState } from "@/hooks/useStoreState";
+import { store } from "@/store/store";
 import "./finisherPrompt.scss";
 
 const FINISHER_KEY_LABEL = keyLabel(INPUT_BINDINGS.finisher[0]);
 
 export const FinisherPrompt = () => {
-    const label = useStore((state) => state.hud.prompt);
+    const label = useStoreState(store, (state) => state.hud.prompt);
 
     return (
         <div className="finisher-prompt" data-visible={label !== null}>
