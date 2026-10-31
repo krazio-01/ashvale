@@ -1,4 +1,4 @@
-import type { IHudSlice } from "@/types/ui";
+import type { IHudSlice, ISettingsSlice } from "@/types/ui";
 
 export type StoreListener<State> = (state: State, previousState: State) => void;
 
@@ -17,8 +17,17 @@ export interface IStoreApi<State> {
     subscribe: (listener: StoreListener<State>) => () => void;
 }
 
+export interface IPersistOptions<State, Saved> {
+    storageKey: string;
+    defaults: Saved;
+    isAllowed: (key: keyof Saved, value: unknown) => boolean;
+    select: (state: State) => Saved;
+    restore: (state: State, saved: Saved) => Partial<State>;
+}
+
 export interface IStoreState {
     hud: IHudSlice;
+    settings: ISettingsSlice;
 }
 
 export type AnimationFrameCallback = (state: IStoreState, deltaSeconds: number) => void;

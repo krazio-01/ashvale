@@ -85,3 +85,13 @@ export interface IErrorResponse {
     message: string;
     data: null;
 }
+
+export interface IChapterTier {
+    upperBound: number;
+    chapterCount: number;
+}
+
+export interface IChapterArcEntry {
+    title: string;
+    artifactName: string;
+}
