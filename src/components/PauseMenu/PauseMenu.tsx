@@ -1,17 +1,16 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GraphicsQuality, IGameSettings, SettingSection } from "@/types/ui";
-import {
-    SETTING_SECTIONS,
-    DEFAULT_SETTINGS,
-    draftWithChange,
-    draftWithPreset,
-    settingsMatch,
-    updateSettings,
-    useSettings,
-} from "@/store/settingsSlice";
-import { SettingsPanel } from "@/components/PauseMenu/SettingsPanel";
-import "@/components/PauseMenu/pauseMenu.scss";
+
+import { useEffect, useRef, useState } from "react";
+import type { IGameSettings, SettingSection } from "@/types/ui";
+import { DEFAULT_SETTINGS, getControlsForSection, SETTING_SECTIONS } from "@/constants/ui";
+import { areSettingsEqual, withQualityPreset, withSettingChange } from "@/store/settingsSlice";
+import { useStoreState } from "@/hooks/useStoreState";
+import { store } from "@/store/store";
+import { ControlsReference } from "./ControlsReference/ControlsReference";
+import { SettingControlRow } from "./SettingControls";
+import "./pauseMenu.scss";
+import { PAUSE_TEXT } from "@/constants/strings";
+import { useHotkey } from "@/hooks/useHotkey";
 
 interface PauseMenuProps {
     onResume: () => void;
@@ -26,24 +25,23 @@ export const PauseMenu = ({
     onResume,
     onQuit,
     realmTitle,
-    title = "Paused",
-    dismissLabel = "Resume",
+    title = PAUSE_TEXT.title,
+    dismissLabel = PAUSE_TEXT.resume,
     dismissKey,
 }: PauseMenuProps) => {
-    const committed = useSettings();
+    const committed = useStoreState(store, (state) => state.settings.values);
     const [activeSection, setActiveSection] = useState<SettingSection>("Display");
     const [draft, setDraft] = useState<IGameSettings>(committed);
     const shellRef = useRef<HTMLDivElement>(null);
 
-    const isDirty = useMemo(() => !settingsMatch(draft, committed), [draft, committed]);
+    const isDirty = !areSettingsEqual(draft, committed);
 
     useEffect(() => {
         shellRef.current?.focus();
     }, []);
 
     useEffect(() => {
-        const shell = shellRef.current;
-        if (!shell) return;
+        const shell = shellRef.current!;
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key !== "Tab") return;
@@ -51,7 +49,6 @@ export const PauseMenu = ({
             const focusable = shell.querySelectorAll<HTMLElement>(
                 'button:not(:disabled), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
             );
-            if (focusable.length === 0) return;
 
             const first = focusable[0];
             const last = focusable[focusable.length - 1];
@@ -69,41 +66,34 @@ export const PauseMenu = ({
         return () => shell.removeEventListener("keydown", handleKeyDown);
     }, []);
 
-    const handleChange = useCallback((partial: Partial<IGameSettings>) => {
+    const handleChange = (partial: Partial<IGameSettings>) => {
         setDraft((current) => {
             const preset = partial.qualityPreset;
 
             if (preset !== undefined) {
                 if (preset === "custom") return current;
-                return draftWithPreset(current, preset as Exclude<GraphicsQuality, "custom">);
+                return withQualityPreset(current, preset);
             }
 
-            return draftWithChange(current, partial);
+            return withSettingChange(current, partial);
         });
-    }, []);
+    };
 
-    const handleSave = useCallback(() => {
-        updateSettings(draft);
-    }, [draft]);
+    const handleSave = () => store.getState().settings.update(draft);
 
-    const attemptClose = useCallback(
-        (action: () => void) => {
-            if (isDirty && !window.confirm("Discard unsaved changes?")) return;
-            action();
-        },
-        [isDirty]
-    );
+    const attemptClose = (action: () => void) => {
+        if (isDirty && !window.confirm(PAUSE_TEXT.discardChanges)) return;
+        action();
+    };
 
-    useEffect(() => {
-        const handleEscape = (e: KeyboardEvent) => {
-            if (e.key !== "Escape") return;
+    useHotkey(
+        "Escape",
+        (e) => {
             e.preventDefault();
             attemptClose(onResume);
-        };
-
-        document.addEventListener("keydown", handleEscape);
-        return () => document.removeEventListener("keydown", handleEscape);
-    }, [attemptClose, onResume]);
+        },
+        "document"
+    );
 
     return (
         <div className="pause-menu-backdrop" onClick={() => attemptClose(onResume)}>
@@ -113,7 +103,7 @@ export const PauseMenu = ({
                 className="pause-menu-shell"
                 role="dialog"
                 aria-modal="true"
-                aria-label="Game settings"
+                aria-label={PAUSE_TEXT.settingsLabel}
                 onClick={(e) => e.stopPropagation()}
             >
                 <header className="pause-menu-header">
@@ -143,7 +133,17 @@ export const PauseMenu = ({
                 </nav>
 
                 <div className="pause-menu-body">
-                    <SettingsPanel section={activeSection} values={draft} onChange={handleChange} />
+                    <div className="settings-panel-list">
+                        {activeSection === "Controls" && <ControlsReference />}
+                        {getControlsForSection(activeSection).map((descriptor) => (
+                            <SettingControlRow
+                                key={String(descriptor.key)}
+                                descriptor={descriptor}
+                                currentValue={draft[descriptor.key]}
+                                onChange={handleChange}
+                            />
+                        ))}
+                    </div>
                 </div>
 
                 <footer className="pause-menu-footer">
@@ -167,7 +167,7 @@ export const PauseMenu = ({
                     </div>
 
                     <div className="footer-right">
-                        {isDirty && <span className="dirty-note">Unsaved changes</span>}
+                        {isDirty && <span className="dirty-note">{PAUSE_TEXT.unsavedChanges}</span>}
                         <button
                             type="button"
                             className="btn-primary"
@@ -189,5 +189,3 @@ export const PauseMenu = ({
         </div>
     );
 };
-
-export default PauseMenu;

@@ -1,15 +1,15 @@
 "use client";
+
 import type {
     IGameSettings,
+    ISettingsSlice,
     ISettingControlDescriptor,
     ISliderControlDescriptor,
-    IToggleControlDescriptor,
     IChoiceControlDescriptor,
 } from "@/types/ui";
+import { PAUSE_TEXT } from "@/constants/strings";
 
-export interface SettingChangeHandler {
-    (partial: Partial<IGameSettings>): void;
-}
+export type SettingChangeHandler = ISettingsSlice["update"];
 
 interface ControlRowProps<K extends keyof IGameSettings> {
     descriptor: ISettingControlDescriptor<K>;
@@ -33,9 +33,7 @@ const SliderRow = <K extends keyof IGameSettings>({
     currentValue: number;
     onChange: SettingChangeHandler;
 }) => {
-    const formatted = descriptor.formatValue
-        ? descriptor.formatValue(currentValue)
-        : String(currentValue);
+    const formatted = descriptor.formatValue(currentValue);
 
     return (
         <div className="setting-row">
@@ -55,42 +53,6 @@ const SliderRow = <K extends keyof IGameSettings>({
                     }
                 />
                 <span className="slider-value">{formatted}</span>
-            </div>
-        </div>
-    );
-};
-
-const ToggleRow = <K extends keyof IGameSettings>({
-    descriptor,
-    currentValue,
-    onChange,
-}: {
-    descriptor: IToggleControlDescriptor<K>;
-    currentValue: boolean;
-    onChange: SettingChangeHandler;
-}) => {
-    const choices: { label: string; value: boolean }[] = [
-        { label: descriptor.offLabel || "Off", value: false },
-        { label: descriptor.onLabel || "On", value: true },
-    ];
-
-    return (
-        <div className="setting-row">
-            <RowHeader label={descriptor.label} description={descriptor.description} />
-            <div className="segmented-control" role="group" aria-label={descriptor.label}>
-                {choices.map((choice) => (
-                    <button
-                        key={String(choice.value)}
-                        type="button"
-                        aria-pressed={currentValue === choice.value}
-                        className={currentValue === choice.value ? "active" : ""}
-                        onClick={() =>
-                            onChange({ [descriptor.key]: choice.value } as Partial<IGameSettings>)
-                        }
-                    >
-                        {choice.label}
-                    </button>
-                ))}
             </div>
         </div>
     );
@@ -118,11 +80,7 @@ const ChoiceRow = <K extends keyof IGameSettings>({
                         type="button"
                         aria-pressed={option.value === currentValue}
                         disabled={isDerivedOnly}
-                        title={
-                            isDerivedOnly
-                                ? "Set automatically when options don't match a preset"
-                                : undefined
-                        }
+                        title={isDerivedOnly ? PAUSE_TEXT.presetSetAutomatically : undefined}
                         className={option.value === currentValue ? "active" : ""}
                         onClick={() =>
                             onChange({ [descriptor.key]: option.value } as Partial<IGameSettings>)
@@ -152,9 +110,16 @@ export const SettingControlRow = <K extends keyof IGameSettings>({
             );
         case "toggle":
             return (
-                <ToggleRow
-                    descriptor={descriptor}
-                    currentValue={currentValue as boolean}
+                <ChoiceRow
+                    descriptor={{
+                        ...descriptor,
+                        type: "choice",
+                        options: [
+                            { label: descriptor.offLabel, value: false },
+                            { label: descriptor.onLabel, value: true },
+                        ] as IChoiceControlDescriptor<K>["options"],
+                    }}
+                    currentValue={currentValue}
                     onChange={onChange}
                 />
             );
@@ -168,5 +133,3 @@ export const SettingControlRow = <K extends keyof IGameSettings>({
             );
     }
 };
-
-export default SettingControlRow;

@@ -2,15 +2,17 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { DirectionalLight, Vector3Tuple } from "three";
-import { sunDirectionOf } from "@/themes/Themes";
+import { sunDirectionFromSky } from "@/themes/Themes";
 import { SCENE_LIGHT_LAYERS } from "@/world/postProcessing/PostProcessPasses";
 import type { IThemeEnvironment } from "@/types/world";
 import { LIGHT } from "@/constants/world";
-import { useSettings, SHADOW_MAP_SIZES } from "@/store/settingsSlice";
+import { useStoreState } from "@/hooks/useStoreState";
+import { store } from "@/store/store";
+import { SHADOW_MAP_SIZES } from "@/constants/ui";
 
 const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
     const { sky, lighting } = environment;
-    const { shadows } = useSettings();
+    const { shadows } = useStoreState(store, (state) => state.settings.values);
     const shadowsEnabled = shadows !== "off";
     const shadowMapResolution = shadowsEnabled ? SHADOW_MAP_SIZES[shadows] : LIGHT.shadowMapSize;
     const shadowTexelSize = (LIGHT.shadowExtent * 2) / shadowMapResolution;
@@ -18,11 +20,6 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
 
     useEffect(() => {
         const shadow = keyLightRef.current?.shadow;
-        if (shadow?.map) {
-            shadow.map.dispose();
-            shadow.map = null;
-        }
-
         return () => {
             if (shadow?.map) {
                 shadow.map.dispose();
@@ -32,14 +29,14 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
     }, [shadows]);
 
     const [keyDirection, rimPosition] = useMemo<[Vector3Tuple, Vector3Tuple]>(() => {
-        const sunDirection = sunDirectionOf(sky);
+        const sunDirection = sunDirectionFromSky(sky);
 
         return [
             [sunDirection.x, sunDirection.y, sunDirection.z],
             [
-                -sunDirection.x * LIGHT.rimDistance,
-                LIGHT.rimElevation * LIGHT.rimDistance,
-                -sunDirection.z * LIGHT.rimDistance,
+                -sunDirection.x * LIGHT.backLightDistance,
+                LIGHT.rimElevation * LIGHT.backLightDistance,
+                -sunDirection.z * LIGHT.backLightDistance,
             ],
         ];
     }, [sky]);
@@ -52,9 +49,9 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
         const anchorZ = Math.round(camera.position.z / shadowTexelSize) * shadowTexelSize;
 
         keyLight.position.set(
-            anchorX + keyDirection[0] * LIGHT.keyDistance,
-            keyDirection[1] * LIGHT.keyDistance,
-            anchorZ + keyDirection[2] * LIGHT.keyDistance
+            anchorX + keyDirection[0] * LIGHT.sunLightDistance,
+            keyDirection[1] * LIGHT.sunLightDistance,
+            anchorZ + keyDirection[2] * LIGHT.sunLightDistance
         );
         keyLight.target.position.set(anchorX, 0, anchorZ);
         keyLight.target.updateMatrixWorld();
@@ -62,19 +59,23 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
 
     return (
         <>
-            <color attach="background" args={[sky.abyss]} />
+            <color attach="background" args={[sky.belowHorizonColor]} />
 
             <hemisphereLight
                 layers={SCENE_LIGHT_LAYERS}
-                args={[lighting.skyFill, lighting.groundFill, lighting.hemisphereIntensity]}
+                args={[
+                    lighting.hemisphereSkyColor,
+                    lighting.hemisphereGroundColor,
+                    lighting.hemisphereIntensity,
+                ]}
             />
 
             <directionalLight
                 ref={keyLightRef}
                 castShadow={shadowsEnabled}
                 layers={SCENE_LIGHT_LAYERS}
-                color={lighting.keyColor}
-                intensity={lighting.keyIntensity}
+                color={lighting.sunLightColor}
+                intensity={lighting.sunLightIntensity}
                 shadow-bias={LIGHT.shadowBias}
                 shadow-mapSize-width={shadowMapResolution}
                 shadow-mapSize-height={shadowMapResolution}

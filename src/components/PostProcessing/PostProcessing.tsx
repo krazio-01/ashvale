@@ -15,12 +15,14 @@ import { Vector2 } from "three";
 import type { Texture, WebGLRenderer } from "three";
 import {
     AtmosphereEffect,
-    FoliageMaskPass,
     OutlineEffect,
+    FoliageMaskPass,
 } from "@/world/postProcessing/PostProcessPasses";
 import type { IThemeEnvironment } from "@/types/world";
 import { POST_PROCESSING, RENDER } from "@/constants/world";
-import { useSettings, OUTLINE_MASK_SCALES } from "@/store/settingsSlice";
+import { useStoreState } from "@/hooks/useStoreState";
+import { store } from "@/store/store";
+import { FOLIAGE_OUTLINE_MASK_SCALES } from "@/constants/ui";
 
 const FOLIAGE_MASK_RENDER_PRIORITY = 0;
 
@@ -60,10 +62,15 @@ const useFoliageMaskTexture = (enabled: boolean, scale: number): Texture => {
 };
 
 const PostProcessing = ({ environment }: { environment: IThemeEnvironment }) => {
-    const { bloom, antiAliasing, outlines, atmosphere: atmosphereEnabled } = useSettings();
+    const {
+        bloom,
+        antiAliasing,
+        outlines,
+        atmosphere: atmosphereEnabled,
+    } = useStoreState(store, (state) => state.settings.values);
     const camera = useThree((state) => state.camera);
 
-    const foliageMaskScale = OUTLINE_MASK_SCALES[outlines];
+    const foliageMaskScale = FOLIAGE_OUTLINE_MASK_SCALES[outlines];
     const foliageMaskEnabled = foliageMaskScale > 0;
     const foliageMask = useFoliageMaskTexture(foliageMaskEnabled, foliageMaskScale);
 

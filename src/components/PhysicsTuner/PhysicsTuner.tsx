@@ -1,8 +1,70 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useState } from "react";
 import { PHYSICS } from "@/constants/physics";
-import { degrees, metres } from "@/lib/helpers";
+import { degreesToRadians, metresToUnits, clamp, lerp } from "@/lib/helpers";
 import "./physicsTuner.scss";
+import { PHYSICS_TUNER_TEXT } from "@/constants/strings";
+import { useHotkey } from "@/hooks/useHotkey";
+
+const UNITS: Record<string, SliderUnit> = {
+    "cloth.maxDriftAtHem": "metres",
+    "cloth.bodyGuardRadius": "metres",
+    "cloth.bodyGuardDepth": "metres",
+    "cloth.collisionThickness": "metres",
+    "cloth.targetClearance": "metres",
+    "cloth.targetClearanceBlend": "metres",
+    "reference.maxLagMoveSpeed": "metres",
+    "reference.maxLagTurnSpeed": "degrees",
+    "reference.teleportDistance": "metres",
+    "reference.teleportAngle": "degrees",
+    "environment.gravity": "metres",
+    "environment.wind.base": "metres",
+    "environment.wind.gustAmplitude": "metres",
+};
+
+const UNIT_SCALE: Record<SliderUnit, (value: number) => number> = {
+    plain: (value) => value,
+    metres: metresToUnits,
+    degrees: degreesToRadians,
+};
+
+const EXPONENTIAL_BELOW = 0.01;
+
+const RECIPROCAL_TOLERANCE = 1e-12;
+
+const POSITIONS = 1000;
+
+const SLIDERS: readonly ISlider[] = [
+    slider("cloth.damping", 0, 6),
+    slider("cloth.bendSoftness", 1e-8, 1e-3, {
+        logarithmic: true,
+    }),
+    slider("cloth.stretchSoftness", 0, 1e-6),
+    slider("cloth.gravityScale", 0, 2),
+    slider("cloth.windExposure", 0, 3),
+    slider("cloth.pinSlack", 1, 1.15),
+    slider("cloth.maxDriftAtHem", 0.05, 1.5),
+    slider("cloth.driftCurve", 0.3, 3),
+    slider("cloth.bodyGuardRadius", 0, 1),
+    slider("cloth.bodyGuardDepth", 0, 0.1),
+    slider("cloth.collisionThickness", 0, 0.05),
+    slider("cloth.targetClearance", 0, 0.1),
+    slider("cloth.targetClearanceBlend", 0, 0.3),
+    slider("cloth.friction", 0, 20),
+    slider("reference.moveLag", 0, 1),
+    slider("reference.turnLag", 0, 1),
+    slider("reference.turnFlingScale", 0, 2),
+    slider("reference.maxLagMoveSpeed", 1, 15),
+    slider("reference.maxLagTurnSpeed", 90, 1080),
+    slider("restart.dampingSeconds", 0, 4),
+    slider("restart.dampingScale", 1, 30),
+    slider("environment.wind.base", 0, 2),
+    slider("environment.wind.gustAmplitude", 0, 2),
+    slider("step.substepsPerFrame", 2, 24, {
+        integer: true,
+    }),
+];
 
 type SliderUnit = "plain" | "metres" | "degrees";
 
@@ -23,36 +85,63 @@ interface ISliderOptions {
     integer?: boolean;
 }
 
-const UNITS: Record<string, SliderUnit> = {
-    "cloth.leashMax": "metres",
-    "cloth.backstopRadius": "metres",
-    "cloth.backstopOffset": "metres",
-    "cloth.collisionThickness": "metres",
-    "cloth.deflectionMargin": "metres",
-    "cloth.deflectionSoftness": "metres",
-    "reference.maxLinearSpeed": "metres",
-    "reference.maxAngularSpeed": "degrees",
-    "reference.teleportDistance": "metres",
-    "reference.teleportAngle": "degrees",
-    "environment.gravity": "metres",
-    "environment.wind.base": "metres",
-    "environment.wind.gustAmplitude": "metres",
+export const PhysicsTuner = () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [, setRevision] = useState(0);
+
+    useHotkey("F8", (event) => {
+        event.preventDefault();
+        if (!isOpen) document.exitPointerLock();
+        setIsOpen(!isOpen);
+    });
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="physics-tuner" onKeyDown={(event) => event.stopPropagation()}>
+            <div className="physics-tuner-header">
+                <span>{PHYSICS_TUNER_TEXT.title}</span>
+                <span className="physics-tuner-hint">F8</span>
+            </div>
+            {SLIDERS.map((entry) => (
+                <label key={entry.path} className="physics-tuner-row">
+                    <span className="physics-tuner-name">{entry.label}</span>
+                    <input
+                        type="range"
+                        min={0}
+                        max={POSITIONS}
+                        step={1}
+                        value={toPosition(entry)}
+                        onChange={(event) => {
+                            entry.write(
+                                toRaw(entry, fromPosition(entry, Number(event.target.value)))
+                            );
+                            setRevision((revision) => revision + 1);
+                        }}
+                    />
+                    <span className="physics-tuner-value">{format(entry)}</span>
+                </label>
+            ))}
+            <div className="physics-tuner-actions">
+                <button type="button" onClick={() => void navigator.clipboard.writeText(snippet())}>
+                    Copy values
+                </button>
+                <button
+                    type="button"
+                    onClick={() =>
+                        globalThis.__ashvalePhysics?.simulations.forEach((entry) =>
+                            entry.simulation.reset()
+                        )
+                    }
+                >
+                    Reset cloth
+                </button>
+            </div>
+        </div>
+    );
 };
-const UNIT_SCALE: Record<SliderUnit, (value: number) => number> = {
-    plain: (value) => value,
-    metres,
-    degrees,
-};
-const EXPONENTIAL_BELOW = 0.01;
-const RECIPROCAL_TOLERANCE = 1e-12;
-const POSITIONS = 1000;
-function slider(
-    path: string,
-    label: string,
-    min: number,
-    max: number,
-    options: ISliderOptions = {}
-): ISlider {
+
+function slider(path: string, min: number, max: number, options: ISliderOptions = {}): ISlider {
     const keys = path.split(".");
     const key = keys.pop() as string;
     const target = keys.reduce(
@@ -60,7 +149,7 @@ function slider(
         PHYSICS as unknown as Record<string, unknown>
     );
     return {
-        label,
+        label: PHYSICS_TUNER_TEXT.sliders[path],
         path,
         min,
         max,
@@ -73,37 +162,6 @@ function slider(
         },
     };
 }
-
-const SLIDERS: readonly ISlider[] = [
-    slider("cloth.damping", "Damping /s", 0, 6),
-    slider("cloth.bendCompliance", "Bend compliance", 1e-8, 1e-3, {
-        logarithmic: true,
-    }),
-    slider("cloth.stretchCompliance", "Stretch compliance", 0, 1e-6),
-    slider("cloth.gravityScale", "Gravity", 0, 2),
-    slider("cloth.windExposure", "Wind exposure", 0, 3),
-    slider("cloth.tetherScale", "Tether slack", 1, 1.15),
-    slider("cloth.leashMax", "Leash at hem", 0.05, 1.5),
-    slider("cloth.leashCurve", "Leash curve", 0.3, 3),
-    slider("cloth.backstopRadius", "Backstop radius", 0, 1),
-    slider("cloth.backstopOffset", "Backstop offset", 0, 0.1),
-    slider("cloth.collisionThickness", "Collision thickness", 0, 0.05),
-    slider("cloth.deflectionMargin", "Deflection margin", 0, 0.1),
-    slider("cloth.deflectionSoftness", "Deflection softness", 0, 0.3),
-    slider("cloth.friction", "Friction /s", 0, 20),
-    slider("reference.linearInertia", "Linear inertia", 0, 1),
-    slider("reference.angularInertia", "Angular inertia", 0, 1),
-    slider("reference.flingScale", "Turn fling", 0, 2),
-    slider("reference.maxLinearSpeed", "Speed cap", 1, 15),
-    slider("reference.maxAngularSpeed", "Turn cap", 90, 1080),
-    slider("restart.calmSeconds", "Restart calm s", 0, 4),
-    slider("restart.dampingScale", "Restart calm damping x", 1, 30),
-    slider("environment.wind.base", "Wind", 0, 2),
-    slider("environment.wind.gustAmplitude", "Wind gusts", 0, 2),
-    slider("step.substepsPerFrame", "Substeps / 60 Hz frame", 2, 24, {
-        integer: true,
-    }),
-];
 
 function shown(entry: ISlider): number {
     return entry.read() / UNIT_SCALE[entry.unit](1);
@@ -118,14 +176,14 @@ function toPosition(entry: ISlider): number {
     const share = entry.logarithmic
         ? Math.log(value / entry.min) / Math.log(entry.max / entry.min)
         : (value - entry.min) / (entry.max - entry.min);
-    return Math.round(Math.min(Math.max(share, 0), 1) * POSITIONS);
+    return Math.round(clamp(share, 0, 1) * POSITIONS);
 }
 
 function fromPosition(entry: ISlider, position: number): number {
     const share = position / POSITIONS;
     return entry.logarithmic
         ? entry.min * (entry.max / entry.min) ** share
-        : entry.min + (entry.max - entry.min) * share;
+        : lerp(entry.min, entry.max, share);
 }
 
 function format(entry: ISlider): string {
@@ -166,67 +224,3 @@ function snippet(): string {
         .map(([name, value]) => `${name}: ${literal(value, name, "")},`)
         .join("\n");
 }
-
-export const PhysicsTuner = () => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [, setRevision] = useState(0);
-
-    useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key !== "F8") return;
-            event.preventDefault();
-            setIsOpen((open) => !open);
-        };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, []);
-
-    useEffect(() => {
-        if (isOpen) document.exitPointerLock();
-    }, [isOpen]);
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="physics-tuner" onKeyDown={(event) => event.stopPropagation()}>
-            <div className="physics-tuner-header">
-                <span>Cloth physics</span>
-                <span className="physics-tuner-hint">F8</span>
-            </div>
-            {SLIDERS.map((entry) => (
-                <label key={entry.path} className="physics-tuner-row">
-                    <span className="physics-tuner-name">{entry.label}</span>
-                    <input
-                        type="range"
-                        min={0}
-                        max={POSITIONS}
-                        step={1}
-                        value={toPosition(entry)}
-                        onChange={(event) => {
-                            entry.write(
-                                toRaw(entry, fromPosition(entry, Number(event.target.value)))
-                            );
-                            setRevision((revision) => revision + 1);
-                        }}
-                    />
-                    <span className="physics-tuner-value">{format(entry)}</span>
-                </label>
-            ))}
-            <div className="physics-tuner-actions">
-                <button type="button" onClick={() => void navigator.clipboard.writeText(snippet())}>
-                    Copy values
-                </button>
-                <button
-                    type="button"
-                    onClick={() =>
-                        globalThis.__ashvalePhysics?.simulations.forEach((entry) =>
-                            entry.simulation.reset()
-                        )
-                    }
-                >
-                    Reset cloth
-                </button>
-            </div>
-        </div>
-    );
-};

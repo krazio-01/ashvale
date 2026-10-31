@@ -1,31 +1,24 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { NoToneMapping } from "three";
+
+import { useEffect, useState } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import { World } from "@/world/World";
-import SkyDome from "@/components/SkyDome";
-import SceneLighting from "@/components/SceneLighting";
-import PostProcessing from "@/components/PostProcessing/PostProcessing";
 import { spawnChapterWorld } from "@/world/ChapterSpawner";
-import { resolveThemeManifest } from "@/themes/Themes";
+import { resolveTheme } from "@/themes/Themes";
 import { isRequestCancellation, useRequest } from "@/hooks/useRequest";
-import { HttpMethod } from "@/constants/strings";
-import { POST_PROCESSING } from "@/constants/world";
+import { LOADING_TEXT, PAUSE_TEXT } from "@/constants/strings";
 import { CAMERA } from "@/constants/player";
 import type { ChapterResponse, RealmResponse } from "@/responses/realm/RealmResponse";
-import type { IThemeManifest } from "@/types/world";
+import type { IThemeConfig } from "@/types/world";
 import { InlineLoader } from "generative-loaders";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import PerformanceOverlay from "../PerformanceOverlay";
-import { useFrameLimit } from "@/components/FrameLimiter/FrameLimiter";
-import { useRenderPixelRatio } from "@/hooks/useRenderPixelRatio";
-import { usePointerLock } from "@/hooks/usePointerLock";
-import { settings } from "@/store/settingsSlice";
-import { FrameRateMeter } from "@/components/FrameRateMeter/FrameRateMeter";
+import { RenderCanvas } from "@/components/RenderCanvas/RenderCanvas";
+import { store } from "@/store/store";
 import { AnimationFrameLoop } from "@/components/AnimationFrameLoop/AnimationFrameLoop";
 import { Hud } from "@/components/Hud/Hud";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
+import dynamic from "next/dynamic";
+import { useHotkey } from "@/hooks/useHotkey";
 import "./scene.scss";
 
 const PhysicsTuner =
@@ -40,8 +33,6 @@ const PhysicsTuner =
         : () => null;
 
 const ACTIVE_CHAPTER_INDEX = 0;
-const FIRST_SPAWN_STAGE = "Opening the realm";
-const SHADER_WARMUP_STAGE = "Warming the shaders";
 
 const WorldRuntime = ({
     chapter,
@@ -51,7 +42,7 @@ const WorldRuntime = ({
     onRequestLock,
 }: {
     chapter: ChapterResponse;
-    manifest: IThemeManifest;
+    manifest: IThemeConfig;
     onStageChange: (stageLabel: string | null) => void;
     isPaused: boolean;
     onRequestLock: (target: Element) => void;
@@ -65,26 +56,21 @@ const WorldRuntime = ({
         let isCancelled = false;
 
         const createWorld = async () => {
-            onStageChange(FIRST_SPAWN_STAGE);
+            onStageChange(LOADING_TEXT.openingRealm);
 
             const createdWorld = await World.create(manifest, glRenderer);
-            if (isCancelled) {
-                createdWorld.dispose();
-                return;
-            }
+            const abortIfCancelled = () => {
+                if (isCancelled) createdWorld.dispose();
+                return isCancelled;
+            };
+            if (abortIfCancelled()) return;
 
             await spawnChapterWorld(createdWorld, camera, chapter, onStageChange);
-            if (isCancelled) {
-                createdWorld.dispose();
-                return;
-            }
+            if (abortIfCancelled()) return;
 
-            onStageChange(SHADER_WARMUP_STAGE);
+            onStageChange(LOADING_TEXT.warmingShaders);
             await glRenderer.compileAsync(createdWorld.root, camera);
-            if (isCancelled) {
-                createdWorld.dispose();
-                return;
-            }
+            if (abortIfCancelled()) return;
 
             activeWorld = createdWorld;
             setWorld(createdWorld);
@@ -116,62 +102,37 @@ const WorldRuntime = ({
     return world ? <primitive object={world.root} /> : null;
 };
 
-const FrameLimitDriver = () => {
-    useFrameLimit();
-    return null;
-};
-
 const Scene = ({ owner, name }: { owner: string; name: string }) => {
     const router = useRouter();
     const { isPending, error, sendRequest } = useRequest();
     const [realm, setRealm] = useState<RealmResponse | null>(null);
-    const [spawnStage, setSpawnStage] = useState<string | null>(FIRST_SPAWN_STAGE);
+    const [spawnStage, setSpawnStage] = useState<string | null>(LOADING_TEXT.openingRealm);
     const [isPaused, setIsPaused] = useState(false);
 
-    const { requestLock, releaseLock } = usePointerLock();
-    const pixelRatio = useRenderPixelRatio();
-
-    const handleResume = useCallback(() => {
+    const handleResume = () => {
         setIsPaused(false);
         requestLock();
-    }, [requestLock]);
+    };
 
-    const handleQuit = useCallback(() => {
-        router.push("/");
-    }, [router]);
+    const handleQuit = () => router.push("/");
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key !== "Tab") return;
+    useHotkey("Tab", (e) => {
+        if (isPaused && (e.target as HTMLElement | null)?.closest(".pause-menu-shell")) return;
 
-            if (isPaused && (e.target as HTMLElement | null)?.closest(".pause-menu-shell")) return;
+        e.preventDefault();
 
-            e.preventDefault();
-
-            if (isPaused) {
-                handleResume();
-            } else {
-                setIsPaused(true);
-                releaseLock();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isPaused, handleResume, releaseLock]);
-
-    const handleStageChange = useCallback(
-        (stageLabel: string | null) => setSpawnStage(stageLabel),
-        []
-    );
+        if (isPaused) {
+            handleResume();
+        } else {
+            setIsPaused(true);
+            releaseLock();
+        }
+    });
 
     useEffect(() => {
         const fetchRealm = async () => {
             try {
-                const response = await sendRequest<RealmResponse>(
-                    HttpMethod.Get,
-                    `/realms/${owner}/${name}`
-                );
+                const response = await sendRequest<RealmResponse>(`/realms/${owner}/${name}`);
                 setRealm(response);
             } catch (caughtError) {
                 if (!isRequestCancellation(caughtError)) setRealm(null);
@@ -185,7 +146,7 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
         return (
             <div className="scene-status">
                 <InlineLoader variant="matrix" size={32} color="#fff" />
-                <p>Generating your realm</p>
+                <p>{LOADING_TEXT.generatingRealm}</p>
             </div>
         );
     }
@@ -193,7 +154,7 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
     if (error) {
         return (
             <div className="scene-status">
-                <p>{error.message || "Unknown error"}</p>
+                <p>{error.message || LOADING_TEXT.unknownError}</p>
             </div>
         );
     }
@@ -201,43 +162,28 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
     const chapter = realm?.chapters[ACTIVE_CHAPTER_INDEX];
     if (!chapter) return null;
 
-    const manifest = resolveThemeManifest(chapter.theme, chapter.season);
+    const manifest = resolveTheme(chapter.theme, chapter.season);
 
     return (
         <div className="scene-canvas-container">
-            <Canvas
-                shadows="percentage"
-                frameloop="never"
-                dpr={pixelRatio}
+            <RenderCanvas
+                environment={manifest.environment}
                 camera={{
-                    fov: settings.fov,
+                    fov: store.getState().settings.values.fov,
                     near: CAMERA.near,
                     far: CAMERA.far,
                     position: CAMERA.startPosition,
                 }}
-                gl={{
-                    antialias: false,
-                    toneMapping: NoToneMapping,
-                    toneMappingExposure: POST_PROCESSING.exposure,
-                }}
             >
-                <FrameLimitDriver />
-                <SkyDome environment={manifest.environment} />
-                <SceneLighting environment={manifest.environment} />
                 <WorldRuntime
                     chapter={chapter}
                     manifest={manifest}
-                    onStageChange={handleStageChange}
+                    onStageChange={setSpawnStage}
                     isPaused={isPaused}
                     onRequestLock={requestLock}
                 />
+            </RenderCanvas>
 
-                <PostProcessing environment={manifest.environment} />
-
-                <PerformanceOverlay />
-            </Canvas>
-
-            <FrameRateMeter />
             <PhysicsTuner />
             <AnimationFrameLoop>
                 <Hud />
@@ -245,7 +191,7 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
 
             {!isPaused && !spawnStage && (
                 <div className="scene-menu-hint">
-                    <kbd>Tab</kbd> menu
+                    <kbd>{PAUSE_TEXT.menuKey}</kbd> {PAUSE_TEXT.menuHint}
                 </div>
             )}
 
@@ -261,11 +207,18 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
                     onResume={handleResume}
                     onQuit={handleQuit}
                     realmTitle={`${owner}/${name}`}
-                    dismissKey="Esc"
+                    dismissKey={PAUSE_TEXT.resumeKey}
                 />
             )}
         </div>
     );
+};
+
+const requestLock = (target: Element | null = document.querySelector("canvas")) =>
+    target?.requestPointerLock();
+
+const releaseLock = () => {
+    if (document.pointerLockElement) document.exitPointerLock();
 };
 
 export default Scene;

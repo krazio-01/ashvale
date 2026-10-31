@@ -1,31 +1,30 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { useSettings } from "@/store/settingsSlice";
+import { useEffect, useState } from "react";
+import { useStoreState } from "@/hooks/useStoreState";
+import { store } from "@/store/store";
 import { getRenderedFrameCount } from "@/components/FrameLimiter/FrameLimiter";
 import "./frameRateMeter.scss";
 
 const SAMPLE_WINDOW_MS = 500;
 export const FrameRateMeter = () => {
-    const { showFps } = useSettings();
+    const { showFps } = useStoreState(store, (state) => state.settings.values);
     const [fps, setFps] = useState(60);
-    const frameCountRef = useRef(0);
-    const lastTimeRef = useRef(0);
 
     useEffect(() => {
         if (!showFps) return;
 
         let rafId: number;
-        lastTimeRef.current = performance.now();
-        frameCountRef.current = getRenderedFrameCount();
+        let lastSampleTime = performance.now();
+        let lastFrameCount = getRenderedFrameCount();
 
         const loop = (now: number) => {
-            const elapsed = now - lastTimeRef.current;
+            const elapsed = now - lastSampleTime;
 
             if (elapsed >= SAMPLE_WINDOW_MS) {
-                const renderedFrames = getRenderedFrameCount() - frameCountRef.current;
+                const renderedFrames = getRenderedFrameCount() - lastFrameCount;
                 setFps(Math.round((renderedFrames * 1000) / elapsed));
-                frameCountRef.current = getRenderedFrameCount();
-                lastTimeRef.current = now;
+                lastFrameCount = getRenderedFrameCount();
+                lastSampleTime = now;
             }
 
             rafId = requestAnimationFrame(loop);
@@ -47,5 +46,3 @@ export const FrameRateMeter = () => {
         </div>
     );
 };
-
-export default FrameRateMeter;
