@@ -1,6 +1,5 @@
 import { Vector3 } from "three";
 import type { Vector3Tuple } from "three";
-import type { IMotorSpec } from "@/systems/combat/CharacterMotor";
 import { CombatCharacter } from "@/entities/characters/CombatCharacter";
 import { enemyCombatLocomotion, enemyRelaxedLocomotion } from "@/entities/characters/locomotion";
 import { BehaviourSelector } from "@/systems/enemyBehaviour/behaviours/EnemyBehaviour";
@@ -9,103 +8,122 @@ import { EngageBehaviour } from "@/systems/enemyBehaviour/behaviours/CombatBehav
 import {
     InvestigateBehaviour,
     SearchBehaviour,
-    DisengageBehaviour,
+    ReturnHomeBehaviour,
     PatrolBehaviour,
 } from "@/systems/enemyBehaviour/behaviours/AmbientBehaviours";
-import { Movement } from "@/systems/enemyBehaviour/EnemySteering";
-import {
-    EnemyPerception,
-    HearingSensor,
-    SightSensor,
-} from "@/systems/enemyBehaviour/perception/EnemyPerception";
-import { NON_PLAYER, SIGHT } from "@/constants/enemies";
-import type { IEnemyArchetype } from "@/constants/enemies";
-import { IDLE_VARIATION, jitteredIdleDelay } from "@/constants/characters";
+import { EnemySteering } from "@/systems/enemyBehaviour/EnemySteering";
+import { EnemyPerception } from "@/systems/enemyBehaviour/perception/EnemyPerception";
+import type { IEnemyArchetype, AwarenessState, ICombatant, IHitPayload } from "@/types/combat";
+import { IDLE_VARIATION } from "@/constants/characters";
+import { ENEMY_MOVEMENT, SIGHT } from "@/constants/enemies";
+import { COMBAT_MOVEMENT } from "@/constants/combat";
 import { HUD } from "@/constants/ui";
 import { alertMarkerFillFor, alertMarkerKindFor } from "@/world/HudTrackers";
 import type { IAlertMarkerSource } from "@/world/HudTrackers";
-import { horizontalDirection } from "@/lib/helpers";
-import type { AwarenessState, ICombatant, IHitPayload } from "@/types/combat";
+import { horizontalDirection, randomOffset } from "@/lib/helpers";
 import type { AlertMarkerKind } from "@/types/ui";
 import type { IWorldContext } from "@/types/world";
+import type { IMotorSpec } from "@/types/physics";
+import { ERRORS } from "@/constants/strings";
+
+interface IEnemyOptions {
+    id: string;
+    archetype: IEnemyArchetype;
+    context: IWorldContext;
+    spawnPosition: Vector3Tuple;
+    spawnYaw: number;
+    player: CombatCharacter | null;
+    passive: boolean;
+}
 
 export class Enemy extends CombatCharacter implements IEnemyCombatBody, IAlertMarkerSource {
+    private static enemyMotor(archetype: IEnemyArchetype): IMotorSpec {
+        return {
+            height: archetype.height,
+            radius: archetype.radius,
+            ...ENEMY_MOVEMENT.motor,
+            pushesDynamicBodies: false,
+        };
+    }
+
     readonly archetype: IEnemyArchetype;
 
-    private readonly homePosition: Vector3;
+    readonly home: Vector3;
     private readonly player: CombatCharacter | null;
-    private readonly steering: Movement;
-    private readonly perception: EnemyPerception | null;
-    private readonly engage: EngageBehaviour | null;
-    private readonly behaviours: BehaviourSelector | null;
-    private hasStoppedThinking = false;
+    private readonly steering: EnemySteering;
+    private readonly brain: {
+        perception: EnemyPerception;
+        engageBehaviour: EngageBehaviour;
+        behaviourSelector: BehaviourSelector;
+    } | null;
+    private hasStoppedDeciding = false;
 
     constructor(options: IEnemyOptions) {
         const model = options.context.assetLibrary.getSkinnedModel(options.archetype.modelPath);
-        if (!model) throw new Error(`enemy model not loaded: ${options.archetype.modelPath}`);
+        if (!model) throw new Error(ERRORS.modelNotLoaded("enemy", options.archetype.modelPath));
 
         super({
             id: options.id,
             team: "enemy",
             context: options.context,
             model,
-            motor: enemyMotor(options.archetype),
+            motor: Enemy.enemyMotor(options.archetype),
             vitals: options.archetype.vitals,
             moveSet: options.archetype.moveSet,
             freeLocomotion: enemyRelaxedLocomotion(
                 options.archetype.height,
-                jitteredIdleDelay(IDLE_VARIATION.relaxedDelaySeconds, Math.random)
+                IDLE_VARIATION.relaxedDelaySeconds *
+                    (1 + randomOffset(Math.random, IDLE_VARIATION.delayJitter))
             ),
             strafeLocomotion: enemyCombatLocomotion(options.archetype.height),
             victimRig: options.archetype.victimRig,
-            turnSmoothing: NON_PLAYER.turnSmoothing,
+            turnSmoothing: ENEMY_MOVEMENT.turnSmoothing,
             modelYawOffset: 0,
             spawnPosition: options.spawnPosition,
             spawnYaw: options.spawnYaw,
-            flashesOnHit: true,
+            hitEffect: "hitFlash",
         });
 
         this.archetype = options.archetype;
         if (options.archetype.weapon) this.equipWeapon(options.archetype.weapon);
-        this.homePosition = new Vector3().fromArray(options.spawnPosition);
+        this.home = new Vector3().fromArray(options.spawnPosition);
         this.player = options.player;
-        this.steering = new Movement(this, options.context.combatRegistry);
+        this.steering = new EnemySteering(this, options.context.combatRegistry);
 
-        const player = options.player;
-        if (options.passive || !player) {
-            this.perception = null;
-            this.engage = null;
-            this.behaviours = null;
+        if (options.passive || !options.player) {
+            this.brain = null;
             return;
         }
 
         const perception = new EnemyPerception(
             this,
-            player,
-            new SightSensor(options.context.physicsWorld, this.motor.collider),
-            new HearingSensor(options.context.combatEvents, this.position),
-            options.context.combatEvents
+            options.player,
+            options.context.physicsWorld,
+            this.motor.collider,
+            options.context.events
         );
-        const meter = perception.meter;
+        const awareness = perception.awareness;
         const random = Math.random;
-        const engage = new EngageBehaviour(
+        const engageBehaviour = new EngageBehaviour(
             this,
-            meter,
-            player,
+            awareness,
+            options.player,
             random,
             options.context.attackCoordinator,
             options.id
         );
 
-        this.perception = perception;
-        this.engage = engage;
-        this.behaviours = new BehaviourSelector({
-            unaware: new PatrolBehaviour(this, meter, random),
-            suspicious: new InvestigateBehaviour(this, meter, random),
-            alert: engage,
-            searching: new SearchBehaviour(this, meter, random),
-            returning: new DisengageBehaviour(this, meter, random),
-        });
+        this.brain = {
+            perception,
+            engageBehaviour,
+            behaviourSelector: new BehaviourSelector({
+                unaware: new PatrolBehaviour(this, awareness, random),
+                suspicious: new InvestigateBehaviour(this, awareness, random),
+                alert: engageBehaviour,
+                searching: new SearchBehaviour(this, awareness, random),
+                returning: new ReturnHomeBehaviour(this, awareness, random),
+            }),
+        };
     }
 
     get attackPower(): number {
@@ -114,7 +132,7 @@ export class Enemy extends CombatCharacter implements IEnemyCombatBody, IAlertMa
 
     get awareness(): AwarenessState {
         if (this.archetype.alwaysAware) return "alert";
-        return this.perception?.meter.state ?? "unaware";
+        return this.brain?.perception.awareness.state ?? "unaware";
     }
 
     get displayName(): string {
@@ -125,12 +143,8 @@ export class Enemy extends CombatCharacter implements IEnemyCombatBody, IAlertMa
         return this.archetype.counterKillable;
     }
 
-    get eyeLift(): number {
+    get eyeHeight(): number {
         return this.archetype.height * SIGHT.eyeHeightFraction;
-    }
-
-    get home(): Vector3 {
-        return this.homePosition;
     }
 
     get alertMarkerHeight(): number {
@@ -138,16 +152,16 @@ export class Enemy extends CombatCharacter implements IEnemyCombatBody, IAlertMa
     }
 
     get alertMarkerKind(): AlertMarkerKind | null {
-        return this.perception ? alertMarkerKindFor(this.perception.meter, this.isDead) : null;
+        return this.brain ? alertMarkerKindFor(this.brain.perception.awareness, this.isDead) : null;
     }
 
     get alertMarkerFill(): number {
-        return this.perception ? alertMarkerFillFor(this.perception.meter) : 0;
+        return this.brain ? alertMarkerFillFor(this.brain.perception.awareness) : 0;
     }
 
     moveTowards(point: Vector3, speed: number, stopDistance: number, pointRadius = 0): number {
         const distance = horizontalDirection(this.position, point, this.desiredVelocity);
-        if (distance <= stopDistance || distance < 1e-4) {
+        if (distance <= stopDistance || distance < COMBAT_MOVEMENT.minimumPlanarLength) {
             this.holdStill();
             return distance;
         }
@@ -158,7 +172,7 @@ export class Enemy extends CombatCharacter implements IEnemyCombatBody, IAlertMa
 
     moveAwayFrom(point: Vector3, speed: number): void {
         const distance = horizontalDirection(point, this.position, this.desiredVelocity);
-        if (distance < 1e-4) {
+        if (distance < COMBAT_MOVEMENT.minimumPlanarLength) {
             this.holdStill();
             return;
         }
@@ -171,88 +185,60 @@ export class Enemy extends CombatCharacter implements IEnemyCombatBody, IAlertMa
         this.steering.steer(this.desiredVelocity, this.archetype.patrolSpeed, 0);
     }
 
-    lookTowards(yaw: number): void {
+    setFacingYaw(yaw: number): void {
         this.facingYaw = yaw;
     }
 
-    faceTarget(): void {
+    startFacingTarget(): void {
         this.facesTarget = true;
         this.target = this.player;
     }
 
-    relax(): void {
+    stopFacingTarget(): void {
         this.facesTarget = false;
     }
 
     performMove(moveId: string): boolean {
         this.target = this.player;
-        return this.machine.startMove(moveId);
+        return this.moveStateMachine.startMove(moveId);
     }
 
-    isPathBlocked(directionX: number, directionZ: number, distance: number): boolean {
-        return this.motor.isPathBlocked(directionX, directionZ, distance);
+    isObstacleAhead(directionX: number, directionZ: number, distance: number): boolean {
+        return this.motor.isObstacleAhead(directionX, directionZ, distance);
     }
 
     dispose(): void {
-        this.stopThinking();
+        this.stopDeciding();
         super.dispose();
     }
 
-    protected think(deltaSeconds: number): void {
+    protected decideActions(deltaSeconds: number): void {
         this.steering.tick(deltaSeconds);
-        const perception = this.perception;
-        const behaviours = this.behaviours;
-        if (!perception || !behaviours) return;
+        const brain = this.brain;
+        if (!brain) return;
 
-        perception.tick(deltaSeconds);
-        behaviours.tick(perception.meter.phase, deltaSeconds);
+        brain.perception.tick(deltaSeconds);
+        brain.behaviourSelector.tick(brain.perception.awareness.phase, deltaSeconds);
     }
 
     protected onDamaged(payload: IHitPayload): void {
-        this.perception?.notifyDamaged(payload.origin);
-        if (payload.impact === "light") this.engage?.notifyLightHitLanded();
+        this.brain?.perception.notifyDamaged(payload.origin);
+        if (payload.impact === "light") this.brain?.engageBehaviour.notifyLightHitLanded();
     }
 
     protected onParrySucceeded(attacker: ICombatant): void {
         this.target = attacker;
-        this.machine.forceMove(this.archetype.riposteMove);
+        this.moveStateMachine.startMove(this.archetype.counterAttackMove, true);
     }
 
     protected onKilled(): void {
-        this.stopThinking();
+        this.stopDeciding();
     }
 
-    private stopThinking(): void {
-        if (this.hasStoppedThinking) return;
-        this.hasStoppedThinking = true;
-        this.behaviours?.stop();
-        this.perception?.dispose();
+    private stopDeciding(): void {
+        if (this.hasStoppedDeciding) return;
+        this.hasStoppedDeciding = true;
+        this.brain?.behaviourSelector.stop();
+        this.brain?.perception.dispose();
     }
-}
-
-interface IEnemyOptions {
-    id: string;
-    archetype: IEnemyArchetype;
-    context: IWorldContext;
-    spawnPosition: Vector3Tuple;
-    spawnYaw: number;
-    player: CombatCharacter | null;
-    passive: boolean;
-}
-
-function enemyMotor(archetype: IEnemyArchetype): IMotorSpec {
-    return {
-        height: archetype.height,
-        radius: archetype.radius,
-        colliderOffset: NON_PLAYER.colliderOffset,
-        maxSlopeClimbAngle: NON_PLAYER.maxSlopeClimbAngle,
-        minSlopeSlideAngle: NON_PLAYER.minSlopeSlideAngle,
-        autostepMaxHeight: NON_PLAYER.autostepMaxHeight,
-        autostepMinWidth: NON_PLAYER.autostepMinWidth,
-        snapToGroundDistance: NON_PLAYER.snapToGroundDistance,
-        terminalVelocity: NON_PLAYER.terminalVelocity,
-        groundAcceleration: NON_PLAYER.acceleration,
-        airAcceleration: NON_PLAYER.acceleration * NON_PLAYER.airAccelerationFraction,
-        pushesDynamicBodies: false,
-    };
 }

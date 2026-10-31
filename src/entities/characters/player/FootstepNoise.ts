@@ -1,19 +1,20 @@
 import { Vector3 } from "three";
-import type { CombatEvents, ICombatEventMap } from "@/events/CombatEvents";
-import { NOISE } from "@/constants/enemies";
-export type FootstepGait = keyof typeof NOISE.footstepRadius;
+import type { ICombatEventMap } from "@/events/CombatEvents";
+import type { GameEvents } from "@/events/EventEmitter";
+import { HEARING } from "@/constants/enemies";
+export type FootstepGait = keyof typeof HEARING.footstepRadius;
 
 export class FootstepNoise {
-    private readonly events: CombatEvents;
+    private readonly events: GameEvents;
     private readonly noise: ICombatEventMap["noise"] = { position: new Vector3(), radius: 0 };
     private secondsUntilStep = 0;
 
-    constructor(events: CombatEvents) {
+    constructor(events: GameEvents) {
         this.events = events;
     }
 
     tick(deltaSeconds: number, gait: FootstepGait, position: Vector3): void {
-        const radius = NOISE.footstepRadius[gait];
+        const radius = HEARING.footstepRadius[gait];
         if (radius <= 0) {
             this.secondsUntilStep = 0;
             return;
@@ -22,7 +23,7 @@ export class FootstepNoise {
         this.secondsUntilStep -= deltaSeconds;
         if (this.secondsUntilStep > 0) return;
 
-        this.secondsUntilStep = NOISE.footstepIntervalSeconds;
+        this.secondsUntilStep = HEARING.footstepIntervalSeconds;
         this.noise.position.copy(position);
         this.noise.radius = radius;
         this.events.emit("noise", this.noise);

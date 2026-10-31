@@ -1,19 +1,25 @@
 import type { Vector3Tuple } from "three";
-import type { CombatCharacter } from "@/entities/characters/CombatCharacter";
-import { Enemy } from "@/entities/characters/enemies/Enemy";
-import { archetypeFor, ENEMY_PLACEMENT, SPAWNING } from "@/constants/enemies";
+import {
+    ARCHETYPES,
+    ENEMY_PLACEMENT,
+    SPAWNING,
+    ENEMY_ARCHETYPES,
+    REGION_ARCHETYPES,
+} from "@/constants/enemies";
 import type { EnemyArchetype } from "@/types/combat";
 import type { IChapterRegion } from "@/types/realm";
-import type { IWorldContext } from "@/types/world";
-import { FULL_TURN, clamp, createSeededRandom, hashString } from "@/lib/helpers";
-
-const TEST_DIRECTORY_PATTERN = /^(__tests__|tests?|specs?|e2e)$/i;
-
-const BUILD_OUTPUT_DIRECTORY_PATTERN = /^(dist|build|out|\.next|target|bin)$/i;
-
-const TOOLING_DIRECTORY_PATTERN = /^(\.github|\.vscode|\.circleci|scripts|ci)$/i;
-
-const ARCHETYPES: readonly EnemyArchetype[] = ["sentinel", "wraith", "golem", "gremlin"];
+import {
+    FULL_TURN,
+    clamp,
+    createSeededRandom,
+    hashString,
+    yawFromDirection,
+    pointAtAngle,
+    randomOffset,
+    firstFit,
+    pickRandom,
+} from "@/lib/helpers";
+import type { RandomSource } from "@/lib/helpers";
 
 interface IEnemyPlacement {
     archetype: EnemyArchetype;
@@ -34,9 +40,7 @@ interface IEnemyPlacementContext {
     clearance: IPlacementClearance | null;
 }
 
-type RandomSource = () => number;
-
-interface IPlacementRun {
+interface IRegionPlacementState {
     region: IChapterRegion;
     context: IEnemyPlacementContext;
     dominant: EnemyArchetype;
@@ -46,31 +50,15 @@ interface IPlacementRun {
     clearanceRadius: number;
 }
 
-export function spawnEnemy(
-    archetype: EnemyArchetype,
-    id: string,
-    context: IWorldContext,
-    spawnPosition: Vector3Tuple,
-    spawnYaw: number,
-    player: CombatCharacter | null
-): Enemy {
-    return new Enemy({
-        id,
-        archetype: archetypeFor(archetype),
-        context,
-        spawnPosition,
-        spawnYaw,
-        player,
-        passive: false,
-    });
+export function standingSpawnHeight(groundHeight: number, bodyHeight: number): number {
+    return groundHeight + bodyHeight / 2 + SPAWNING.spawnClearanceBuffer;
 }
 
-export function dominantArchetypeFor(region: IChapterRegion): EnemyArchetype {
-    if (TEST_DIRECTORY_PATTERN.test(region.displayName)) return "wraith";
-    if (BUILD_OUTPUT_DIRECTORY_PATTERN.test(region.displayName)) return "golem";
-    if (TOOLING_DIRECTORY_PATTERN.test(region.displayName)) return "gremlin";
+function dominantArchetypeFor(region: IChapterRegion): EnemyArchetype {
+    for (const rule of REGION_ARCHETYPES.rules)
+        if (rule.directoryPattern.test(region.displayName)) return rule.archetype;
 
-    return "sentinel";
+    return REGION_ARCHETYPES.fallback;
 }
 
 export function placeRegionEnemies(
@@ -98,7 +86,7 @@ export function placeRegionEnemies(
 function createPlacementRun(
     region: IChapterRegion,
     context: IEnemyPlacementContext
-): IPlacementRun {
+): IRegionPlacementState {
     const [width, depth] = region.floorSize;
     const clearance = context.clearance;
     const clearanceRadius = clearance
@@ -134,8 +122,11 @@ function nextCampSize(nextRandom: RandomSource, remaining: number): number {
     return ENEMY_PLACEMENT.smallestCamp + Math.floor(nextRandom() * span);
 }
 
-function findCampCentre(run: IPlacementRun, takenCentres: number[]): [number, number] | null {
-    const { region, context, nextRandom } = run;
+function findCampCentre(
+    run: IRegionPlacementState,
+    takenCentres: number[]
+): [number, number] | null {
+    const { region, nextRandom } = run;
     const [centreX, , centreZ] = region.worldPosition;
     const [width, depth] = region.floorSize;
     const halfWidth = Math.max(width / 2 - ENEMY_PLACEMENT.regionEdgeMargin, 0);
@@ -143,22 +134,25 @@ function findCampCentre(run: IPlacementRun, takenCentres: number[]): [number, nu
     const minimumCampSpacingSquared =
         ENEMY_PLACEMENT.minimumCampSpacing * ENEMY_PLACEMENT.minimumCampSpacing;
 
-    for (let attempt = 0; attempt < ENEMY_PLACEMENT.samplingAttempts; attempt += 1) {
-        const x = centreX + (nextRandom() * 2 - 1) * halfWidth;
-        const z = centreZ + (nextRandom() * 2 - 1) * halfDepth;
+    return firstFit(ENEMY_PLACEMENT.samplingAttempts, (): [number, number] | null => {
+        const x = centreX + randomOffset(nextRandom, halfWidth);
+        const z = centreZ + randomOffset(nextRandom, halfDepth);
 
-        if (isInsideClearance(run, x, z)) continue;
-        if (context.groundSteepnessAt(x, z) > ENEMY_PLACEMENT.maximumSteepness) continue;
-        if (!context.propIsClear(x, z, ENEMY_PLACEMENT.propClearanceRadius)) continue;
-        if (isCrowded(takenCentres, x, z, minimumCampSpacingSquared)) continue;
-
+        if (!isSpotOpen(run, x, z)) return null;
+        if (isCrowded(takenCentres, x, z, minimumCampSpacingSquared)) return null;
         return [x, z];
-    }
-
-    return null;
+    });
 }
 
-function isInsideClearance(run: IPlacementRun, x: number, z: number): boolean {
+function isSpotOpen(run: IRegionPlacementState, x: number, z: number): boolean {
+    return (
+        !isInsideClearance(run, x, z) &&
+        !(run.context.groundSteepnessAt(x, z) > ENEMY_PLACEMENT.maximumSteepness) &&
+        run.context.propIsClear(x, z, ENEMY_PLACEMENT.propClearanceRadius)
+    );
+}
+
+function isInsideClearance(run: IRegionPlacementState, x: number, z: number): boolean {
     const offsetX = x - run.clearanceX;
     const offsetZ = z - run.clearanceZ;
 
@@ -167,8 +161,8 @@ function isInsideClearance(run: IPlacementRun, x: number, z: number): boolean {
 
 function isCrowded(points: number[], x: number, z: number, minimumSpacingSquared: number): boolean {
     for (let index = 0; index < points.length; index += 2) {
-        const offsetX = x - (points[index] ?? 0);
-        const offsetZ = z - (points[index + 1] ?? 0);
+        const offsetX = x - points[index];
+        const offsetZ = z - points[index + 1];
 
         if (offsetX * offsetX + offsetZ * offsetZ < minimumSpacingSquared) return true;
     }
@@ -178,7 +172,7 @@ function isCrowded(points: number[], x: number, z: number, minimumSpacingSquared
 
 function appendCamp(
     placements: IEnemyPlacement[],
-    run: IPlacementRun,
+    run: IRegionPlacementState,
     centre: [number, number],
     size: number
 ): number {
@@ -188,13 +182,13 @@ function appendCamp(
     const facingTarget = campFacingTarget(run, members, memberCount);
 
     for (let index = 0; index < members.length; index += 2) {
-        const x = members[index] ?? 0;
-        const z = members[index + 1] ?? 0;
+        const x = members[index];
+        const z = members[index + 1];
         const archetype = pickArchetype(dominant, nextRandom);
-        const spawnY =
-            context.groundHeightAt(x, z) +
-            archetypeFor(archetype).height / 2 +
-            SPAWNING.spawnClearanceBuffer;
+        const spawnY = standingSpawnHeight(
+            context.groundHeightAt(x, z),
+            ARCHETYPES[archetype].height
+        );
 
         placements.push({
             archetype,
@@ -206,36 +200,36 @@ function appendCamp(
     return memberCount;
 }
 
-function spreadCampMembers(run: IPlacementRun, centre: [number, number], size: number): number[] {
-    const { context, nextRandom } = run;
+function spreadCampMembers(
+    run: IRegionPlacementState,
+    centre: [number, number],
+    size: number
+): number[] {
+    const { nextRandom } = run;
     const members: number[] = [centre[0], centre[1]];
     const minimumMemberSpacingSquared =
         ENEMY_PLACEMENT.minimumMemberSpacing * ENEMY_PLACEMENT.minimumMemberSpacing;
 
     for (let member = 1; member < size; member += 1) {
-        for (let attempt = 0; attempt < ENEMY_PLACEMENT.samplingAttempts; attempt += 1) {
+        const spot = firstFit(ENEMY_PLACEMENT.samplingAttempts, () => {
             const angle = nextRandom() * FULL_TURN;
             const radius =
                 ENEMY_PLACEMENT.minimumMemberSpacing +
                 nextRandom() * (ENEMY_PLACEMENT.campRadius - ENEMY_PLACEMENT.minimumMemberSpacing);
-            const x = centre[0] + Math.cos(angle) * radius;
-            const z = centre[1] + Math.sin(angle) * radius;
+            const point = pointAtAngle(centre[0], centre[1], angle, radius);
 
-            if (isInsideClearance(run, x, z)) continue;
-            if (context.groundSteepnessAt(x, z) > ENEMY_PLACEMENT.maximumSteepness) continue;
-            if (!context.propIsClear(x, z, ENEMY_PLACEMENT.propClearanceRadius)) continue;
-            if (isCrowded(members, x, z, minimumMemberSpacingSquared)) continue;
-
-            members.push(x, z);
-            break;
-        }
+            if (!isSpotOpen(run, point[0], point[1])) return null;
+            if (isCrowded(members, point[0], point[1], minimumMemberSpacingSquared)) return null;
+            return point;
+        });
+        if (spot) members.push(spot[0], spot[1]);
     }
 
     return members;
 }
 
 function campFacingTarget(
-    run: IPlacementRun,
+    run: IRegionPlacementState,
     members: number[],
     memberCount: number
 ): [number, number] {
@@ -246,8 +240,8 @@ function campFacingTarget(
     let sumZ = 0;
 
     for (let index = 0; index < members.length; index += 2) {
-        sumX += members[index] ?? 0;
-        sumZ += members[index + 1] ?? 0;
+        sumX += members[index];
+        sumZ += members[index + 1];
     }
 
     return [sumX / memberCount, sumZ / memberCount];
@@ -261,17 +255,18 @@ function facingYawTowards(
 ): number {
     const offsetX = target[0] - x;
     const offsetZ = target[1] - z;
-    const jitter = (nextRandom() * 2 - 1) * ENEMY_PLACEMENT.facingJitter;
+    const jitter = randomOffset(nextRandom, ENEMY_PLACEMENT.facingJitter);
 
     if (offsetX === 0 && offsetZ === 0) return nextRandom() * FULL_TURN;
 
-    return Math.atan2(offsetX, offsetZ) + jitter;
+    return yawFromDirection(offsetX, offsetZ) + jitter;
 }
 
 function pickArchetype(dominant: EnemyArchetype, nextRandom: RandomSource): EnemyArchetype {
     if (nextRandom() < ENEMY_PLACEMENT.dominantArchetypeShare) return dominant;
 
-    const alternatives = ARCHETYPES.filter((archetype) => archetype !== dominant);
-
-    return alternatives[Math.floor(nextRandom() * alternatives.length)] ?? dominant;
+    return pickRandom(
+        ENEMY_ARCHETYPES.filter((archetype) => archetype !== dominant),
+        nextRandom
+    );
 }
