@@ -1,23 +1,27 @@
-import { PROP_TRANSFORM_STRIDE, PropLayer } from "@/types/world";
-import type { IPropGroup, IThemeProp } from "@/types/world";
-import { TERRAIN, WATER_CHANNEL, WORLD_EDGE } from "@/constants/world";
-import { clamp, lerp, scaleBetween, smoothstep, FULL_TURN } from "@/lib/helpers";
 import type { Vector3Tuple } from "three";
-import { createGridSample } from "@/world/terrain/TerrainGeneration";
-import type { IGridSample, TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
-import { PROP_FIELD } from "@/constants/placement";
+import { PropLayer, type IThemeProp, type IPropGroup } from "@/types/world";
+import {
+    createGridSample,
+    type IGridSample,
+    type TerrainSampleGrid,
+} from "@/world/terrain/TerrainGeneration";
+import { WATER_CHANNEL, WORLD_EDGE, TERRAIN } from "@/constants/world";
+import { PROP_SCATTER, PROP_TRANSFORM_STRIDE, PROP_LAYER_RULES } from "@/constants/placement";
+import {
+    clamp,
+    lerp,
+    valueInRange,
+    smoothstep,
+    FULL_TURN,
+    pointAtAngle,
+    pickRandomOrNull,
+    firstFit,
+} from "@/lib/helpers";
+import type { RandomSource } from "@/lib/helpers";
 
-const SOFT_EDGED_LAYERS = new Set([PropLayer.Understory, PropLayer.Groundcover]);
-
-const rimSample = createGridSample();
+const rimProbeSample = createGridSample();
 
 const RIM_PROBE_COUNT = 6;
-
-interface IGroupBuilder {
-    prop: IThemeProp;
-    hasCollider: boolean;
-    transformValues: number[];
-}
 
 export enum PlacementOutcome {
     Placed = "placed",
@@ -25,12 +29,12 @@ export enum PlacementOutcome {
     Thinned = "thinned",
 }
 
-export interface IFieldContext {
-    heightMap: TerrainSampleGrid;
+export interface IPropScatterContext {
+    sampleGrid: TerrainSampleGrid;
     center: Vector3Tuple;
     occupancy: PropOccupancy;
     collector: PropCollector;
-    heightSample: IGridSample;
+    scratchSample: IGridSample;
     remainingColliderBudget: number;
     nextRandom: () => number;
     clutterSpecies: IThemeProp[];
@@ -42,6 +46,12 @@ export interface IPlacementRules {
     scaleBoost: [number, number];
     centreBias: number;
     spacingGap: number;
+}
+
+interface IGroupBuilder {
+    prop: IThemeProp;
+    hasCollider: boolean;
+    transformValues: number[];
 }
 
 export class PropOccupancy {
@@ -132,19 +142,18 @@ export class PropOccupancy {
 
         for (let row = firstRow; row <= lastRow; row += 1) {
             for (let column = firstColumn; column <= lastColumn; column += 1) {
-                let entry =
-                    this.cellHead[row * this.cellsPerSide + column] ?? PropOccupancy.EMPTY_CELL;
+                let entry = this.cellHead[row * this.cellsPerSide + column];
 
                 while (entry !== PropOccupancy.EMPTY_CELL) {
-                    const disc = this.entryDisc[entry] ?? 0;
-                    entry = this.entryNextInCell[entry] ?? PropOccupancy.EMPTY_CELL;
+                    const disc = this.entryDisc[entry];
+                    entry = this.entryNextInCell[entry];
 
                     if (this.discVisitedInQuery[disc] === this.queryStamp) continue;
                     this.discVisitedInQuery[disc] = this.queryStamp;
 
-                    const gapX = centerX - (this.discCenterX[disc] ?? 0);
-                    const gapZ = centerZ - (this.discCenterZ[disc] ?? 0);
-                    const contactDistance = radius + (this.discRadius[disc] ?? 0);
+                    const gapX = centerX - this.discCenterX[disc];
+                    const gapZ = centerZ - this.discCenterZ[disc];
+                    const contactDistance = radius + this.discRadius[disc];
 
                     if (gapX * gapX + gapZ * gapZ < contactDistance * contactDistance) return false;
                 }
@@ -167,7 +176,7 @@ export class PropOccupancy {
         this.growEntriesIfFull();
 
         this.entryDisc[entry] = disc;
-        this.entryNextInCell[entry] = this.cellHead[cell] ?? PropOccupancy.EMPTY_CELL;
+        this.entryNextInCell[entry] = this.cellHead[cell];
         this.cellHead[cell] = entry;
         this.entryCount += 1;
     }
@@ -195,8 +204,10 @@ export class PropCollector {
     private static readonly BUCKET_KEY_OFFSET = 1 << 20;
 
     private static bucketKeyFor(worldX: number, worldZ: number): number {
-        const bucketX = Math.floor(worldX / TERRAIN.bucketSize) + PropCollector.BUCKET_KEY_OFFSET;
-        const bucketZ = Math.floor(worldZ / TERRAIN.bucketSize) + PropCollector.BUCKET_KEY_OFFSET;
+        const bucketX =
+            Math.floor(worldX / TERRAIN.propGroupCellSize) + PropCollector.BUCKET_KEY_OFFSET;
+        const bucketZ =
+            Math.floor(worldZ / TERRAIN.propGroupCellSize) + PropCollector.BUCKET_KEY_OFFSET;
 
         return bucketX * (PropCollector.BUCKET_KEY_OFFSET * 2) + bucketZ;
     }
@@ -224,8 +235,8 @@ export class PropCollector {
         builder.transformValues.push(worldX, worldY, worldZ, rotationY, scale);
     }
 
-    toBuckets(): IPropGroup[][] {
-        const buckets: IPropGroup[][] = [];
+    toChunks(): IPropGroup[][] {
+        const chunks: IPropGroup[][] = [];
 
         for (const buildersByModelPath of this.buildersByBucket.values()) {
             const groups: IPropGroup[] = [];
@@ -241,10 +252,10 @@ export class PropCollector {
                     transforms: new Float32Array(builder.transformValues),
                 });
 
-            if (groups.length > 0) buckets.push(groups);
+            if (groups.length > 0) chunks.push(groups);
         }
 
-        return buckets;
+        return chunks;
     }
 
     private builderFor(
@@ -273,13 +284,40 @@ export class PropCollector {
 }
 
 export const collidesWithPlayer = (prop: IThemeProp): boolean =>
-    prop.collides ?? (prop.layer === PropLayer.Canopy || prop.layer === PropLayer.Rock);
+    prop.collides ?? PROP_LAYER_RULES[prop.layer].collidesByDefault;
 
-export function pickSpecies(species: IThemeProp[], nextRandom: () => number): IThemeProp | null {
-    if (species.length === 0) return null;
-    if (species.length === 1) return species[0] ?? null;
+export function rollPropScale(
+    prop: IThemeProp,
+    scaleBoost: readonly [number, number],
+    nextRandom: RandomSource
+): number {
+    return (
+        valueInRange(prop.scaleRange, nextRandom()) *
+        lerp(scaleBoost[0], scaleBoost[1], nextRandom())
+    );
+}
 
-    return species[Math.floor(nextRandom() * species.length)] ?? null;
+export function placeUnlessBlocked(
+    prop: IThemeProp,
+    localX: number,
+    localZ: number,
+    rules: IPlacementRules,
+    scatter: IPropScatterContext
+): PlacementOutcome | null {
+    const outcome = placeProp(prop, localX, localZ, rules, scatter);
+    return outcome === PlacementOutcome.Blocked ? null : outcome;
+}
+
+export function scatterSpecies(
+    species: IThemeProp[],
+    count: number,
+    nextRandom: RandomSource,
+    placeOne: (prop: IThemeProp, index: number) => void
+): void {
+    for (let index = 0; index < count; index += 1) {
+        const prop = pickRandomOrNull(species, nextRandom);
+        if (prop) placeOne(prop, index);
+    }
 }
 
 function randomRotationFor(prop: IThemeProp, nextRandom: () => number): number {
@@ -295,23 +333,39 @@ export function placeProp(
     localX: number,
     localZ: number,
     rules: IPlacementRules,
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): PlacementOutcome {
     const collides = collidesWithPlayer(prop);
-    if (collides && field.remainingColliderBudget <= 0) return PlacementOutcome.Blocked;
+    if (collides && scatter.remainingColliderBudget <= 0) return PlacementOutcome.Blocked;
 
-    const scale =
-        scaleBetween(prop.scaleRange, field.nextRandom()) *
-        lerp(rules.scaleBoost[0], rules.scaleBoost[1], field.nextRandom());
+    const scale = rollPropScale(prop, rules.scaleBoost, scatter.nextRandom);
     const footprintRadius = prop.footprintRadius * scale;
 
-    const sample = passesHardLimits(prop, localX, localZ, footprintRadius, collides, rules, field);
+    const sample = passesHardLimits(
+        prop,
+        localX,
+        localZ,
+        footprintRadius,
+        collides,
+        rules,
+        scatter
+    );
     if (!sample) return PlacementOutcome.Blocked;
 
-    if (SOFT_EDGED_LAYERS.has(prop.layer) && field.nextRandom() >= edgeDensityAt(sample, rules))
+    if (
+        PROP_LAYER_RULES[prop.layer].softEdged &&
+        scatter.nextRandom() >= edgeDensityAt(sample, rules)
+    )
         return PlacementOutcome.Thinned;
 
-    commitProp(prop, localX, localZ, sample.elevation - PROP_FIELD.groundBite, scale, field);
+    commitProp(
+        prop,
+        localX,
+        localZ,
+        sample.elevation - PROP_SCATTER.sinkIntoGround,
+        scale,
+        scatter
+    );
 
     return PlacementOutcome.Placed;
 }
@@ -323,21 +377,21 @@ function passesHardLimits(
     footprintRadius: number,
     collides: boolean,
     rules: IPlacementRules,
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): IGridSample | undefined {
-    if (!field.occupancy.isClear(localX, localZ, footprintRadius + rules.spacingGap))
+    if (!scatter.occupancy.isClear(localX, localZ, footprintRadius + rules.spacingGap))
         return undefined;
 
     const slopeLimit = prop.slopeLimit ?? rules.slopeLimit;
-    const sample = field.heightMap.sampleAt(localX, localZ, field.heightSample);
-    if (sample.footprintDistance > WORLD_EDGE.groundApron) return undefined;
+    const sample = scatter.sampleGrid.sampleAt(localX, localZ, scatter.scratchSample);
+    if (sample.footprintDistance > WORLD_EDGE.flatBorderWidth) return undefined;
     if (sample.waterDepth > -WATER_CHANNEL.propBankMargin) return undefined;
     if (sample.steepness > slopeLimit) return undefined;
-    if (sample.trailDistance < PROP_FIELD.softEdges.trailClearance + footprintRadius)
+    if (sample.trailDistance < PROP_SCATTER.softEdges.trailClearance + footprintRadius)
         return undefined;
     if (
         collides &&
-        !hasLevelRim(localX, localZ, footprintRadius, slopeLimit, field, sample.elevation)
+        !hasLevelRim(localX, localZ, footprintRadius, slopeLimit, scatter, sample.elevation)
     )
         return undefined;
 
@@ -350,12 +404,11 @@ export function forceProp(
     localZ: number,
     scale: number,
     sink: number,
-    field: IFieldContext,
-    embedClutter = false
+    scatter: IPropScatterContext
 ): void {
-    const sample = field.heightMap.sampleAt(localX, localZ, field.heightSample);
+    const sample = scatter.sampleGrid.sampleAt(localX, localZ, scatter.scratchSample);
 
-    commitProp(prop, localX, localZ, sample.elevation - sink, scale, field, embedClutter);
+    commitProp(prop, localX, localZ, sample.elevation - sink, scale, scatter, false);
 }
 
 function commitProp(
@@ -364,25 +417,25 @@ function commitProp(
     localZ: number,
     elevation: number,
     scale: number,
-    field: IFieldContext,
+    scatter: IPropScatterContext,
     embedClutter = true
 ): void {
     const collides = collidesWithPlayer(prop);
     const footprintRadius = prop.footprintRadius * scale;
 
     if (collides && embedClutter && prop.pack !== "architecture" && prop.layer !== PropLayer.Debris)
-        embedClutterAroundHost(localX, localZ, footprintRadius, field);
+        embedClutterAroundHost(localX, localZ, footprintRadius, scatter);
 
-    field.occupancy.reserve(localX, localZ, footprintRadius);
-    if (collides) field.remainingColliderBudget -= 1;
+    scatter.occupancy.reserve(localX, localZ, footprintRadius);
+    if (collides) scatter.remainingColliderBudget -= 1;
 
-    field.collector.add(
+    scatter.collector.add(
         prop,
         collides,
-        field.center[0] + localX,
+        scatter.center[0] + localX,
         elevation + (prop.groundOffset ?? 0) * scale,
-        field.center[2] + localZ,
-        randomRotationFor(prop, field.nextRandom),
+        scatter.center[2] + localZ,
+        randomRotationFor(prop, scatter.nextRandom),
         scale
     );
 }
@@ -391,11 +444,11 @@ function embedClutterAroundHost(
     hostX: number,
     hostZ: number,
     hostFootprintRadius: number,
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): void {
-    if (field.clutterSpecies.length === 0) return;
+    if (scatter.clutterSpecies.length === 0) return;
 
-    const settings = PROP_FIELD.embedding;
+    const settings = PROP_SCATTER.clutterAroundProps;
     const count = clamp(
         Math.round(hostFootprintRadius * settings.countPerFootprintMetre),
         settings.minimumCount,
@@ -404,27 +457,17 @@ function embedClutterAroundHost(
     const innerRadius = hostFootprintRadius * settings.innerRadiusRatio;
     const outerRadius = hostFootprintRadius * settings.outerRadiusRatio;
 
-    for (let index = 0; index < count; index += 1) {
-        const prop = pickSpecies(field.clutterSpecies, field.nextRandom);
-        if (!prop) continue;
-
-        for (let attempt = 0; attempt < settings.placementAttempts; attempt += 1) {
-            const angle = field.nextRandom() * FULL_TURN;
+    scatterSpecies(scatter.clutterSpecies, count, scatter.nextRandom, (prop) =>
+        firstFit(settings.placementAttempts, () => {
+            const angle = scatter.nextRandom() * FULL_TURN;
             const distance = lerp(
                 innerRadius,
                 outerRadius,
-                Math.pow(field.nextRandom(), settings.rules.centreBias)
+                Math.pow(scatter.nextRandom(), settings.rules.centreBias)
             );
-            const localX = hostX + Math.cos(angle) * distance;
-            const localZ = hostZ + Math.sin(angle) * distance;
+            const [localX, localZ] = pointAtAngle(hostX, hostZ, angle, distance);
 
-            const scale =
-                scaleBetween(prop.scaleRange, field.nextRandom()) *
-                lerp(
-                    settings.rules.scaleBoost[0],
-                    settings.rules.scaleBoost[1],
-                    field.nextRandom()
-                );
+            const scale = rollPropScale(prop, settings.rules.scaleBoost, scatter.nextRandom);
             const footprintRadius = prop.footprintRadius * scale;
 
             const sample = passesHardLimits(
@@ -434,26 +477,27 @@ function embedClutterAroundHost(
                 footprintRadius,
                 false,
                 settings.rules,
-                field
+                scatter
             );
-            if (!sample) continue;
+            if (!sample) return null;
 
             commitProp(
                 prop,
                 localX,
                 localZ,
-                sample.elevation - PROP_FIELD.groundBite,
+                sample.elevation - PROP_SCATTER.sinkIntoGround,
                 scale,
-                field,
+                scatter,
                 false
             );
-            break;
-        }
-    }
+            return sample;
+        })
+    );
 }
 
 function edgeDensityAt(sample: IGridSample, rules: IPlacementRules): number {
-    const { trailClearance, trailFadeWidth, slopeFadeRatio, apronFadeWidth } = PROP_FIELD.softEdges;
+    const { trailClearance, trailFadeWidth, slopeFadeRatio, apronFadeWidth } =
+        PROP_SCATTER.softEdges;
 
     const offTrail = smoothstep(
         trailClearance,
@@ -465,8 +509,8 @@ function edgeDensityAt(sample: IGridSample, rules: IPlacementRules): number {
     const insideApron =
         1 -
         smoothstep(
-            WORLD_EDGE.groundApron - apronFadeWidth,
-            WORLD_EDGE.groundApron,
+            WORLD_EDGE.flatBorderWidth - apronFadeWidth,
+            WORLD_EDGE.flatBorderWidth,
             sample.footprintDistance
         );
 
@@ -478,7 +522,7 @@ function hasLevelRim(
     localZ: number,
     clearanceRadius: number,
     slopeLimit: number,
-    field: IFieldContext,
+    scatter: IPropScatterContext,
     centerElevation: number
 ): boolean {
     const elevationDeltaLimit = Math.max(0.4, clearanceRadius * 0.4);
@@ -486,17 +530,17 @@ function hasLevelRim(
     for (let probe = 0; probe < RIM_PROBE_COUNT; probe += 1) {
         const angle = (probe / RIM_PROBE_COUNT) * FULL_TURN;
 
-        field.heightMap.sampleAt(
-            localX + Math.cos(angle) * clearanceRadius,
-            localZ + Math.sin(angle) * clearanceRadius,
-            rimSample
+        scatter.sampleGrid.sampleAt(
+            ...pointAtAngle(localX, localZ, angle, clearanceRadius),
+            rimProbeSample
         );
 
-        if (rimSample.steepness > slopeLimit) return false;
-        if (Math.abs(rimSample.elevation - centerElevation) > elevationDeltaLimit) return false;
-        if (rimSample.waterDepth > -WATER_CHANNEL.propBankMargin) return false;
-        if (rimSample.footprintDistance > WORLD_EDGE.groundApron) return false;
-        if (rimSample.trailDistance < PROP_FIELD.softEdges.trailClearance) return false;
+        if (rimProbeSample.steepness > slopeLimit) return false;
+        if (Math.abs(rimProbeSample.elevation - centerElevation) > elevationDeltaLimit)
+            return false;
+        if (rimProbeSample.waterDepth > -WATER_CHANNEL.propBankMargin) return false;
+        if (rimProbeSample.footprintDistance > WORLD_EDGE.flatBorderWidth) return false;
+        if (rimProbeSample.trailDistance < PROP_SCATTER.softEdges.trailClearance) return false;
     }
 
     return true;

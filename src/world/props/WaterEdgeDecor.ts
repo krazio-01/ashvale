@@ -1,15 +1,15 @@
-import type { IThemeProp } from "@/types/world";
-import type { IWaterCourse } from "@/world/water/WaterCourse";
-import { forceProp, pickSpecies, type IFieldContext } from "@/world/props/PropPlacement";
-import type { ISpeciesByLayer } from "@/world/props/PropField";
+import type { IThemeProp, IWaterCourse, ISpeciesByLayer } from "@/types/world";
+import { forceProp, type IPropScatterContext, scatterSpecies } from "@/world/props/PropPlacement";
 import { WATER_EDGE } from "@/constants/placement";
-import { scaleBetween, FULL_TURN } from "@/lib/helpers";
-
-interface ISpringStone {
-    cross: number;
-    back: number;
-    scale: number;
-}
+import {
+    valueInRange,
+    FULL_TURN,
+    pointAtAngle,
+    randomOffset,
+    pickRandomOrNull,
+    segmentFrame,
+} from "@/lib/helpers";
+import type { ISegmentFrame } from "@/lib/helpers";
 
 const SPRING_RIM_STONES: ISpringStone[] = [
     { cross: 0.0, back: 0.1, scale: 2.8 },
@@ -38,35 +38,41 @@ const SPRING_BACKWALL_STONES: ISpringStone[] = [
 
 const ALL_SPRING_STONES = [...SPRING_RIM_STONES, ...SPRING_BACKWALL_STONES];
 
+interface ISpringStone {
+    cross: number;
+    back: number;
+    scale: number;
+}
+
 export function decorateWaterCourse(
     course: IWaterCourse,
     speciesByLayer: ISpeciesByLayer,
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): void {
     if (course.points.length < 2) return;
 
     if (course.isMudhole) {
-        decorateMudhole(course, speciesByLayer, field);
+        decorateMudhole(course, speciesByLayer, scatter);
         return;
     }
 
-    decorateSpring(course, speciesByLayer, field);
-    decorateOutflow(course, speciesByLayer, field);
+    decorateSpring(course, speciesByLayer, scatter);
+    decorateOutflow(course, speciesByLayer, scatter);
 }
 
 function decorateSpring(
     course: IWaterCourse,
     speciesByLayer: ISpeciesByLayer,
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): void {
-    const source = course.points[0]!;
+    const source = course.points[0];
     const frame = courseFrameAt(course, 0);
     const reach = Math.max(source.halfWidth, WATER_EDGE.minimumSpringRadius);
     const boulders = speciesByLayer.rock;
 
     if (boulders.length > 0)
         for (const stone of ALL_SPRING_STONES) {
-            const boulder = pickSpecies(boulders, field.nextRandom);
+            const boulder = pickRandomOrNull(boulders, scatter.nextRandom);
             if (!boulder) continue;
 
             forceProp(
@@ -77,57 +83,55 @@ function decorateSpring(
                 source.z +
                     frame.acrossZ * (reach * stone.cross) -
                     frame.alongZ * (reach * stone.back),
-                stone.scale * jitterAround(WATER_EDGE.stoneScaleJitter, field),
+                stone.scale *
+                    (1 + randomOffset(scatter.nextRandom, WATER_EDGE.stoneScaleJitter / 2)),
                 WATER_EDGE.stoneSink,
-                field
+                scatter
             );
         }
 
     const bankPlants = riverbankFoliage(speciesByLayer);
     if (bankPlants.length === 0) return;
 
-    for (let index = 0; index < WATER_EDGE.springPlantCount; index += 1) {
-        const plant = pickSpecies(bankPlants, field.nextRandom);
-        if (!plant) continue;
-
-        const cross = (field.nextRandom() - 0.5) * WATER_EDGE.springPlantCrossSpread;
-        const back = scaleBetween(WATER_EDGE.springPlantBackRange, field.nextRandom());
+    scatterSpecies(bankPlants, WATER_EDGE.springPlantCount, scatter.nextRandom, (plant) => {
+        const cross = randomOffset(scatter.nextRandom, WATER_EDGE.springPlantCrossSpread / 2);
+        const back = valueInRange(WATER_EDGE.springPlantBackRange, scatter.nextRandom());
 
         forceProp(
             plant,
             source.x + frame.acrossX * (reach * cross) - frame.alongX * (reach * back),
             source.z + frame.acrossZ * (reach * cross) - frame.alongZ * (reach * back),
-            scaleBetween(WATER_EDGE.plantScaleRange, field.nextRandom()),
+            valueInRange(WATER_EDGE.plantScaleRange, scatter.nextRandom()),
             0,
-            field
+            scatter
         );
-    }
+    });
 }
 
 function decorateOutflow(
     course: IWaterCourse,
     speciesByLayer: ISpeciesByLayer,
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): void {
     const boulders = speciesByLayer.rock;
     if (boulders.length === 0) return;
 
     const points = course.points;
-    const mouth = points[points.length - 1]!;
+    const mouth = points[points.length - 1];
     const frame = courseFrameAt(course, points.length - 1);
     const offset = mouth.halfWidth + WATER_EDGE.outflowStoneOffset;
 
     for (const side of [-1, 1]) {
-        const boulder = pickSpecies(boulders, field.nextRandom);
+        const boulder = pickRandomOrNull(boulders, scatter.nextRandom);
         if (!boulder) continue;
 
         forceProp(
             boulder,
             mouth.x + frame.acrossX * offset * side,
             mouth.z + frame.acrossZ * offset * side,
-            scaleBetween(WATER_EDGE.outflowStoneScaleRange, field.nextRandom()),
+            valueInRange(WATER_EDGE.outflowStoneScaleRange, scatter.nextRandom()),
             WATER_EDGE.stoneSink,
-            field
+            scatter
         );
     }
 }
@@ -135,81 +139,70 @@ function decorateOutflow(
 function decorateMudhole(
     course: IWaterCourse,
     speciesByLayer: ISpeciesByLayer,
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): void {
     const points = course.points;
-    const centre = points[Math.floor(points.length / 2)]!;
+    const centre = points[Math.floor(points.length / 2)];
     const poolRadius = centre.halfWidth;
     const boulders = speciesByLayer.rock;
     const foliage = riverbankFoliage(speciesByLayer);
 
-    for (let index = 0; index < WATER_EDGE.mudholeStoneCount; index += 1) {
-        const boulder = pickSpecies(boulders, field.nextRandom);
-        if (!boulder) continue;
-
+    scatterSpecies(boulders, WATER_EDGE.mudholeStoneCount, scatter.nextRandom, (boulder, index) => {
         const angle =
             (index / WATER_EDGE.mudholeStoneCount) * FULL_TURN +
-            (field.nextRandom() - 0.5) * WATER_EDGE.mudholeStoneAngleJitter;
+            randomOffset(scatter.nextRandom, WATER_EDGE.mudholeStoneAngleJitter / 2);
         const distance =
-            poolRadius + scaleBetween(WATER_EDGE.mudholeStoneOffsetRange, field.nextRandom());
+            poolRadius + valueInRange(WATER_EDGE.mudholeStoneOffsetRange, scatter.nextRandom());
 
         forceProp(
             boulder,
-            centre.x + Math.cos(angle) * distance,
-            centre.z + Math.sin(angle) * distance,
-            scaleBetween(WATER_EDGE.mudholeStoneScaleRange, field.nextRandom()),
+            ...pointAtAngle(centre.x, centre.z, angle, distance),
+            valueInRange(WATER_EDGE.mudholeStoneScaleRange, scatter.nextRandom()),
             WATER_EDGE.mudholeStoneSink,
-            field
+            scatter
         );
-    }
+    });
 
-    for (let index = 0; index < WATER_EDGE.mudholePlantCount; index += 1) {
-        const plant = pickSpecies(foliage, field.nextRandom);
-        if (!plant) continue;
-
-        const angle = field.nextRandom() * FULL_TURN;
+    scatterSpecies(foliage, WATER_EDGE.mudholePlantCount, scatter.nextRandom, (plant) => {
+        const angle = scatter.nextRandom() * FULL_TURN;
         const distance =
-            poolRadius + scaleBetween(WATER_EDGE.mudholePlantOffsetRange, field.nextRandom());
+            poolRadius + valueInRange(WATER_EDGE.mudholePlantOffsetRange, scatter.nextRandom());
 
         forceProp(
             plant,
-            centre.x + Math.cos(angle) * distance,
-            centre.z + Math.sin(angle) * distance,
-            scaleBetween(WATER_EDGE.plantScaleRange, field.nextRandom()),
+            ...pointAtAngle(centre.x, centre.z, angle, distance),
+            valueInRange(WATER_EDGE.plantScaleRange, scatter.nextRandom()),
             0,
-            field
+            scatter
         );
-    }
+    });
 
     if (poolRadius < WATER_EDGE.mudholeTreePoolRadius) return;
 
-    const tree = pickSpecies(speciesByLayer.canopy, field.nextRandom);
+    const tree = pickRandomOrNull(speciesByLayer.canopy, scatter.nextRandom);
     if (!tree) return;
 
-    const angle = field.nextRandom() * FULL_TURN;
+    const angle = scatter.nextRandom() * FULL_TURN;
     const distance =
-        poolRadius + scaleBetween(WATER_EDGE.mudholeTreeOffsetRange, field.nextRandom());
+        poolRadius + valueInRange(WATER_EDGE.mudholeTreeOffsetRange, scatter.nextRandom());
 
     forceProp(
         tree,
-        centre.x + Math.cos(angle) * distance,
-        centre.z + Math.sin(angle) * distance,
-        scaleBetween(WATER_EDGE.mudholeTreeScaleRange, field.nextRandom()),
+        ...pointAtAngle(centre.x, centre.z, angle, distance),
+        valueInRange(WATER_EDGE.mudholeTreeScaleRange, scatter.nextRandom()),
         0,
-        field
+        scatter
     );
 }
 
 const isFlowering = (prop: IThemeProp): boolean => /flower/i.test(prop.modelPath);
+
 const riverbankFoliage = (speciesByLayer: ISpeciesByLayer): IThemeProp[] => [
     ...speciesByLayer.groundcover.filter((prop) => !isFlowering(prop)),
     ...speciesByLayer.understory.filter((prop) => !isFlowering(prop)),
 ];
 
-const jitterAround = (spread: number, field: IFieldContext): number =>
-    1 - spread / 2 + field.nextRandom() * spread;
-
-function courseFrameAt(course: IWaterCourse, pointIndex: number): ICourseFrame {
+function courseFrameAt(course: IWaterCourse, pointIndex: number): ISegmentFrame {
     const points = course.points;
     const isSource = pointIndex === 0;
     const spanEnd = isSource
@@ -217,21 +210,7 @@ function courseFrameAt(course: IWaterCourse, pointIndex: number): ICourseFrame {
         : pointIndex;
     const spanStart = isSource ? pointIndex : Math.max(pointIndex - WATER_EDGE.frameSpan, 0);
 
-    const fromPoint = points[spanStart]!;
-    const toPoint = points[spanEnd]!;
-    const travelX = toPoint.x - fromPoint.x;
-    const travelZ = toPoint.z - fromPoint.z;
-    const travelLength = Math.hypot(travelX, travelZ) || 1;
-
-    const alongX = travelX / travelLength;
-    const alongZ = travelZ / travelLength;
-
-    return { alongX, alongZ, acrossX: -alongZ, acrossZ: alongX };
-}
-
-interface ICourseFrame {
-    alongX: number;
-    alongZ: number;
-    acrossX: number;
-    acrossZ: number;
+    const fromPoint = points[spanStart];
+    const toPoint = points[spanEnd];
+    return segmentFrame(fromPoint.x, fromPoint.z, toPoint.x, toPoint.z);
 }

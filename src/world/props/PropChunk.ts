@@ -1,53 +1,48 @@
 import RAPIER from "@dimforge/rapier3d-compat";
+import { createFixedBody } from "@/systems/physics/RapierWorld";
 import type { RigidBody, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Camera, Group, InstancedMesh, Object3D, Vector3 } from "three";
-import { Entity } from "@/entities/Entity";
-import { PROP_TRANSFORM_STRIDE, PropLayer } from "@/types/world";
 import type { IPropGroup, IModelTemplate, IWorldContext, IWorldEntity } from "@/types/world";
-import { FOLIAGE_LAYER } from "@/world/postProcessing/PostProcessPasses";
-import { PROP_FIELD } from "@/constants/placement";
-import { createSeededRandom, hashString, lerp } from "@/lib/helpers";
+import { FOLIAGE_LAYER } from "@/constants/world";
+import { PROP_SCATTER, PROP_TRANSFORM_STRIDE, PROP_LAYER_RULES } from "@/constants/placement";
+import {
+    createSeededRandom,
+    hashString,
+    lerp,
+    freezeTransform,
+    yawQuaternion,
+} from "@/lib/helpers";
 
-export class PropBatch extends Entity implements IWorldEntity {
+export class PropChunk implements IWorldEntity {
     private static readonly instanceTransform = new Object3D();
-
-    private static matrixScratch = new Float32Array(0);
 
     private static readonly cameraGroundPosition = new Vector3();
 
     private static buildInstanceMatrices(group: IPropGroup): Float32Array {
-        const requiredLength = group.instanceCount * 16;
-        if (PropBatch.matrixScratch.length < requiredLength)
-            PropBatch.matrixScratch = new Float32Array(requiredLength);
+        const matrices = new Float32Array(group.instanceCount * 16);
 
         for (let instance = 0; instance < group.instanceCount; instance += 1) {
             const offset = instance * PROP_TRANSFORM_STRIDE;
 
-            PropBatch.instanceTransform.position.set(
-                group.transforms[offset] ?? 0,
-                group.transforms[offset + 1] ?? 0,
-                group.transforms[offset + 2] ?? 0
+            PropChunk.instanceTransform.position.set(
+                group.transforms[offset],
+                group.transforms[offset + 1],
+                group.transforms[offset + 2]
             );
-            PropBatch.instanceTransform.rotation.y = group.transforms[offset + 3] ?? 0;
-            PropBatch.instanceTransform.scale.setScalar(group.transforms[offset + 4] ?? 1);
-            PropBatch.instanceTransform.updateMatrix();
-            PropBatch.instanceTransform.matrix.toArray(PropBatch.matrixScratch, instance * 16);
+            PropChunk.instanceTransform.rotation.y = group.transforms[offset + 3];
+            PropChunk.instanceTransform.scale.setScalar(group.transforms[offset + 4]);
+            PropChunk.instanceTransform.updateMatrix();
+            PropChunk.instanceTransform.matrix.toArray(matrices, instance * 16);
         }
 
-        return PropBatch.matrixScratch;
-    }
-
-    private static shadowCastingLayer(layer: PropLayer): boolean {
-        return (
-            layer === PropLayer.Canopy || layer === PropLayer.Rock || layer === PropLayer.Understory
-        );
+        return matrices;
     }
 
     readonly sceneObject = new Group();
 
     private readonly physicsWorld: PhysicsWorld;
     private readonly camera: Camera;
-    private readonly batches: InstancedMesh[] = [];
+    private readonly instancedMeshes: InstancedMesh[] = [];
     private readonly rigidBody: RigidBody;
 
     private footprintCenterX = 0;
@@ -55,13 +50,10 @@ export class PropBatch extends Entity implements IWorldEntity {
     private activationDistanceSquared = Infinity;
     private deactivationDistanceSquared = Infinity;
 
-    constructor(batchId: string, context: IWorldContext, camera: Camera, groups: IPropGroup[]) {
-        super(`${batchId}-props`);
-        this.sceneObject.matrixAutoUpdate = false;
-
+    constructor(context: IWorldContext, camera: Camera, groups: IPropGroup[]) {
         this.camera = camera;
         this.physicsWorld = context.physicsWorld;
-        this.rigidBody = context.physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+        this.rigidBody = createFixedBody(context.physicsWorld);
 
         for (const group of groups) {
             if (group.instanceCount === 0) continue;
@@ -69,13 +61,13 @@ export class PropBatch extends Entity implements IWorldEntity {
             const template = context.assetLibrary.getTemplate(group.modelPath);
             if (!template) continue;
 
-            this.addBatches(group, template);
+            this.addInstancedMeshes(group, template);
             if (group.hasCollider) this.addColliders(group, template);
         }
 
-        this.sceneObject.updateMatrixWorld(true);
-        this.sceneObject.matrixWorldAutoUpdate = false;
-        for (const batch of this.batches) batch.matrixWorldAutoUpdate = false;
+        freezeTransform(this.sceneObject);
+        for (const instancedMesh of this.instancedMeshes)
+            instancedMesh.matrixWorldAutoUpdate = false;
 
         this.measureFootprint(groups);
         this.sceneObject.visible = false;
@@ -83,10 +75,10 @@ export class PropBatch extends Entity implements IWorldEntity {
     }
 
     update(): void {
-        this.camera.getWorldPosition(PropBatch.cameraGroundPosition);
+        this.camera.getWorldPosition(PropChunk.cameraGroundPosition);
 
-        const offsetX = PropBatch.cameraGroundPosition.x - this.footprintCenterX;
-        const offsetZ = PropBatch.cameraGroundPosition.z - this.footprintCenterZ;
+        const offsetX = PropChunk.cameraGroundPosition.x - this.footprintCenterX;
+        const offsetZ = PropChunk.cameraGroundPosition.z - this.footprintCenterZ;
         const distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
 
         this.sceneObject.visible = this.sceneObject.visible
@@ -97,30 +89,33 @@ export class PropBatch extends Entity implements IWorldEntity {
     dispose(): void {
         this.physicsWorld.removeRigidBody(this.rigidBody);
 
-        for (const batch of this.batches) batch.dispose();
+        for (const instancedMesh of this.instancedMeshes) instancedMesh.dispose();
 
-        this.batches.length = 0;
+        this.instancedMeshes.length = 0;
         this.sceneObject.clear();
     }
 
-    private addBatches(group: IPropGroup, template: IModelTemplate): void {
-        const matrices = PropBatch.buildInstanceMatrices(group);
-        const castsShadow = PropBatch.shadowCastingLayer(group.layer);
+    private addInstancedMeshes(group: IPropGroup, template: IModelTemplate): void {
+        const matrices = PropChunk.buildInstanceMatrices(group);
+        const castsShadow = PROP_LAYER_RULES[group.layer].castsShadow;
 
         for (const part of template.parts) {
-            const batch = new InstancedMesh(part.geometry, part.material, group.instanceCount);
-            batch.castShadow = castsShadow;
-            batch.receiveShadow = true;
-            batch.matrixAutoUpdate = false;
-            batch.updateMatrixWorld(true);
-            if (part.isFoliage) batch.layers.enable(FOLIAGE_LAYER);
+            const instancedMesh = new InstancedMesh(
+                part.geometry,
+                part.material,
+                group.instanceCount
+            );
+            instancedMesh.castShadow = castsShadow;
+            instancedMesh.receiveShadow = true;
+            instancedMesh.matrixAutoUpdate = false;
+            if (part.isFoliage) instancedMesh.layers.enable(FOLIAGE_LAYER);
 
-            batch.instanceMatrix.array.set(matrices.subarray(0, group.instanceCount * 16));
-            batch.instanceMatrix.needsUpdate = true;
-            batch.computeBoundingSphere();
+            instancedMesh.instanceMatrix.array.set(matrices);
+            instancedMesh.instanceMatrix.needsUpdate = true;
+            instancedMesh.computeBoundingSphere();
 
-            this.batches.push(batch);
-            this.sceneObject.add(batch);
+            this.instancedMeshes.push(instancedMesh);
+            this.sceneObject.add(instancedMesh);
         }
     }
 
@@ -129,11 +124,11 @@ export class PropBatch extends Entity implements IWorldEntity {
 
         for (let instance = 0; instance < group.instanceCount; instance += 1) {
             const offset = instance * PROP_TRANSFORM_STRIDE;
-            const scale = group.transforms[offset + 4] ?? 1;
-            const x = group.transforms[offset] ?? 0;
-            const y = group.transforms[offset + 1] ?? 0;
-            const z = group.transforms[offset + 2] ?? 0;
-            const yaw = group.transforms[offset + 3] ?? 0;
+            const scale = group.transforms[offset + 4];
+            const x = group.transforms[offset];
+            const y = group.transforms[offset + 1];
+            const z = group.transforms[offset + 2];
+            const yaw = group.transforms[offset + 3];
 
             if (isCuboid) {
                 const hx = template.halfExtents.x * scale;
@@ -149,10 +144,9 @@ export class PropBatch extends Entity implements IWorldEntity {
                 const offsetZ =
                     (-template.centerOffset.x * sinYaw + template.centerOffset.z * cosYaw) * scale;
 
-                const halfYaw = yaw / 2;
                 const colliderDesc = RAPIER.ColliderDesc.cuboid(hx, hy, hz)
                     .setTranslation(x + offsetX, y + offsetY, z + offsetZ)
-                    .setRotation({ x: 0, y: Math.sin(halfYaw), z: 0, w: Math.cos(halfYaw) });
+                    .setRotation(yawQuaternion(yaw));
 
                 this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
             } else {
@@ -181,9 +175,9 @@ export class PropBatch extends Entity implements IWorldEntity {
             const count = group.instanceCount;
             for (let i = 0; i < count; i++) {
                 const offset = i * PROP_TRANSFORM_STRIDE;
-                const x = transforms[offset] ?? 0;
-                const z = transforms[offset + 2] ?? 0;
-                const scale = transforms[offset + 4] ?? 1;
+                const x = transforms[offset];
+                const z = transforms[offset + 2];
+                const scale = transforms[offset + 4];
                 const radius = group.footprintRadius * scale;
 
                 minimumX = Math.min(minimumX, x - radius);
@@ -204,10 +198,10 @@ export class PropBatch extends Entity implements IWorldEntity {
         );
         const jitterRatio = createSeededRandom(jitterSeed)();
         const jitteredRadius =
-            PROP_FIELD.activationRadius *
-            lerp(1 - PROP_FIELD.activationJitter, 1 + PROP_FIELD.activationJitter, jitterRatio);
+            PROP_SCATTER.activationRadius *
+            lerp(1 - PROP_SCATTER.activationJitter, 1 + PROP_SCATTER.activationJitter, jitterRatio);
         const activationDistance = jitteredRadius + footprintReach;
-        const deactivationDistance = activationDistance + PROP_FIELD.deactivationMargin;
+        const deactivationDistance = activationDistance + PROP_SCATTER.deactivationMargin;
 
         this.activationDistanceSquared = activationDistance * activationDistance;
         this.deactivationDistanceSquared = deactivationDistance * deactivationDistance;
