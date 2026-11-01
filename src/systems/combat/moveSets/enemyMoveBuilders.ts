@@ -1,6 +1,11 @@
 import { CLIP } from "@/constants/characters";
-import { PARRY, TELEGRAPH } from "@/constants/combat";
-import { defineMove, SHARED_REACTIONS } from "@/systems/combat/moveSets/moveDefinition";
+import { PARRY, ATTACK_WARNING } from "@/constants/combat";
+import {
+    defineMove,
+    hitWindow,
+    SHARED_REACTIONS,
+    WEAPON_HIT_SHAPE,
+} from "@/systems/combat/moveSets/moveDefinition";
 import type {
     HitShape,
     ICancelWindow,
@@ -9,7 +14,7 @@ import type {
     IMoveWindow,
     ImpactTier,
     IProjectileLaunch,
-    IWarpWindow,
+    IGapCloseWindow,
     SwingDirection,
 } from "@/types/combat";
 
@@ -21,26 +26,27 @@ export const ENEMY_DEFENSE_MOVE_IDS = {
 const RECOVERY_CANCEL_AFTER = 0.25;
 const LATEST_MOVEMENT_CANCEL = 0.95;
 const CHAIN_INTO = ["light", "heavy"] as const;
+const TRACKING_TURN_RATE = 6;
 
 interface IStrikeSpec {
     id: string;
     clip: string;
     playbackRate?: number;
     window: readonly [number, number];
-    shape: HitShape;
+    shape?: HitShape;
     damageScale: number;
     poiseDamage: number;
     impact: ImpactTier;
     knockback: number;
     swing: SwingDirection;
-    perilous?: boolean;
+    dodgeOnly?: boolean;
     armor?: IMoveWindow;
     chainAt?: number;
     followedBy?: string;
-    warp?: IWarpWindow;
+    gapClose?: IGapCloseWindow;
 }
 
-interface ICastSpec {
+interface IProjectileMoveSpec {
     id: string;
     clip: string;
     playbackRate?: number;
@@ -53,7 +59,7 @@ function baseMove(id: string, clip: string, playbackRate: number): IMoveDefiniti
         {
             fadeSeconds: 0.08,
             requires: "any",
-            minimumWindupSeconds: TELEGRAPH.minimumWindupSeconds,
+            minimumWindupSeconds: ATTACK_WARNING.minimumWindupSeconds,
         },
         { id, clip, tags: ["light"], playbackRate }
     );
@@ -72,26 +78,24 @@ function attackCancels(committedUntil: number, chainAt: number | undefined): ICa
 
 export function strike(spec: IStrikeSpec): IMoveDefinition {
     const [from, to] = spec.window;
-    const perilous = spec.perilous ?? false;
+    const { shape = WEAPON_HIT_SHAPE, dodgeOnly = false } = spec;
     return {
         ...baseMove(spec.id, spec.clip, spec.playbackRate ?? 1),
         armor: spec.armor,
-        warp: spec.warp,
+        gapClose: spec.gapClose,
         followedBy: spec.followedBy,
-        tracking: { from: 0, to: from, turnRate: 6 },
+        tracking: { from: 0, to: from, turnRate: TRACKING_TURN_RATE },
         hits: [
-            {
-                from,
-                to,
-                shape: spec.shape,
+            hitWindow(from, to, {
+                shape,
                 damageScale: spec.damageScale,
                 poiseDamage: spec.poiseDamage,
                 impact: spec.impact,
                 knockback: spec.knockback,
-                parryable: !perilous,
-                perilous,
+                parryable: !dodgeOnly,
+                dodgeOnly,
                 swing: spec.swing,
-            },
+            }),
         ],
         cancels: attackCancels(to, spec.chainAt),
     };
@@ -105,10 +109,10 @@ export function strikeWithRecovery(
     return [strike({ ...spec, followedBy: recoveryId }), recovery(recoveryId, recoveryClip)];
 }
 
-export function cast(spec: ICastSpec): IMoveDefinition {
+export function projectileMove(spec: IProjectileMoveSpec): IMoveDefinition {
     return {
         ...baseMove(spec.id, spec.clip, spec.playbackRate ?? 1),
-        tracking: { from: 0, to: spec.projectile.at, turnRate: 6 },
+        tracking: { from: 0, to: spec.projectile.at, turnRate: TRACKING_TURN_RATE },
         projectile: spec.projectile,
         cancels: attackCancels(spec.projectile.at, spec.chainAt),
     };
@@ -122,7 +126,10 @@ function recovery(id: string, clip: string): IMoveDefinition {
     };
 }
 
-export function enemyMoveSet(moves: readonly IMoveDefinition[], dodgeClip: string): IMoveSet {
+export function enemyMoveSet(
+    moves: readonly IMoveDefinition[],
+    dodgeClip: string = CLIP.dodgeBackstep
+): IMoveSet {
     const byId: Record<string, IMoveDefinition> = {
         [ENEMY_DEFENSE_MOVE_IDS.parry]: {
             ...baseMove(ENEMY_DEFENSE_MOVE_IDS.parry, CLIP.parry, 1),
