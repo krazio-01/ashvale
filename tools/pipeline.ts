@@ -34,27 +34,10 @@ export const PIPELINE_CONFIG = {
     },
     python: { interpreter: process.env.PYTHON_BIN ?? "python3" },
     maxTextureSize: 1024,
-    encodeConcurrency: 1,
     geometryDriftTolerance: 1e-3,
 } as const;
 
-export const BYTES_PER_MEGABYTE = 1_048_576;
-
-export const toMegabytes = (bytes: number): number => bytes / BYTES_PER_MEGABYTE;
-
-export const formatMegabytes = (bytes: number): string => toMegabytes(bytes).toFixed(1);
-
-export const describeError = (error: unknown): string =>
-    error instanceof Error ? error.message : String(error);
-
-export const assertExists = (file: string, message: string): void => {
-    if (!fs.existsSync(file)) throw new Error(message);
-};
-
-export const isWithin = (parent: string, child: string): boolean =>
-    child === parent || child.startsWith(parent + path.sep);
-
-export const readJsonFile = <T>(file: string): T => JSON.parse(fs.readFileSync(file, "utf8")) as T;
+const BYTES_PER_MEGABYTE = 1_048_576;
 
 export abstract class PipelineCommand {
     abstract readonly name: string;
@@ -63,12 +46,6 @@ export abstract class PipelineCommand {
 
     abstract run(args: readonly string[]): Promise<void>;
 }
-
-const listFilesRecursively = (directory: string): string[] =>
-    fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-        const entryPath = path.join(directory, entry.name);
-        return entry.isDirectory() ? listFilesRecursively(entryPath) : [entryPath];
-    });
 
 export class FileTree {
     readonly root: string;
@@ -115,80 +92,26 @@ export class FileTree {
     }
 }
 
-const PROCESS_LOG_BUFFER_BYTES = 256 * 1024 * 1024;
-
-export class BlenderPackages {
-    private readonly settings = PIPELINE_CONFIG.characters.blenderPackages;
-
-    get directory(): string {
-        return this.settings.directory;
-    }
-
-    ensureInstalled(): void {
-        const marker = path.join(this.directory, ".installed");
-        const wanted = this.settings.requirements.join(" ");
-        if (fs.existsSync(marker) && fs.readFileSync(marker, "utf8") === wanted) return;
-
-        const downloads = fs.mkdtempSync(path.join(os.tmpdir(), "ashvale-wheels-"));
-        try {
-            execFileSync(
-                PIPELINE_CONFIG.python.interpreter,
-                [
-                    "-m",
-                    "pip",
-                    "download",
-                    "--quiet",
-                    "--only-binary=:all:",
-                    "--no-deps",
-                    "--python-version",
-                    this.settings.pythonVersion,
-                    ...this.settings.platforms.flatMap((platform) => ["--platform", platform]),
-                    "--dest",
-                    downloads,
-                    ...this.settings.requirements,
-                ],
-                { stdio: "inherit" }
-            );
-            fs.rmSync(this.directory, { recursive: true, force: true });
-            fs.mkdirSync(this.directory, { recursive: true });
-            for (const wheel of fs.readdirSync(downloads).filter((file) => file.endsWith(".whl")))
-                execFileSync(PIPELINE_CONFIG.python.interpreter, [
-                    "-m",
-                    "zipfile",
-                    "-e",
-                    path.join(downloads, wheel),
-                    this.directory,
-                ]);
-            fs.writeFileSync(marker, wanted);
-            console.log(`blender packages installed in ${this.directory}: ${wanted}`);
-        } finally {
-            fs.rmSync(downloads, { recursive: true, force: true });
-        }
-    }
-}
-
 export class Blender {
-    private readonly binary: string;
-
-    constructor(binary: string = PIPELINE_CONFIG.blender.binary) {
-        this.binary = binary;
-    }
+    private static readonly PROCESS_LOG_BUFFER_BYTES = 256 * 1024 * 1024;
 
     assertInstalled(): void {
-        assertExists(
-            this.binary,
-            `blender not found at ${this.binary}: install it or set BLENDER_BIN`
-        );
+        const { binary } = PIPELINE_CONFIG.blender;
+        assertExists(binary, `blender not found at ${binary}: install it or set BLENDER_BIN`);
     }
 
-    runScript(script: string, args: readonly string[], echoPrefixes: readonly string[]): string[] {
+    runScript(args: readonly string[], echoPrefixes: readonly string[]): string[] {
+        const { binary, script } = PIPELINE_CONFIG.blender;
         const log = execFileSync(
-            this.binary,
+            binary,
             ["-b", "--python-exit-code", "1", "--python", script, "--", ...args],
             {
                 encoding: "utf8",
-                maxBuffer: PROCESS_LOG_BUFFER_BYTES,
-                env: { ...process.env, ASHVALE_BLENDER_PACKAGES: new BlenderPackages().directory },
+                maxBuffer: Blender.PROCESS_LOG_BUFFER_BYTES,
+                env: {
+                    ...process.env,
+                    ASHVALE_BLENDER_PACKAGES: PIPELINE_CONFIG.characters.blenderPackages.directory,
+                },
             }
         );
         const lines = log.split("\n");
@@ -197,3 +120,77 @@ export class Blender {
         return lines;
     }
 }
+
+export const toMegabytes = (bytes: number): number => bytes / BYTES_PER_MEGABYTE;
+
+export const formatMegabytes = (bytes: number): string => toMegabytes(bytes).toFixed(1);
+
+export const describeError = (error: unknown): string =>
+    error instanceof Error ? error.message : String(error);
+
+export const assertExists = (file: string, message: string): void => {
+    if (!fs.existsSync(file)) throw new Error(message);
+};
+
+export const isWithin = (parent: string, child: string): boolean =>
+    child === parent || child.startsWith(parent + path.sep);
+
+export const readJsonFile = <T>(file: string): T => JSON.parse(fs.readFileSync(file, "utf8")) as T;
+
+export const copyFileWithFolders = (source: string, destination: string): void => {
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(source, destination);
+};
+
+export const sourcePathOf = (publicUrl: string): string =>
+    path.join(path.dirname(PIPELINE_CONFIG.sourceRoot), publicUrl);
+
+const listFilesRecursively = (directory: string): string[] =>
+    fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        const entryPath = path.join(directory, entry.name);
+        return entry.isDirectory() ? listFilesRecursively(entryPath) : [entryPath];
+    });
+
+export const ensureBlenderPackages = (): void => {
+    const { directory, pythonVersion, platforms, requirements } =
+        PIPELINE_CONFIG.characters.blenderPackages;
+    const marker = path.join(directory, ".installed");
+    const wanted = requirements.join(" ");
+    if (fs.existsSync(marker) && fs.readFileSync(marker, "utf8") === wanted) return;
+
+    const downloads = fs.mkdtempSync(path.join(os.tmpdir(), "ashvale-wheels-"));
+    try {
+        execFileSync(
+            PIPELINE_CONFIG.python.interpreter,
+            [
+                "-m",
+                "pip",
+                "download",
+                "--quiet",
+                "--only-binary=:all:",
+                "--no-deps",
+                "--python-version",
+                pythonVersion,
+                ...platforms.flatMap((platform) => ["--platform", platform]),
+                "--dest",
+                downloads,
+                ...requirements,
+            ],
+            { stdio: "inherit" }
+        );
+        fs.rmSync(directory, { recursive: true, force: true });
+        fs.mkdirSync(directory, { recursive: true });
+        for (const wheel of fs.readdirSync(downloads).filter((file) => file.endsWith(".whl")))
+            execFileSync(PIPELINE_CONFIG.python.interpreter, [
+                "-m",
+                "zipfile",
+                "-e",
+                path.join(downloads, wheel),
+                directory,
+            ]);
+        fs.writeFileSync(marker, wanted);
+        console.log(`blender packages installed in ${directory}: ${wanted}`);
+    } finally {
+        fs.rmSync(downloads, { recursive: true, force: true });
+    }
+};

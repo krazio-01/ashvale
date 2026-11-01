@@ -45,9 +45,10 @@ class SkeletonDescriptor:
     chains = descriptor_section("chains", dict)
     core_bones = descriptor_section("rig", lambda rig: tuple(rig["coreBones"]))
     damped_bones = descriptor_section("rig", lambda rig: tuple(rig["dampedBones"]))
-    torso_anchors = descriptor_section("rig", lambda rig: tuple(rig["torsoAnchors"]))
+    torso_anchors = descriptor_section("propAnchors", tuple)
     spine_curve = descriptor_section("spineCurve", lambda curve: tuple((bone, region) for bone, region in curve))
     placed_joints = descriptor_section("placedJoints", tuple)
+    measured_joints = descriptor_section("measuredJoints", tuple)
     segment_tails = descriptor_section("segmentTails", dict)
     hidden_bone_parts = descriptor_section("hiddenBoneParts", tuple)
     prop_anchors = descriptor_section("propAnchors", tuple)
@@ -56,6 +57,7 @@ class SkeletonDescriptor:
     )
     finger_bones = descriptor_section("fingerBones", tuple)
     leaf_marker = descriptor_section("leafMarker")
+    physics_bone_prefix = descriptor_section("physicsBonePrefix")
 
     def suffix(self, side):
         return self._section("sides")[side]
@@ -136,21 +138,6 @@ class TuningSection:
             raise AttributeError(f"tuning {self._name}.{key} is missing from the recipe") from None
 
 
-class Tuning:
-    def __init__(self, sections):
-        self._sections = sections
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(config["tuning"])
-
-    def section(self, name):
-        try:
-            return TuningSection(name, self._sections[name])
-        except KeyError:
-            raise KeyError(f"tuning has no section {name}") from None
-
-
 class ModelSettings:
     def __init__(self, descriptor, height_scale, tuning):
         self.descriptor = descriptor
@@ -159,10 +146,13 @@ class ModelSettings:
 
     @classmethod
     def from_config(cls, config):
-        return cls(SkeletonDescriptor.from_config(config), HeightScale.from_config(config), Tuning.from_config(config))
+        return cls(SkeletonDescriptor.from_config(config), HeightScale.from_config(config), config["tuning"])
 
     def section(self, name):
-        return self.tuning.section(name)
+        try:
+            return TuningSection(name, self.tuning[name])
+        except KeyError:
+            raise KeyError(f"tuning has no section {name}") from None
 
     def length(self, metres):
         return self.height_scale.length(metres)

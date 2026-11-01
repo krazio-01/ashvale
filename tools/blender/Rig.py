@@ -249,8 +249,17 @@ class FootHeightProbe:
             stance = 0.0
         return stance, [height - stance for height in heights]
 
-    @staticmethod
-    def report(output, stance, grounded):
+    def ground(self, job, lowest_hip_z, rest_hip_z, frame_count, rewrite):
+        output = job["output"]
+        if job.get("grounding") == "none":
+            print(f"GROUND {output} left as authored")
+            return
+        if lowest_hip_z < UPRIGHT_HIP_FRACTION * rest_hip_z:
+            print(f"GROUND {output} skipped, hips drop below {UPRIGHT_HIP_FRACTION:.0%} of standing height")
+            return
+        stance, grounded = self.measure_ground_offset(frame_count)
+        if stance:
+            rewrite(stance)
         print(
             f"GROUND {output} shift={stance * 100:.1f}cm sole mean={sum(grounded) / len(grounded) * 100:.1f}"
             f" lowest={min(grounded) * 100:.1f} highest={max(grounded) * 100:.1f}cm"
@@ -302,18 +311,11 @@ class ArmaturePoseSolver:
     def __init__(self, armature):
         bones = armature.data.bones
         self.order = [bone.name for bone in sorted(bones, key=lambda bone: len(bone.parent_recursive))]
-        self.depth = {name: index for index, name in enumerate(self.order)}
         self.parent = {bone.name: bone.parent.name if bone.parent else None for bone in bones}
         self.rest_relative = {
             bone.name: bone.parent.matrix_local.inverted() @ bone.matrix_local if bone.parent else bone.matrix_local.copy()
             for bone in bones
         }
-
-    def parent_first(self, names):
-        unknown = sorted(set(names) - set(self.depth))
-        if unknown:
-            raise ValueError(f"unknown bones {unknown}")
-        return sorted(names, key=lambda name: self.depth[name])
 
     def matrices(self, pose):
         result = {}
@@ -334,17 +336,16 @@ class ArmaturePoseSolver:
     def local_location(self, name, armature_position, matrices):
         return self.parent_frame(name, matrices).inverted() @ armature_position
 
-    def solve_two_bone(self, pose, chain, target_position, target_rotation):
+    def solve_two_bone(self, pose, chain, target_position, target_rotation, pole=None, reach_limit=IK_REACH_LIMIT):
         upper, lower, end = chain
         matrices = self.matrices(pose)
         root, joint, tip = (matrices[name].translation.copy() for name in chain)
         upper_length = (joint - root).length
         lower_length = (tip - joint).length
         reach = target_position - root
-        distance = max(1e-6, min(reach.length, (upper_length + lower_length) * IK_REACH_LIMIT))
+        distance = max(1e-6, min(reach.length, (upper_length + lower_length) * reach_limit))
         direction = reach.normalized()
-        bend_axis = (tip - root).cross(joint - root)
-        bend_axis = perpendicular_to(bend_axis, direction)
+        bend_axis = perpendicular_to((tip - root).cross(joint - root) if pole is None else direction.cross(pole), direction)
         if bend_axis.length < 1e-6:
             bend_axis = direction.orthogonal()
         bend_axis.normalize()

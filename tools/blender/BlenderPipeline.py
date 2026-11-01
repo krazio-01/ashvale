@@ -10,8 +10,7 @@ from mathutils import Matrix, Quaternion, Vector
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-if os.environ.get("ASHVALE_BLENDER_PACKAGES"):
-    sys.path.insert(0, os.environ["ASHVALE_BLENDER_PACKAGES"])
+sys.path.insert(0, os.environ["ASHVALE_BLENDER_PACKAGES"])
 
 from scipy.spatial import ConvexHull
 
@@ -25,7 +24,6 @@ from Rig import (
     OUTPUT_FPS,
     SOURCE_TO_TARGET_BONE_MAPS,
     TWIST_REFERENCE,
-    UPRIGHT_HIP_FRACTION,
     WORLD_UP,
     ActionWriter,
     ImportedArmature,
@@ -41,7 +39,7 @@ from Rig import (
     rest_world,
     set_scene_fps,
 )
-from PoseAuthoring import AUTHORED_BAKERS, GameFit, PoseLibrary, ReferenceMotion
+from PoseAuthoring import BeatClipBaker, GameFit, PoseLibrary, ReferenceMotion
 
 BODY_BONES = ("pelvis", "neck_01", "thigh_l", "thigh_r", "calf_l", "foot_l")
 STRIKE_SPEED_FRACTION = 0.6
@@ -182,9 +180,14 @@ class MocapRetargeter:
         for pose_bone in keyed:
             writer.write(pose_bone.name, "rotation_quaternion", rotations[pose_bone.name])
 
-        hips = HipMotionWriter(self, writer, hip_samples, start_hip, hip_scale, job)
-        hips.write_hip_keys(0.0)
-        self.ground(job, hips, hip_samples, hip_scale, frame_count)
+        self.write_hip_keys(writer, hip_samples, start_hip, hip_scale, job, 0.0)
+        self.probe.ground(
+            job,
+            min(hip.z * hip_scale for hip in hip_samples),
+            self.target_hip.z,
+            frame_count,
+            lambda stance: self.write_hip_keys(writer, hip_samples, start_hip, hip_scale, job, stance),
+        )
 
         take.remove()
         writer.action.name = job["output"]
@@ -250,47 +253,25 @@ class MocapRetargeter:
         }
         return ordered, offsets
 
-    def ground(self, job, hips, hip_samples, hip_scale, frame_count):
-        if job.get("grounding") == "none":
-            print(f"GROUND {job['output']} left as authored")
-            return
-        if min(hip.z * hip_scale for hip in hip_samples) < UPRIGHT_HIP_FRACTION * self.target_hip.z:
-            print(f"GROUND {job['output']} skipped, hips drop below {UPRIGHT_HIP_FRACTION:.0%} of standing height")
-            return
-        stance, grounded = self.probe.measure_ground_offset(frame_count)
-        if stance:
-            hips.write_hip_keys(stance)
-        FootHeightProbe.report(job["output"], stance, grounded)
-
-
-class HipMotionWriter:
-    def __init__(self, retargeter, writer, hip_samples, start_hip, hip_scale, job):
-        self.retargeter = retargeter
-        self.writer = writer
-        self.hip_samples = hip_samples
-        self.start_hip = start_hip
-        self.hip_scale = hip_scale
-        self.extract_root = job.get("rootMotion", "inPlace") == "extract"
-        self.hold_feet = bool(job.get("holdFeet"))
-        self.travel = hip_samples[-1] - hip_samples[0]
-        self.last_index = max(len(hip_samples) - 1, 1)
-
-    def write_hip_keys(self, ground_offset):
-        retargeter = self.retargeter
+    def write_hip_keys(self, writer, hip_samples, start_hip, hip_scale, job, ground_offset):
+        extract_root = job.get("rootMotion", "inPlace") == "extract"
+        hold_feet = bool(job.get("holdFeet"))
+        travel = hip_samples[-1] - hip_samples[0]
+        last_index = max(len(hip_samples) - 1, 1)
         roots, pelvises = [], []
-        for index, hip_world in enumerate(self.hip_samples):
-            offset = (hip_world - self.start_hip) * self.hip_scale
+        for index, hip_world in enumerate(hip_samples):
+            offset = (hip_world - start_hip) * hip_scale
             offset.z = 0.0
             sway = Vector()
-            if not self.extract_root:
-                if self.hold_feet:
-                    sway = offset - Vector((self.travel.x, self.travel.y, 0.0)) * self.hip_scale * (index / self.last_index)
+            if not extract_root:
+                if hold_feet:
+                    sway = offset - Vector((travel.x, travel.y, 0.0)) * hip_scale * (index / last_index)
                 offset = Vector()
-            vertical = hip_world.z * self.hip_scale - retargeter.target_hip.z - ground_offset
-            roots.append(retargeter.root_rest_inverse @ (retargeter.armature_inverse @ offset))
-            pelvises.append(retargeter.pelvis_rest_inverse @ (retargeter.armature_inverse @ Vector((sway.x, sway.y, vertical))))
-        self.writer.write("root", "location", roots)
-        self.writer.write("pelvis", "location", pelvises)
+            vertical = hip_world.z * hip_scale - self.target_hip.z - ground_offset
+            roots.append(self.root_rest_inverse @ (self.armature_inverse @ offset))
+            pelvises.append(self.pelvis_rest_inverse @ (self.armature_inverse @ Vector((sway.x, sway.y, vertical))))
+        writer.write("root", "location", roots)
+        writer.write("pelvis", "location", pelvises)
 
 
 class ClipBaker:
@@ -298,26 +279,21 @@ class ClipBaker:
         probe = FootHeightProbe(target)
         self.retargeter = MocapRetargeter(target, probe)
         self.library = PoseLibrary(target)
-        references = ReferenceMotion()
-        self.authored_bakers = [baker_class(target, self.library, probe, references, fit) for baker_class in AUTHORED_BAKERS]
+        self.beat_baker = BeatClipBaker(target, self.library, probe, ReferenceMotion(), fit)
 
     def bake(self, job):
-        baker = next((baker for baker in self.authored_bakers if baker.job_key in job), self.retargeter)
+        baker = self.beat_baker if "beats" in job else self.retargeter
         action, frame_count, source_fps = baker.bake(job)
         self.library.baked[job["output"]] = action
         print(f"BAKED {job['output']} frames={frame_count}")
         return action, frame_count, source_fps
 
-    @property
-    def clip_marks(self):
-        return {output: marks for baker in self.authored_bakers for output, marks in baker.clip_marks.items()}
-
     def close(self):
         self.library.close()
 
 
-def blade_axis(target, side="r"):
-    knuckles = [pose_head(target, f"{finger}_01_{side}") for finger in ("index", "middle", "ring", "pinky")]
+def blade_axis(target):
+    knuckles = [pose_head(target, f"{finger}_01_r") for finger in ("index", "middle", "ring", "pinky")]
     centre = sum(knuckles, Vector()) / len(knuckles)
     return centre, (knuckles[0] - knuckles[3]).normalized()
 
@@ -424,7 +400,7 @@ def run_bake(jobs_path, output_path, marks_path):
     config, target, _, baker = load_clip_job(jobs_path)
     produced = [action for job in config["jobs"] for action, _, _ in [baker.bake(job)] if not job.get("poseSource")]
     baker.close()
-    write_json(marks_path, baker.clip_marks, indent=2, sort_keys=True)
+    write_json(marks_path, baker.beat_baker.clip_marks, indent=2, sort_keys=True)
     for action in list(bpy.data.actions):
         if action not in produced:
             bpy.data.actions.remove(action)
@@ -632,8 +608,6 @@ def parse_arguments():
     model_mode.add_argument("stage")
     model_mode.add_argument("recipe_file")
     model_mode.add_argument("work_root")
-    if "--" not in sys.argv:
-        parser.error("arguments must follow the -- separator")
     return parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
 
 

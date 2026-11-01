@@ -4,51 +4,54 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { NodeIO, type Document } from "@gltf-transform/core";
-import { Box3, Euler, Matrix4, Quaternion, Vector3 } from "three";
+import {
+    Box3,
+    Euler,
+    type Interpolant,
+    Matrix4,
+    Quaternion,
+    QuaternionKeyframeTrack,
+    Vector3,
+    VectorKeyframeTrack,
+} from "three";
 import { EXTMeshoptCompression } from "@gltf-transform/extensions";
 import { dedup, prune, resample } from "@gltf-transform/functions";
-import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
-import { CLIP } from "@/constants/characters";
+import { CLIP, SKELETON_BONES } from "@/constants/characters";
 import { PLAYER, PLAYER_STARTING_WEAPON } from "@/constants/player";
-import { axisVector, degrees, measureBladeAxes } from "@/lib/helpers";
+import {
+    axisVector,
+    degreesToRadians,
+    measureBladeAxes,
+    radiansToDegrees,
+    roundTo,
+} from "@/lib/helpers";
 import { CLIP_MARKS } from "@/constants/combat";
-import type { IClipMarks } from "@/constants/combat";
-import { ASSET_CATALOGUE } from "../assets/AssetCategories";
+import type { IClipMarks } from "@/types/combat";
+import { assetCategory } from "../assets/AssetCategories";
 import {
     Blender,
     PIPELINE_CONFIG,
     PipelineCommand,
+    copyFileWithFolders,
     formatMegabytes,
+    readJsonFile,
+    sourcePathOf,
     toMegabytes,
 } from "../pipeline";
+import { accessorElements, createGltfIo } from "../assets/AssetFormats";
 import {
     CLIP_JOBS,
-    CLIP_LIBRARY,
+    CLIP_BAKE_FILES,
     CLIPS_PROVIDED_BY_CHARACTER_MODEL,
     GAME_FIT,
     OUTPUT_FPS,
     authoredPoses,
-    isAuthoredJob,
     isBeatJob,
     SOURCE_RIGS,
     type ClipJob,
     type IRetargetJob,
     type SourceRig,
 } from "./combatClipManifest";
-
-const TRANSLATION_NODES = new Set(["root", "pelvis"]);
-const RESAMPLE_TOLERANCE = 1e-4;
-const BAKE_LOG_PREFIXES = ["BAKED", "GROUND", "CHECK", "EXPORTED"];
-const AUDITION_LOG_PREFIXES = ["BAKED", "GROUND", "CHECK", "STRIKE", "AUDITION"];
-const SHEET_COLUMNS = 10;
-const SHEET_PAGE_FRAMES = 40;
-const SHEET_VIEWS = ["front", "side", "close", "rear"] as const;
-const SCRATCH_ROOT = fs.realpathSync(os.tmpdir());
-const CLIP_MARK_PRECISION = 1000;
-const MARK_TOLERANCE = 0.002;
-const MAX_MARK_DRIFT_FRAMES = 2;
-const SAME_ROTATION_DEGREES = 0.01;
-const SAME_TRANSLATION_CENTIMETRES = 0.01;
 
 interface ICarryAnchor {
     bone: string;
@@ -60,59 +63,41 @@ interface IBakedClipMarks extends IClipMarks {
     seconds: number;
 }
 
-const round = (value: number): number =>
-    Math.round(value * CLIP_MARK_PRECISION) / CLIP_MARK_PRECISION;
-
-const roundMark = (_key: string, value: unknown): unknown =>
-    typeof value === "number" ? round(value) : value;
-
-async function createClipIo(): Promise<NodeIO> {
-    await MeshoptEncoder.ready;
-    await MeshoptDecoder.ready;
-    return new NodeIO().registerExtensions([EXTMeshoptCompression]).registerDependencies({
-        "meshopt.encoder": MeshoptEncoder,
-        "meshopt.decoder": MeshoptDecoder,
-    });
+interface IClipTracks {
+    duration: number;
+    tracks: Map<string, Interpolant>;
 }
 
-async function carryAnchor(io: NodeIO): Promise<ICarryAnchor> {
-    const carry = PLAYER_STARTING_WEAPON.carry;
-    if (!carry) throw new Error("the player weapon has no carry mount");
-    const weaponRoot = (await io.read(path.join("assets-src", PLAYER_STARTING_WEAPON.modelPath))).getRoot();
-    const bounds = new Box3();
-    for (const node of weaponRoot.listNodes()) {
-        const matrix = new Matrix4().fromArray(node.getWorldMatrix());
-        for (const primitive of node.getMesh()?.listPrimitives() ?? []) {
-            const positions = primitive.getAttribute("POSITION");
-            if (!positions) continue;
-            bounds.union(
-                new Box3(
-                    new Vector3(...positions.getMin([0, 0, 0])),
-                    new Vector3(...positions.getMax([0, 0, 0]))
-                ).applyMatrix4(matrix)
-            );
-        }
-    }
-    const { lengthAxis, bladeSign } = measureBladeAxes(bounds);
-    const characterRoot = (await io.read(CLIP_LIBRARY.target)).getRoot();
-    const bone = characterRoot.listNodes().find((node) => node.getName() === carry.bone);
-    if (!bone) throw new Error(`${CLIP_LIBRARY.target} has no ${carry.bone} bone`);
-    const boneFrame = new Quaternion().setFromRotationMatrix(new Matrix4().fromArray(bone.getWorldMatrix()));
-    const carryRotation = new Quaternion().setFromEuler(
-        new Euler(...(carry.rotationDegrees.map(degrees) as [number, number, number]))
-    );
-    return {
-        bone: carry.bone,
-        hilt: new Vector3(...carry.position).divideScalar(PLAYER.height).applyQuaternion(boneFrame).toArray(),
-        blade: axisVector(lengthAxis, bladeSign, new Vector3()).applyQuaternion(carryRotation).applyQuaternion(boneFrame).toArray(),
-    };
+interface IClipFile {
+    clips: Map<string, IClipTracks>;
+    rest: Map<string, number[]>;
 }
 
-async function gameFit(io: NodeIO): Promise<typeof GAME_FIT & { carry: ICarryAnchor }> {
-    return { ...GAME_FIT, carry: await carryAnchor(io) };
+interface IWorst {
+    value: number;
+    channel: string;
+    time: number;
 }
 
 export class ClipCooker extends PipelineCommand {
+    private static readonly CLIP_MARK_PRECISION = 1000;
+
+    private static readonly TRANSLATION_NODES = new Set<string>([
+        SKELETON_BONES.root,
+        SKELETON_BONES.pelvis,
+    ]);
+
+    private static readonly RESAMPLE_TOLERANCE = 1e-4;
+
+    private static readonly BAKE_LOG_PREFIXES = ["BAKED", "GROUND", "CHECK", "EXPORTED"];
+
+    private static readonly MARK_TOLERANCE = 0.002;
+
+    private static readonly MAX_MARK_DRIFT_FRAMES = 2;
+
+    private static readonly roundMark = (_key: string, value: unknown): unknown =>
+        typeof value === "number" ? roundTo(value, ClipCooker.CLIP_MARK_PRECISION) : value;
+
     readonly name = "cook-clips";
     readonly usage = "[--only <ClipName,ClipName> --out <file.glb>]";
     readonly summary =
@@ -130,32 +115,32 @@ export class ClipCooker extends PipelineCommand {
         if (only && jobs.length !== only.length)
             throw new Error(`--only names clips with no manifest job: ${only.join(", ")}`);
 
-        const io = await createClipIo();
+        const io = await createGltfIo([EXTMeshoptCompression], true);
         const workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "combat-clips-"));
         try {
             const jobsPath = path.join(workDirectory, "jobs.json");
             const rawPath = path.join(workDirectory, "raw.glb");
             const marksPath = path.join(workDirectory, "marks.json");
-            const stagedPath = path.join(workDirectory, path.basename(CLIP_LIBRARY.output));
+            const stagedPath = path.join(workDirectory, path.basename(CLIP_BAKE_FILES.output));
             fs.writeFileSync(
                 jobsPath,
                 JSON.stringify({
-                    target: path.resolve(CLIP_LIBRARY.target),
+                    target: path.resolve(CLIP_BAKE_FILES.target),
                     jobs,
                     game: await gameFit(io),
                 })
             );
             new Blender().runScript(
-                PIPELINE_CONFIG.blender.script,
                 ["bake", jobsPath, rawPath, marksPath],
-                BAKE_LOG_PREFIXES
+                ClipCooker.BAKE_LOG_PREFIXES
             );
-            await this.stripChannels(io, rawPath, stagedPath);
+            await this.stripResampleAndCompress(io, rawPath, stagedPath);
             if (values.out) {
-                fs.mkdirSync(path.dirname(path.resolve(values.out)), { recursive: true });
-                fs.copyFileSync(stagedPath, path.resolve(values.out));
+                copyFileWithFolders(stagedPath, path.resolve(values.out));
                 fs.copyFileSync(marksPath, `${path.resolve(values.out)}.marks.json`);
-                console.log(`subset of ${jobs.length} clips written to ${values.out}, nothing published`);
+                console.log(
+                    `subset of ${jobs.length} clips written to ${values.out}, nothing published`
+                );
                 return;
             }
 
@@ -182,7 +167,11 @@ export class ClipCooker extends PipelineCommand {
         }
     }
 
-    private async stripChannels(io: NodeIO, rawPath: string, outputPath: string): Promise<void> {
+    private async stripResampleAndCompress(
+        io: NodeIO,
+        rawPath: string,
+        outputPath: string
+    ): Promise<void> {
         const document = await io.read(rawPath);
         for (const animation of document.getRoot().listAnimations())
             for (const channel of animation.listChannels()) {
@@ -190,7 +179,7 @@ export class ClipCooker extends PipelineCommand {
                 const nodeName = channel.getTargetNode()?.getName() ?? "";
                 const isDropped =
                     targetPath === "scale" ||
-                    (targetPath === "translation" && !TRANSLATION_NODES.has(nodeName));
+                    (targetPath === "translation" && !ClipCooker.TRANSLATION_NODES.has(nodeName));
                 if (!isDropped) continue;
 
                 const sampler = channel.getSampler();
@@ -198,7 +187,11 @@ export class ClipCooker extends PipelineCommand {
                 if (sampler && sampler.listParents().length <= 1) sampler.dispose();
             }
 
-        await document.transform(resample({ tolerance: RESAMPLE_TOLERANCE }), dedup(), prune());
+        await document.transform(
+            resample({ tolerance: ClipCooker.RESAMPLE_TOLERANCE }),
+            dedup(),
+            prune()
+        );
         document
             .createExtension(EXTMeshoptCompression)
             .setRequired(true)
@@ -207,53 +200,52 @@ export class ClipCooker extends PipelineCommand {
     }
 
     private verifyClipMarks(marksPath: string, durations: Map<string, number>): void {
-        const baked: Record<string, IBakedClipMarks> = JSON.parse(
-            fs.readFileSync(marksPath, "utf8")
-        );
+        const baked = readJsonFile<Record<string, IBakedClipMarks>>(marksPath);
         const problems: string[] = [];
         for (const [name, clip] of Object.entries(baked)) {
             const seconds = durations.get(name);
             if (
                 seconds === undefined ||
-                Math.abs(seconds - clip.seconds) > MAX_MARK_DRIFT_FRAMES / OUTPUT_FPS
+                Math.abs(seconds - clip.seconds) > ClipCooker.MAX_MARK_DRIFT_FRAMES / OUTPUT_FPS
             )
                 throw new Error(
                     `${name}: baked marks assume ${clip.seconds}s but the published clip is ${seconds}s`
                 );
 
             const normalise = (time: number): number => Math.min(1, time / seconds);
-            const baked01: IClipMarks = {
+            const normalisedMarks: IClipMarks = {
                 marks: Object.fromEntries(
                     Object.entries(clip.marks).map(([mark, time]) => [mark, normalise(time)])
                 ),
                 grip: clip.grip && { from: normalise(clip.grip.from), to: normalise(clip.grip.to) },
             };
-            const isEmpty = Object.keys(baked01.marks).length === 0 && !baked01.grip;
+            const isEmpty =
+                Object.keys(normalisedMarks.marks).length === 0 && !normalisedMarks.grip;
             const known = CLIP_MARKS[name];
             if (!known) {
                 if (!isEmpty)
                     problems.push(
-                        `${name}: missing from CLIP_MARKS, baked ${JSON.stringify(baked01, roundMark)}`
+                        `${name}: missing from CLIP_MARKS, baked ${JSON.stringify(normalisedMarks, ClipCooker.roundMark)}`
                     );
                 continue;
             }
             const drifted = [
-                ...Object.entries(baked01.marks).map(
+                ...Object.entries(normalisedMarks.marks).map(
                     ([mark, value]) => [mark, value, known.marks[mark]] as const
                 ),
-                ...(baked01.grip
+                ...(normalisedMarks.grip
                     ? ([
-                          ["grip.from", baked01.grip.from, known.grip?.from],
-                          ["grip.to", baked01.grip.to, known.grip?.to],
+                          ["grip.from", normalisedMarks.grip.from, known.grip?.from],
+                          ["grip.to", normalisedMarks.grip.to, known.grip?.to],
                       ] as const)
                     : []),
             ].filter(
                 ([, value, expected]) =>
-                    expected === undefined || Math.abs(value - expected) > MARK_TOLERANCE
+                    expected === undefined || Math.abs(value - expected) > ClipCooker.MARK_TOLERANCE
             );
             for (const [mark, value, expected] of drifted)
                 problems.push(
-                    `${name}.${mark}: constants say ${expected}, baked clip gives ${round(value)}`
+                    `${name}.${mark}: constants say ${expected}, baked clip gives ${roundTo(value, ClipCooker.CLIP_MARK_PRECISION)}`
                 );
         }
         if (problems.length > 0)
@@ -270,15 +262,15 @@ export class ClipCooker extends PipelineCommand {
     }
 
     private enforceBudget(stagedPath: string, clipCount: number): void {
-        const owner = ASSET_CATALOGUE.ownerOfSourceFile(CLIP_LIBRARY.output);
-        const relativePath = path.relative(owner.sourceDirectory, CLIP_LIBRARY.output);
+        const owner = assetCategory("characters");
+        const relativePath = path.basename(CLIP_BAKE_FILES.output);
         const budget = owner.budgetForFile(relativePath);
         if (budget === undefined)
             throw new Error(`${owner.name} has no file budget for ${relativePath}`);
 
         const bytes = fs.statSync(stagedPath).size;
         console.log(
-            `${CLIP_LIBRARY.output}: ${clipCount} clips, ${formatMegabytes(bytes)} / ${budget} MB`
+            `${CLIP_BAKE_FILES.output}: ${clipCount} clips, ${formatMegabytes(bytes)} / ${budget} MB`
         );
         if (toMegabytes(bytes) > budget)
             throw new Error(`${relativePath} exceeds its ${budget} MB budget; not published`);
@@ -287,20 +279,35 @@ export class ClipCooker extends PipelineCommand {
     private publish(stagedPath: string): void {
         const cookedPath = path.join(
             PIPELINE_CONFIG.outputRoot,
-            path.relative(PIPELINE_CONFIG.sourceRoot, CLIP_LIBRARY.output)
+            path.relative(PIPELINE_CONFIG.sourceRoot, CLIP_BAKE_FILES.output)
         );
-        for (const destination of [CLIP_LIBRARY.output, cookedPath]) {
-            fs.mkdirSync(path.dirname(destination), { recursive: true });
-            fs.copyFileSync(stagedPath, destination);
+        for (const destination of [CLIP_BAKE_FILES.output, cookedPath]) {
+            copyFileWithFolders(stagedPath, destination);
             console.log(`published ${destination}`);
         }
     }
 }
 
-const isSourceRig = (rig: string): rig is SourceRig =>
-    (SOURCE_RIGS as readonly string[]).includes(rig);
-
 export class ClipAudition extends PipelineCommand {
+    private static readonly AUDITION_LOG_PREFIXES = [
+        "BAKED",
+        "GROUND",
+        "CHECK",
+        "STRIKE",
+        "AUDITION",
+    ];
+
+    private static readonly SHEET_COLUMNS = 10;
+
+    private static readonly SHEET_PAGE_FRAMES = 40;
+
+    private static readonly SHEET_VIEWS = ["front", "side", "close", "rear"] as const;
+
+    private static readonly SCRATCH_ROOT = fs.realpathSync(os.tmpdir());
+
+    private static readonly isSourceRig = (rig: string): rig is SourceRig =>
+        (SOURCE_RIGS as readonly string[]).includes(rig);
+
     readonly name = "audition";
     readonly usage =
         "--out <dir> (--clip <ClipName> | --source <file> --rig <rig> [--from --to --calibration --action --extract --align-travel]) [--step n]";
@@ -334,15 +341,14 @@ export class ClipAudition extends PipelineCommand {
         fs.writeFileSync(
             jobPath,
             JSON.stringify({
-                target: path.resolve(CLIP_LIBRARY.target),
+                target: path.resolve(CLIP_BAKE_FILES.target),
                 jobs,
-                game: await gameFit(await createClipIo()),
+                game: await gameFit(await createGltfIo([EXTMeshoptCompression])),
             })
         );
         const lines = new Blender().runScript(
-            PIPELINE_CONFIG.blender.script,
             ["audition", jobPath, outDirectory, values.step],
-            AUDITION_LOG_PREFIXES
+            ClipAudition.AUDITION_LOG_PREFIXES
         );
         fs.writeFileSync(
             path.join(outDirectory, "profile.txt"),
@@ -360,7 +366,7 @@ export class ClipAudition extends PipelineCommand {
             const job = jobsByOutput.get(name);
             if (!job) throw new Error(`no manifest job outputs ${name}`);
             if (ordered.includes(job)) return;
-            if (isAuthoredJob(job) || isBeatJob(job))
+            if (isBeatJob(job))
                 for (const pose of authoredPoses(job))
                     if (!pose.library) visit(pose.clip, [...chain, name]);
             ordered.push(job);
@@ -381,7 +387,7 @@ export class ClipAudition extends PipelineCommand {
     }): Omit<IRetargetJob, "output"> & { output: string } {
         if (!values.source || !values.rig)
             throw new Error("audition needs --clip, or --source with --rig");
-        if (!isSourceRig(values.rig))
+        if (!ClipAudition.isSourceRig(values.rig))
             throw new Error(
                 `unknown --rig ${values.rig}, expected one of ${SOURCE_RIGS.join(", ")}`
             );
@@ -400,12 +406,12 @@ export class ClipAudition extends PipelineCommand {
     }
 
     private prepareOutDirectory(outDirectory: string): void {
-        const isInsideScratch = outDirectory.startsWith(SCRATCH_ROOT + path.sep);
+        const isInsideScratch = outDirectory.startsWith(ClipAudition.SCRATCH_ROOT + path.sep);
         const isEmptyOrMissing =
             !fs.existsSync(outDirectory) || fs.readdirSync(outDirectory).length === 0;
         if (!isInsideScratch && !isEmptyOrMissing)
             throw new Error(
-                `refusing to clear ${outDirectory}: not empty and not inside ${SCRATCH_ROOT}`
+                `refusing to clear ${outDirectory}: not empty and not inside ${ClipAudition.SCRATCH_ROOT}`
             );
         fs.rmSync(outDirectory, { recursive: true, force: true });
         fs.mkdirSync(outDirectory, { recursive: true });
@@ -413,12 +419,12 @@ export class ClipAudition extends PipelineCommand {
 
     private writeContactSheets(outDirectory: string): void {
         const renders = fs.readdirSync(outDirectory).filter((file) => file.endsWith(".png"));
-        for (const view of SHEET_VIEWS) {
+        for (const view of ClipAudition.SHEET_VIEWS) {
             const frames = renders.filter((file) => file.startsWith(`${view}_`)).sort();
-            for (let page = 0; page * SHEET_PAGE_FRAMES < frames.length; page += 1) {
+            for (let page = 0; page * ClipAudition.SHEET_PAGE_FRAMES < frames.length; page += 1) {
                 const pageFrames = frames.slice(
-                    page * SHEET_PAGE_FRAMES,
-                    (page + 1) * SHEET_PAGE_FRAMES
+                    page * ClipAudition.SHEET_PAGE_FRAMES,
+                    (page + 1) * ClipAudition.SHEET_PAGE_FRAMES
                 );
                 const sheet = path.join(
                     outDirectory,
@@ -431,7 +437,7 @@ export class ClipAudition extends PipelineCommand {
                     "%t",
                     ...pageFrames.map((file) => path.join(outDirectory, file)),
                     "-tile",
-                    `${Math.min(SHEET_COLUMNS, pageFrames.length)}x`,
+                    `${Math.min(ClipAudition.SHEET_COLUMNS, pageFrames.length)}x`,
                     "-geometry",
                     "+2+2",
                     sheet,
@@ -442,80 +448,43 @@ export class ClipAudition extends PipelineCommand {
     }
 }
 
-interface ITrack {
-    times: number[];
-    values: number[][];
-}
-
-interface IClipTracks {
-    duration: number;
-    tracks: Map<string, ITrack>;
-}
-
-interface IClipFile {
-    clips: Map<string, IClipTracks>;
-    rest: Map<string, number[]>;
-}
-
-interface IWorst {
-    value: number;
-    channel: string;
-    time: number;
-}
-
-const COMPARED_PATHS = new Set(["rotation", "translation"]);
-
-function sampleTrack(track: ITrack, time: number, isRotation: boolean): number[] {
-    const { times, values } = track;
-    if (time <= times[0]) return values[0];
-    if (time >= times[times.length - 1]) return values[values.length - 1];
-
-    let upper = 1;
-    while (times[upper] < time) upper += 1;
-    const amount = (time - times[upper - 1]) / (times[upper] - times[upper - 1]);
-    const from = values[upper - 1];
-    const to = values[upper];
-    const sign =
-        isRotation && from.reduce((sum, value, index) => sum + value * to[index], 0) < 0 ? -1 : 1;
-    const mixed = from.map((value, index) => value + (sign * to[index] - value) * amount);
-    if (!isRotation) return mixed;
-    const length = Math.hypot(...mixed);
-    return mixed.map((value) => value / length);
-}
-
-function readClipFile(document: Document): IClipFile {
-    const rest = new Map<string, number[]>();
-    for (const node of document.getRoot().listNodes()) {
-        rest.set(`${node.getName()}|rotation`, node.getRotation());
-        rest.set(`${node.getName()}|translation`, node.getTranslation());
-    }
-
-    const clips = new Map<string, IClipTracks>();
-    for (const animation of document.getRoot().listAnimations()) {
-        const tracks = new Map<string, ITrack>();
-        let duration = 0;
-        for (const channel of animation.listChannels()) {
-            const targetPath = channel.getTargetPath() ?? "";
-            const input = channel.getSampler()?.getInput();
-            const output = channel.getSampler()?.getOutput();
-            if (!COMPARED_PATHS.has(targetPath) || !input || !output) continue;
-
-            const times = Array.from(
-                { length: input.getCount() },
-                (_, index) => input.getElement(index, [])[0]
-            );
-            const values = Array.from({ length: output.getCount() }, (_, index) =>
-                output.getElement(index, [])
-            );
-            tracks.set(`${channel.getTargetNode()?.getName()}|${targetPath}`, { times, values });
-            duration = Math.max(duration, times[times.length - 1]);
-        }
-        clips.set(animation.getName(), { duration, tracks });
-    }
-    return { clips, rest };
-}
-
 export class ClipComparer extends PipelineCommand {
+    private static readonly COMPARED_PATHS = new Set(["rotation", "translation"]);
+
+    private static readonly SAME_ROTATION_DEGREES = 0.01;
+
+    private static readonly SAME_TRANSLATION_CENTIMETRES = 0.01;
+
+    private static readClipFile(document: Document): IClipFile {
+        const rest = new Map<string, number[]>();
+        for (const node of document.getRoot().listNodes()) {
+            rest.set(`${node.getName()}|rotation`, node.getRotation());
+            rest.set(`${node.getName()}|translation`, node.getTranslation());
+        }
+
+        const clips = new Map<string, IClipTracks>();
+        for (const animation of document.getRoot().listAnimations()) {
+            const tracks = new Map<string, Interpolant>();
+            let duration = 0;
+            for (const channel of animation.listChannels()) {
+                const targetPath = channel.getTargetPath() ?? "";
+                const input = channel.getSampler()?.getInput();
+                const output = channel.getSampler()?.getOutput();
+                if (!ClipComparer.COMPARED_PATHS.has(targetPath) || !input || !output) continue;
+
+                const times = accessorElements(input).map(([time]) => time);
+                const values = accessorElements(output).flat();
+                const name = `${channel.getTargetNode()?.getName()}|${targetPath}`;
+                const Track =
+                    targetPath === "rotation" ? QuaternionKeyframeTrack : VectorKeyframeTrack;
+                tracks.set(name, new Track(name, times, values).InterpolantFactoryMethodLinear());
+                duration = Math.max(duration, times[times.length - 1]);
+            }
+            clips.set(animation.getName(), { duration, tracks });
+        }
+        return { clips, rest };
+    }
+
     readonly name = "compare-clips";
     readonly usage = "<before.glb> <after.glb> [--clip <ClipName>]";
     readonly summary = "Report per-clip rotation/translation differences between two clip files";
@@ -529,9 +498,11 @@ export class ClipComparer extends PipelineCommand {
         const [beforePath, afterPath] = positionals;
         if (!beforePath || !afterPath) throw new Error(`usage: compare-clips ${this.usage}`);
 
-        const io = await createClipIo();
+        const io = await createGltfIo([EXTMeshoptCompression]);
         const [before, after] = await Promise.all(
-            [beforePath, afterPath].map(async (file) => readClipFile(await io.read(file)))
+            [beforePath, afterPath].map(async (file) =>
+                ClipComparer.readClipFile(await io.read(file))
+            )
         );
         const names = [...new Set([...before.clips.keys(), ...after.clips.keys()])]
             .filter((name) => !values.clip || name === values.clip)
@@ -575,7 +546,7 @@ export class ClipComparer extends PipelineCommand {
                 time: number
             ): number[] => {
                 const track = clip.tracks.get(channel);
-                return track ? sampleTrack(track, time, isRotation) : (rest.get(channel) ?? []);
+                return track ? [...track.evaluate(time)] : (rest.get(channel) ?? []);
             };
             for (let frame = 0; frame <= Math.round(duration * OUTPUT_FPS); frame += 1) {
                 const time = frame / OUTPUT_FPS;
@@ -583,11 +554,13 @@ export class ClipComparer extends PipelineCommand {
                 const b = valueAt(after, afterRest, time);
                 if (a.length === 0 || b.length === 0) continue;
 
-                const unitDot = (): number =>
-                    a.reduce((sum, value, index) => sum + value * b[index], 0) /
-                    (Math.hypot(...a) * Math.hypot(...b));
                 const difference = isRotation
-                    ? (2 * Math.acos(Math.min(1, Math.abs(unitDot()))) * 180) / Math.PI
+                    ? radiansToDegrees(
+                          new Quaternion()
+                              .fromArray(a)
+                              .normalize()
+                              .angleTo(new Quaternion().fromArray(b).normalize())
+                      )
                     : Math.hypot(...a.map((value, index) => value - b[index])) * 100;
                 const worst = isRotation ? rotation : translation;
                 if (difference > worst.value)
@@ -600,8 +573,8 @@ export class ClipComparer extends PipelineCommand {
         }
 
         const isSame =
-            rotation.value < SAME_ROTATION_DEGREES &&
-            translation.value < SAME_TRANSLATION_CENTIMETRES &&
+            rotation.value < ClipComparer.SAME_ROTATION_DEGREES &&
+            translation.value < ClipComparer.SAME_TRANSLATION_CENTIMETRES &&
             Math.abs(before.duration - after.duration) < 1e-4;
         const bone = (worst: IWorst): string => worst.channel.split("|")[0];
         console.log(
@@ -614,4 +587,49 @@ export class ClipComparer extends PipelineCommand {
         );
         return isSame;
     }
+}
+
+async function carryAnchor(io: NodeIO): Promise<ICarryAnchor> {
+    const carry = PLAYER_STARTING_WEAPON.carry;
+    if (!carry) throw new Error("the player weapon has no carry mount");
+    const weaponRoot = (await io.read(sourcePathOf(PLAYER_STARTING_WEAPON.modelPath))).getRoot();
+    const bounds = new Box3();
+    for (const node of weaponRoot.listNodes()) {
+        const matrix = new Matrix4().fromArray(node.getWorldMatrix());
+        for (const primitive of node.getMesh()?.listPrimitives() ?? []) {
+            const positions = primitive.getAttribute("POSITION");
+            if (!positions) continue;
+            bounds.union(
+                new Box3(
+                    new Vector3(...positions.getMin([0, 0, 0])),
+                    new Vector3(...positions.getMax([0, 0, 0]))
+                ).applyMatrix4(matrix)
+            );
+        }
+    }
+    const { lengthAxis, tipDirectionSign } = measureBladeAxes(bounds);
+    const characterRoot = (await io.read(CLIP_BAKE_FILES.target)).getRoot();
+    const bone = characterRoot.listNodes().find((node) => node.getName() === carry.bone);
+    if (!bone) throw new Error(`${CLIP_BAKE_FILES.target} has no ${carry.bone} bone`);
+    const boneFrame = new Quaternion().setFromRotationMatrix(
+        new Matrix4().fromArray(bone.getWorldMatrix())
+    );
+    const carryRotation = new Quaternion().setFromEuler(
+        new Euler(...(carry.rotationDegrees.map(degreesToRadians) as [number, number, number]))
+    );
+    return {
+        bone: carry.bone,
+        hilt: new Vector3(...carry.position)
+            .divideScalar(PLAYER.height)
+            .applyQuaternion(boneFrame)
+            .toArray(),
+        blade: axisVector(lengthAxis, tipDirectionSign, new Vector3())
+            .applyQuaternion(carryRotation)
+            .applyQuaternion(boneFrame)
+            .toArray(),
+    };
+}
+
+async function gameFit(io: NodeIO): Promise<typeof GAME_FIT & { carry: ICarryAnchor }> {
+    return { ...GAME_FIT, carry: await carryAnchor(io) };
 }

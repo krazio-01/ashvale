@@ -1,7 +1,11 @@
-import { SourceImporter } from "./assets/AssetCategories";
-import { AssetCooker, AssetVerifier, TranscoderInstaller } from "./assets/AssetCommands";
+import {
+    AssetCooker,
+    AssetVerifier,
+    SourceImporter,
+    TranscoderInstaller,
+} from "./assets/AssetCommands";
 import { ClipAudition, ClipComparer, ClipCooker } from "./clips/ClipCommands";
-import type { PipelineCommand } from "./pipeline";
+import { describeError, type PipelineCommand } from "./pipeline";
 
 const COMMANDS: readonly PipelineCommand[] = [
     new AssetCooker(),
@@ -36,6 +40,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(describeError(error));
     process.exitCode = 1;
 });

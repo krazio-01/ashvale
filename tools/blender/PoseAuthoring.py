@@ -1,6 +1,4 @@
-import bisect
 import math
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from typing import NamedTuple
 
@@ -10,15 +8,14 @@ from mathutils import Matrix, Quaternion, Vector
 from Geometry import BLENDER_TO_GLTF, smoothstep, smoothstep_unit
 from Rig import (
     FINGERS,
+    IK_REACH_LIMIT,
     OUTPUT_FPS,
     SOURCE_TO_TARGET_BONE_MAPS,
     TRANSLATED_BONES,
-    UPRIGHT_HIP_FRACTION,
     ActionWriter,
     ImportedArmature,
     Pose,
     ArmaturePoseSolver,
-    FootHeightProbe,
     action_fcurves,
     character_to_armature_rotation,
     character_to_armature_vector,
@@ -30,7 +27,6 @@ from Rig import (
 
 VECTOR_EPSILON = 1e-6
 FLOAT_EPSILON = 1e-9
-HOLD_EPSILON = 1e-4
 KEY_SPACING_TOLERANCE = 1e-6
 FK_TOLERANCE = 1e-4
 
@@ -89,7 +85,6 @@ BALANCE_MARGIN = 0.03
 GROUNDED_TOLERANCE = 0.03
 FOOT_HALF_WIDTH = 0.04
 
-RELEASE_SECONDS = 0.1
 DEFAULT_ARC = 0.25
 FOLLOWER_RELEASE_FRAMES = 3
 MOVING_HOLD_PELVIS_DRIFT_METRES = (0.0, 0.0, -0.006)
@@ -98,8 +93,6 @@ OVERSHOOT_STRENGTH = 1.2
 
 RANGE_MARGIN = math.radians(8.0)
 POP_DEGREES_PER_FRAME = 40.0
-LONG_ARC_DEGREES = 150.0
-PLANT_SLIDE_TOLERANCE = 0.005
 GRIP_DRIFT_TOLERANCE = 0.01
 FULL_GRIP_WEIGHT = 0.999
 WRIST_BEND_LIMIT_DEGREES = 25.0
@@ -132,12 +125,6 @@ SPRING_LAGS = {
 }
 
 
-EASES = {
-    "linear": lambda amount: amount,
-    "in": lambda amount: amount * amount,
-    "out": lambda amount: 1.0 - (1.0 - amount) ** 2,
-    "inOut": smoothstep_unit,
-}
 FEELS = {
     "ease": smoothstep_unit,
     "hold": smoothstep_unit,
@@ -146,21 +133,6 @@ FEELS = {
     "overshoot": lambda amount: 1.0 + (OVERSHOOT_STRENGTH + 1.0) * (amount - 1.0) ** 3 + OVERSHOOT_STRENGTH * (amount - 1.0) ** 2,
     "anticipate": lambda amount: (OVERSHOOT_STRENGTH + 1.0) * amount**3 - OVERSHOOT_STRENGTH * amount**2,
 }
-
-
-def hermite_weights(amount):
-    squared = amount * amount
-    cubed = squared * amount
-    return cubed - 2.0 * squared + amount, 3.0 * squared - 2.0 * cubed, cubed - squared
-
-
-def key_velocities(rates):
-    velocities = [rates[0] * 0.0]
-    for before, after in zip(rates, rates[1:]):
-        is_turn = before.length < HOLD_EPSILON or after.length < HOLD_EPSILON or before.dot(after) <= 0.0
-        velocities.append(before * 0.0 if is_turn else (before + after) / 2.0)
-    velocities.append(rates[-1] * 0.0)
-    return velocities
 
 
 def blend_rotation(start, end, amount):
@@ -256,48 +228,6 @@ def apply_spring_lag(values, follower, blend, difference, advance):
         current = advance(current, velocity * step)
         result.append(blend(values[index], current, index))
     return result
-
-
-class VectorSpline:
-    def __init__(self, times, values):
-        self.times = times
-        self.values = values
-        self.deltas = [after - before for before, after in zip(values, values[1:])]
-        spans = [after - before for before, after in zip(times, times[1:])]
-        self.velocities = key_velocities([delta / span for delta, span in zip(self.deltas, spans)])
-
-    def at(self, segment, amount):
-        span = self.times[segment + 1] - self.times[segment]
-        tangent_in, end, tangent_out = hermite_weights(amount)
-        return (
-            self.values[segment]
-            + self.velocities[segment] * (tangent_in * span)
-            + self.deltas[segment] * end
-            + self.velocities[segment + 1] * (tangent_out * span)
-        )
-
-
-class RotationSpline:
-    def __init__(self, times, rotations):
-        self.times = times
-        self.starts = rotations[:-1]
-        self.deltas = [quaternion_to_rotation_vector(before.inverted() @ after) for before, after in zip(rotations, rotations[1:])]
-        spans = [after - before for before, after in zip(times, times[1:])]
-        self.velocities = key_velocities([delta / span for delta, span in zip(self.deltas, spans)])
-        self.arcs = [math.degrees(delta.length) for delta in self.deltas]
-
-    def at(self, segment, amount):
-        span = self.times[segment + 1] - self.times[segment]
-        tangent_in, end, tangent_out = hermite_weights(amount)
-        delta = self.deltas[segment]
-        velocity = self.velocities[segment + 1]
-        angle = delta.length
-        end_velocity = velocity + 0.5 * delta.cross(velocity)
-        if angle > HOLD_EPSILON:
-            curvature = 1.0 / angle**2 - (1.0 + math.cos(angle)) / (2.0 * angle * math.sin(angle))
-            end_velocity += curvature * delta.cross(delta.cross(velocity))
-        offset = self.velocities[segment] * (tangent_in * span) + delta * end + end_velocity * (tangent_out * span)
-        return self.starts[segment] @ rotation_vector_to_quaternion(offset)
 
 
 class PoseLibrary:
@@ -417,7 +347,7 @@ class GameFit:
     knuckle_reach: float
     palm_depth: float
     blade_length: float
-    carry: CarryAnchor | None
+    carry: CarryAnchor
     tuning: dict
 
     @classmethod
@@ -427,273 +357,9 @@ class GameFit:
             knuckle_reach=game["grip"]["knuckleReach"],
             palm_depth=game["grip"]["palmDepth"],
             blade_length=game["bladeToCharacterHeight"] * height,
-            carry=CarryAnchor.from_config(game["carry"], target, height) if "carry" in game else None,
+            carry=CarryAnchor.from_config(game["carry"], target, height),
             tuning=game["tuning"],
         )
-
-
-class AuthoredClipBaker(ABC):
-    job_key = None
-
-    def __init__(self, target, library, probe, references, fit):
-        self.target = target
-        self.fit = fit
-        self.clip_marks = {}
-        self.library = library
-        self.probe = probe
-        self.references = references
-        self.skeleton = ArmaturePoseSolver(target)
-        self.rest_hip = target.data.bones["pelvis"].head_local.copy()
-        self.root_rest_inverse = target.data.bones["root"].matrix_local.to_quaternion().inverted()
-        self.skeleton_verified = False
-
-    @abstractmethod
-    def bake(self, job):
-        pass
-
-    def checks(self, job, frames, frame_matrices, check_context):
-        return []
-
-    def finish(self, job, frames, pelvis_targets, warnings, finger_weights=None, check_context=None):
-        frame_count = len(frames)
-        if "fingers" in job:
-            gripping = self.library.capture(job["fingers"]).rotations
-            finger_bones = [bone for bone in gripping if bone.split("_")[0] in FINGERS]
-            weights = list(finger_weights) if finger_weights is not None else [0.0] * frame_count
-            for grip in job.get("grips", []):
-                first, last = self.contact_range(job, grip, frame_count)
-                for index, weight in self.contact_weights(first, last, frame_count):
-                    weights[index] = max(weights[index], weight)
-            for pose, weight in zip(frames, weights):
-                for bone in finger_bones:
-                    pose.rotations[bone] = pose.rotations[bone].slerp(gripping[bone], weight)
-
-        for plant in job.get("plants", []):
-            chain = LEG_CHAINS[plant["foot"]]
-            first, last = self.contact_range(job, plant, frame_count)
-            anchor = self.library.capture(plant["pose"]) if "pose" in plant else frames[first]
-            locked = self.skeleton.matrices(anchor)[chain[2]].copy()
-            self.hold_contact(frames, chain, first, last, lambda matrices: locked)
-        for grip in job.get("grips", []):
-            first, last = self.contact_range(job, grip, frame_count)
-            reference = self.skeleton.matrices(self.library.capture(grip["pose"]) if "pose" in grip else frames[first])
-            hilt_offset = reference[SWORD_HAND].inverted() @ reference[OFF_HAND]
-            self.hold_contact(frames, OFF_HAND_ARM, first, last, lambda matrices: matrices[SWORD_HAND] @ hilt_offset)
-
-        frame_matrices = [self.skeleton.matrices(pose) for pose in frames]
-        self.report(job, frames, frame_matrices, warnings + self.checks(job, frames, frame_matrices, check_context))
-        writer = self.write(job["output"], frames)
-        self.ground(job, writer, frames, pelvis_targets)
-        writer.action.name = job["output"]
-        set_scene_fps(OUTPUT_FPS)
-        return writer.action, frame_count, OUTPUT_FPS
-
-    def verify_skeleton(self):
-        if self.skeleton_verified:
-            return
-        action = self.references.actions[0]
-        self.target.animation_data_create()
-        self.target.animation_data.action = action
-        start, end = action.frame_range
-        bpy.context.scene.frame_set(int((start + end) / 2))
-        expected = {pose_bone.name: pose_bone.matrix.translation.copy() for pose_bone in self.target.pose.bones}
-        actual = self.skeleton.matrices(Pose.capture(self.target))
-        drift = max((actual[name].translation - position).length for name, position in expected.items())
-        if drift > FK_TOLERANCE:
-            raise RuntimeError(f"ArmaturePoseSolver FK disagrees with Blender by {drift * 100:.3f} cm on {action.name}")
-        self.skeleton_verified = True
-
-    def key_pose(self, key):
-        pose = self.library.capture(key["pose"])
-        pelvis_position = self.skeleton.matrices(pose)["pelvis"].translation.copy()
-        pose.rotations = {
-            bone: pose.rotations.get(bone, Quaternion()) if bone in AUTHORED_BONES else Quaternion()
-            for bone in self.skeleton.order
-        }
-        pose.locations["root"] = Vector()
-        adjust = key.get("adjust", {})
-        for bone in self.skeleton.parent_first(adjust):
-            matrices = self.skeleton.matrices(pose)
-            turned = character_to_armature_rotation(adjust[bone]) @ matrices[bone].to_quaternion()
-            pose.rotations[bone] = self.skeleton.local_rotation(bone, turned, matrices)
-        return pose, pelvis_position
-
-    def contact_range(self, job, contact, frame_count):
-        first, last = (int(round(contact[edge] * OUTPUT_FPS)) for edge in ("from", "to"))
-        if not 0 <= first < last < frame_count:
-            raise ValueError(f"{job['output']}: contact {contact} must satisfy 0 <= from < to <= clip length")
-        return first, last
-
-    def contact_weights(self, first, last, frame_count):
-        release = round(RELEASE_SECONDS * OUTPUT_FPS)
-        engage = release if first > 0 else 0
-        for index in range(max(first - engage, 0), min(last + release, frame_count - 1) + 1):
-            if index < first:
-                yield index, 1.0 - (first - index) / engage
-            else:
-                yield index, 1.0 if index <= last else 1.0 - (index - last) / (release + 1)
-
-    def hold_contact(self, frames, chain, first, last, target_for):
-        for index, weight in self.contact_weights(first, last, len(frames)):
-            matrices = self.skeleton.matrices(frames[index])
-            free = matrices[chain[2]]
-            held = target_for(matrices)
-            position = free.translation.lerp(held.translation, weight)
-            rotation = blend_rotation(free.to_quaternion(), held.to_quaternion(), weight)
-            self.skeleton.solve_two_bone(frames[index], chain, position, rotation)
-
-    def report(self, job, frames, frame_matrices, warnings):
-        output = job["output"]
-        worst_range = {}
-        worst_pop = (0.0, "", 0.0)
-        previous = None
-        for index, (pose, matrices) in enumerate(zip(frames, frame_matrices)):
-            time = index / OUTPUT_FPS
-            for bone, (low, high) in self.references.natural_ranges().items():
-                if bone.split("_")[0] in FINGERS:
-                    continue
-                rotation = pose.rotations.get(bone)
-                if rotation is None:
-                    continue
-                vector = quaternion_to_rotation_vector(rotation)
-                excess = max(max(low[axis] - vector[axis], vector[axis] - high[axis]) for axis in range(3)) - RANGE_MARGIN
-                if excess > worst_range.get(bone, (0.0, 0.0))[0]:
-                    worst_range[bone] = (excess, time)
-            watched = {bone: matrices[bone].to_quaternion() for bone in WATCHED_BONES}
-            if previous is not None:
-                for bone, rotation in watched.items():
-                    step = shortest_turn_degrees(previous[bone], rotation)
-                    if step > worst_pop[0]:
-                        worst_pop = (step, bone, time)
-            previous = watched
-        for bone, (excess, time) in sorted(worst_range.items()):
-            warnings.append(f"range {bone} {math.degrees(excess):.0f}° beyond the natural range at {time:.2f}s")
-        if worst_pop[0] > POP_DEGREES_PER_FRAME:
-            warnings.append(f"pop {worst_pop[1]} {worst_pop[0]:.0f}°/frame at {worst_pop[2]:.2f}s")
-        for plant in job.get("plants", []):
-            foot = LEG_CHAINS[plant["foot"]][2]
-            first, last = (int(round(plant[edge] * OUTPUT_FPS)) for edge in ("from", "to"))
-            anchor = frame_matrices[first][foot].translation
-            slide = max((frame_matrices[index][foot].translation - anchor).length for index in range(first, last + 1))
-            if slide > PLANT_SLIDE_TOLERANCE:
-                warnings.append(f"plant {plant['foot']} slides {slide * 100:.1f}cm")
-        for warning in warnings:
-            print(f"CHECK {output} {warning}")
-        if not warnings:
-            print(f"CHECK {output} ok")
-
-    def write(self, output, frames):
-        writer = ActionWriter(self.target, output)
-        for pose_bone in (bone for bone in self.target.pose.bones if bone.name in AUTHORED_BONES):
-            samples = []
-            for pose in frames:
-                rotation = pose.rotations[pose_bone.name]
-                samples.append(-rotation if samples and samples[-1].dot(rotation) < 0.0 else rotation)
-            writer.write(pose_bone.name, "rotation_quaternion", samples)
-        for name in TRANSLATED_BONES:
-            writer.write(name, "location", [pose.locations[name] for pose in frames])
-        return writer
-
-    def ground(self, job, writer, frames, pelvis_targets):
-        output = job["output"]
-        if job.get("grounding") == "none":
-            print(f"GROUND {output} left as authored")
-            return
-        if min(target.z for target in pelvis_targets) < UPRIGHT_HIP_FRACTION * self.rest_hip.z:
-            print(f"GROUND {output} skipped, hips drop below {UPRIGHT_HIP_FRACTION:.0%} of standing height")
-            return
-        stance, grounded = self.probe.measure_ground_offset(len(frames))
-        if stance:
-            lowered = Vector((0.0, 0.0, stance))
-            writer.write(
-                "pelvis",
-                "location",
-                [
-                    self.skeleton.local_location("pelvis", target - lowered, self.skeleton.matrices(pose))
-                    for pose, target in zip(frames, pelvis_targets)
-                ],
-            )
-        FootHeightProbe.report(output, stance, grounded)
-
-
-class KeyedClipBaker(AuthoredClipBaker):
-    job_key = "keys"
-
-    def bake(self, job):
-        self.verify_skeleton()
-        keys = self.validated_keys(job)
-        times = [key["time"] for key in keys]
-        eases = [key.get("ease", "linear") for key in keys]
-        key_poses, pelvis_positions = zip(*(self.key_pose(key) for key in keys))
-        rotations = {
-            bone: RotationSpline(times, [pose.rotations[bone] for pose in key_poses])
-            for bone in self.skeleton.order
-            if bone in AUTHORED_BONES
-        }
-        pelvis = self.pelvis_splines(job, keys, pelvis_positions, times)
-        frame_count = int(round(times[-1] * OUTPUT_FPS)) + 1
-        sampled = [self.frame_pose(index / OUTPUT_FPS, times, eases, rotations, pelvis) for index in range(frame_count)]
-        arc_warnings = [
-            f"long arc {bone} {arc:.0f}° between keys at {times[index]:.2f}s and {times[index + 1]:.2f}s,"
-            " add a key between them"
-            for bone, spline in rotations.items()
-            for index, arc in enumerate(spline.arcs)
-            if arc > LONG_ARC_DEGREES
-        ]
-        return self.finish(job, [pose for pose, _ in sampled], [target for _, target in sampled], arc_warnings)
-
-    def validated_keys(self, job):
-        output = job["output"]
-        keys = sorted(job["keys"], key=lambda key: key["time"])
-        if len(keys) < 2 or keys[0]["time"] != 0:
-            raise ValueError(f"{output}: needs at least two keys and the first must be at time 0")
-        for before, after in zip(keys, keys[1:]):
-            if after["time"] - before["time"] < 1.0 / OUTPUT_FPS - KEY_SPACING_TOLERANCE:
-                raise ValueError(f"{output}: keys at {before['time']}s and {after['time']}s are closer than one frame")
-        with_travel = sum("travel" in key for key in keys)
-        if with_travel not in (0, len(keys)):
-            raise ValueError(f"{output}: give travel on every key or on none")
-        if with_travel and job["rootMotion"] != "extract":
-            raise ValueError(f"{output}: travel needs rootMotion extract")
-        unknown = sorted({key.get("ease", "linear") for key in keys} - set(EASES))
-        if unknown:
-            raise ValueError(f"{output}: unknown ease {unknown}, expected one of {sorted(EASES)}")
-        return keys
-
-    def pelvis_splines(self, job, keys, pelvis_positions, times):
-        first = pelvis_positions[0]
-        travel, offset, height = [], [], []
-        for key, position in zip(keys, pelvis_positions):
-            shift = character_to_armature_vector(key.get("pelvis", (0.0, 0.0, 0.0)))
-            if "travel" in key:
-                moved = character_to_armature_vector(key["travel"])
-            elif job["rootMotion"] == "extract":
-                moved = position - first
-            else:
-                moved = Vector()
-            travel.append(Vector((moved.x, moved.y, 0.0)))
-            offset.append(Vector((shift.x, shift.y, 0.0)))
-            height.append(Vector((0.0, 0.0, position.z + shift.z)))
-        return {
-            "travel": VectorSpline(times, travel),
-            "offset": VectorSpline(times, offset),
-            "height": VectorSpline(times, height),
-        }
-
-    def frame_pose(self, time, times, eases, rotations, pelvis):
-        segment = max(0, min(len(times) - 2, bisect.bisect_right(times, time) - 1))
-        amount = min(1.0, max(0.0, (time - times[segment]) / (times[segment + 1] - times[segment])))
-        amount = EASES[eases[segment + 1]](amount)
-        pose = Pose({bone: Quaternion() for bone in self.skeleton.order}, {})
-        pose.rotations.update({bone: spline.at(segment, amount) for bone, spline in rotations.items()})
-        travel = pelvis["travel"].at(segment, amount)
-        offset = pelvis["offset"].at(segment, amount)
-        height = pelvis["height"].at(segment, amount)
-        pose.locations["root"] = self.root_rest_inverse @ travel
-        pose.locations["pelvis"] = Vector()
-        target = Vector((self.rest_hip.x + travel.x + offset.x, self.rest_hip.y + travel.y + offset.y, height.z))
-        pose.locations["pelvis"] = self.skeleton.local_location("pelvis", target, self.skeleton.matrices(pose))
-        return pose, target
 
 
 @dataclass
@@ -784,15 +450,124 @@ class HandFrame(NamedTuple):
         return cls(blade, finger, basis(blade, finger).inverted(), handle_offset, (index - pinky).length)
 
 
-class BeatClipBaker(AuthoredClipBaker):
-    job_key = "beats"
+
+class BeatClipBaker:
 
     def __init__(self, target, library, probe, references, fit):
-        super().__init__(target, library, probe, references, fit)
+        self.target = target
+        self.fit = fit
+        self.clip_marks = {}
+        self.library = library
+        self.probe = probe
+        self.references = references
+        self.skeleton = ArmaturePoseSolver(target)
+        self.rest_hip = target.data.bones["pelvis"].head_local.copy()
+        self.root_rest_inverse = target.data.bones["root"].matrix_local.to_quaternion().inverted()
+        self.skeleton_verified = False
         self.sword_hand_frame, self.off_hand_frame = (HandFrame.from_rest(target.data.bones, side, fit) for side in ("r", "l"))
         self.grip_spacing = self.sword_hand_frame.knuckle_span * GRIP_HAND_GAP
         self.height = self.rest_hip.z
         self.hand_twists = {}
+
+    def finish(self, job, frames, pelvis_targets, timeline):
+        frame_count = len(frames)
+        if "fingers" in job:
+            gripping = self.library.capture(job["fingers"]).rotations
+            finger_bones = [bone for bone in gripping if bone.split("_")[0] in FINGERS]
+            for pose, weight in zip(frames, timeline.grip_weights):
+                for bone in finger_bones:
+                    pose.rotations[bone] = pose.rotations[bone].slerp(gripping[bone], weight)
+
+        frame_matrices = [self.skeleton.matrices(pose) for pose in frames]
+        self.report(job, frames, frame_matrices, self.checks(job, frames, frame_matrices, timeline))
+        writer = self.write(job["output"], frames)
+        self.probe.ground(
+            job,
+            min(target.z for target in pelvis_targets),
+            self.rest_hip.z,
+            frame_count,
+            lambda stance: writer.write(
+                "pelvis",
+                "location",
+                [
+                    self.skeleton.local_location("pelvis", target - Vector((0.0, 0.0, stance)), self.skeleton.matrices(pose))
+                    for pose, target in zip(frames, pelvis_targets)
+                ],
+            ),
+        )
+        writer.action.name = job["output"]
+        set_scene_fps(OUTPUT_FPS)
+        return writer.action, frame_count, OUTPUT_FPS
+
+    def verify_skeleton(self):
+        if self.skeleton_verified:
+            return
+        action = self.references.actions[0]
+        self.target.animation_data_create()
+        self.target.animation_data.action = action
+        start, end = action.frame_range
+        bpy.context.scene.frame_set(int((start + end) / 2))
+        expected = {pose_bone.name: pose_bone.matrix.translation.copy() for pose_bone in self.target.pose.bones}
+        actual = self.skeleton.matrices(Pose.capture(self.target))
+        drift = max((actual[name].translation - position).length for name, position in expected.items())
+        if drift > FK_TOLERANCE:
+            raise RuntimeError(f"ArmaturePoseSolver FK disagrees with Blender by {drift * 100:.3f} cm on {action.name}")
+        self.skeleton_verified = True
+
+    def key_pose(self, key):
+        pose = self.library.capture(key["pose"])
+        pelvis_position = self.skeleton.matrices(pose)["pelvis"].translation.copy()
+        pose.rotations = {
+            bone: pose.rotations.get(bone, Quaternion()) if bone in AUTHORED_BONES else Quaternion()
+            for bone in self.skeleton.order
+        }
+        pose.locations["root"] = Vector()
+        return pose, pelvis_position
+
+    def report(self, job, frames, frame_matrices, warnings):
+        output = job["output"]
+        worst_range = {}
+        worst_pop = (0.0, "", 0.0)
+        previous = None
+        for index, (pose, matrices) in enumerate(zip(frames, frame_matrices)):
+            time = index / OUTPUT_FPS
+            for bone, (low, high) in self.references.natural_ranges().items():
+                if bone.split("_")[0] in FINGERS:
+                    continue
+                rotation = pose.rotations.get(bone)
+                if rotation is None:
+                    continue
+                vector = quaternion_to_rotation_vector(rotation)
+                excess = max(max(low[axis] - vector[axis], vector[axis] - high[axis]) for axis in range(3)) - RANGE_MARGIN
+                if excess > worst_range.get(bone, (0.0, 0.0))[0]:
+                    worst_range[bone] = (excess, time)
+            watched = {bone: matrices[bone].to_quaternion() for bone in WATCHED_BONES}
+            if previous is not None:
+                for bone, rotation in watched.items():
+                    step = shortest_turn_degrees(previous[bone], rotation)
+                    if step > worst_pop[0]:
+                        worst_pop = (step, bone, time)
+            previous = watched
+        for bone, (excess, time) in sorted(worst_range.items()):
+            warnings.append(f"range {bone} {math.degrees(excess):.0f}° beyond the natural range at {time:.2f}s")
+        if worst_pop[0] > POP_DEGREES_PER_FRAME:
+            warnings.append(f"pop {worst_pop[1]} {worst_pop[0]:.0f}°/frame at {worst_pop[2]:.2f}s")
+        for warning in warnings:
+            print(f"CHECK {output} {warning}")
+        if not warnings:
+            print(f"CHECK {output} ok")
+
+    def write(self, output, frames):
+        writer = ActionWriter(self.target, output)
+        for pose_bone in (bone for bone in self.target.pose.bones if bone.name in AUTHORED_BONES):
+            samples = []
+            for pose in frames:
+                rotation = pose.rotations[pose_bone.name]
+                samples.append(-rotation if samples and samples[-1].dot(rotation) < 0.0 else rotation)
+            writer.write(pose_bone.name, "rotation_quaternion", samples)
+        for name in TRANSLATED_BONES:
+            writer.write(name, "location", [pose.locations[name] for pose in frames])
+        return writer
 
     def scaled(self, values):
         return character_to_armature_vector([value * self.height for value in values])
@@ -915,8 +690,6 @@ class BeatClipBaker(AuthoredClipBaker):
 
     def carry_frame(self, matrices):
         carry = self.fit.carry
-        if carry is None:
-            raise ValueError("a carried hand needs game.carry in the job config")
         return matrices[carry.bone] @ self.target.data.bones[carry.bone].matrix_local.inverted()
 
     def carried_hilt(self, matrices):
@@ -999,37 +772,10 @@ class BeatClipBaker(AuthoredClipBaker):
             position.z += min(STEP_LIFT_MAX, STEP_LIFT_PER_METRE * distance) * 4.0 * clamped * (1.0 - clamped)
         return position
 
-    def place_with_pole(self, pose, chain, target, pole):
-        upper, lower, end = chain
-        matrices = self.skeleton.matrices(pose)
-        root, joint, tip = (matrices[name].translation.copy() for name in chain)
-        upper_length = (joint - root).length
-        lower_length = (tip - joint).length
-        reach = target - root
-        distance = max(VECTOR_EPSILON, min(reach.length, (upper_length + lower_length) * MAX_REACH_FRACTION))
-        direction = reach.normalized()
-        side = perpendicular_to(pole, direction)
-        if side.length < VECTOR_EPSILON:
-            side = perpendicular_to(joint - root, direction)
-        side.normalize()
-        cosine = max(-1.0, min(1.0, (upper_length**2 + distance**2 - lower_length**2) / (2.0 * upper_length * distance)))
-        elbow = root + direction * (upper_length * cosine) + side * (upper_length * math.sqrt(1.0 - cosine * cosine))
-        swing = (joint - root).rotation_difference(elbow - root)
-        pose.rotations[upper] = self.skeleton.local_rotation(upper, swing @ matrices[upper].to_quaternion(), matrices)
-        matrices = self.skeleton.matrices(pose)
-        joint, tip = matrices[lower].translation, matrices[end].translation
-        swing = (tip - joint).rotation_difference(root + direction * distance - joint)
-        pose.rotations[lower] = self.skeleton.local_rotation(lower, swing @ matrices[lower].to_quaternion(), matrices)
-
     def solve_hinged(self, pose, chain, target, rotation, pole=None):
         upper, lower, end = chain
         twist = twist_degrees(pose.rotations[lower])
-        if pole is None:
-            self.skeleton.solve_two_bone(pose, chain, target, rotation)
-        else:
-            self.place_with_pole(pose, chain, target, pole)
-            matrices = self.skeleton.matrices(pose)
-            pose.rotations[end] = self.skeleton.local_rotation(end, rotation, matrices)
+        self.skeleton.solve_two_bone(pose, chain, target, rotation, pole, IK_REACH_LIMIT if pole is None else MAX_REACH_FRACTION)
         axis = self.references.flexion_axes().get(lower)
         if axis is None:
             return
@@ -1288,8 +1034,6 @@ class BeatClipBaker(AuthoredClipBaker):
                 target = target.drifted()
             travel = self.scaled(beat["travel"]) if "travel" in beat else previous_travel
             spans.append(BeatSpan(time, time + beat["seconds"], previous, target, previous_travel, travel, beat))
-            if beat.get("contact"):
-                print(f"CONTACT {output} {time:.3f}")
             previous, previous_travel = target, travel
             time += beat["seconds"]
 
@@ -1348,7 +1092,7 @@ class BeatClipBaker(AuthoredClipBaker):
             spans = [span._replace(start=time - span.end, end=time - span.start) for span in reversed(spans)]
         timeline = BeatTimeline(spans=spans, grip_weights=grip_weights, authored_weights=authored_weights)
         self.clip_marks[output] = self.derive_marks(output, spans, timeline.grip_weights, job.get("reversed", False))
-        return self.finish(job, frames, pelvis_targets, [], timeline.grip_weights, timeline)
+        return self.finish(job, frames, pelvis_targets, timeline)
 
     def derive_marks(self, output, spans, grip_weights, reversed_spans):
         names = [span.beat["mark"] for span in spans if "mark" in span.beat]
@@ -1430,7 +1174,7 @@ class BeatClipBaker(AuthoredClipBaker):
                     warnings.append(f"elbow {label} {clearance * 100:.0f}cm from the spine, inside the ribs")
                 if abduction < ARM_ABDUCTION_MIN_DEGREES:
                     warnings.append(f"arm {label} pressed against the torso, {abduction:.0f}° out")
-        if self.fit.carry is not None and any(is_carried(job["stances"][name].get("hand")) for name in (job["start"], *(beat["pose"] for beat in job["beats"]))):
+        if any(is_carried(job["stances"][name].get("hand")) for name in (job["start"], *(beat["pose"] for beat in job["beats"]))):
             gaps = [(self.blade_axis(matrices)[0] - self.carried_hilt(matrices)).length for matrices in frame_matrices]
             clearances = [self.blade_head_clearance(matrices) for matrices in frame_matrices]
             gripped = [index for index, gap in enumerate(gaps) if gap <= self.fit.tuning["gripGapMetres"]]
@@ -1527,6 +1271,3 @@ class BeatClipBaker(AuthoredClipBaker):
             if difference > MATCH_DEGREES:
                 warnings.append(f"{edge} off {difference:.0f}° at {bone} from {reference['clip']}")
         return warnings
-
-
-AUTHORED_BAKERS = (BeatClipBaker, KeyedClipBaker)

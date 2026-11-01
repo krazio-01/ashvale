@@ -1,8 +1,7 @@
 import numpy as np
 
-from Geometry import SkinInfluences, closest_on_segment, graph_distance_to_sources, rounded, segment_distance, smoothstep_unit
+from Geometry import SkinInfluences, closest_on_segment, graph_distance_to_sources, principal_axes, rounded, segment_distance, smoothstep
 
-LATTICE_PREFIX = "phys_"
 SPACING_PERCENTILE = 95.0
 CLEARANCE_PASSES = 32
 CLEARANCE_TOLERANCE = 1e-9
@@ -10,8 +9,8 @@ CLEARANCE_GATE_SHARE = 0.999
 NODE_DECIMALS = 5
 
 
-def lattice_bone_name(body, column, row):
-    return f"{LATTICE_PREFIX}{body}_c{column}_r{row}"
+def lattice_bone_name(prefix, body, column, row):
+    return f"{prefix}{body}_c{column}_r{row}"
 
 
 def gaussian_weighted_average(values, samples, node_coordinates, sigma):
@@ -55,8 +54,7 @@ def grid_triangle_weights(column_position, row_position, columns, rows):
 def build_sheet(points, normals, columns, rows, centre, settings):
     physics = settings.section("physics")
     middle = points.mean(axis=0)
-    _, eigenvectors = np.linalg.eigh(np.cov((points[:, :2] - middle[:2]).T))
-    across = np.array([*eigenvectors[:, -1], 0.0])
+    across = np.array([*principal_axes(points[:, :2])[0], 0.0])
     across = -across if across[0] < 0 else across
     u = (points - middle) @ across
     v = points[:, 2].max() - points[:, 2]
@@ -75,8 +73,7 @@ def sheet_weights(grid, columns, rows, settings):
     column_position = (grid["u"] - grid["u_min"]) / span_u * (columns - 1)
     row_position = grid["v"] / max(grid["v_max"], 1e-9) * (rows - 1)
     nodes, weights = grid_triangle_weights(column_position, row_position, columns, rows)
-    fade = np.clip(np.clip(row_position, 0.0, rows - 1) / settings.section("physics").fadeRows, 0.0, 1.0)
-    return nodes, weights, smoothstep_unit(fade)
+    return nodes, weights, smoothstep(0.0, settings.section("physics").fadeRows, np.clip(row_position, 0.0, rows - 1))
 
 
 def wrapped_columns(grid, points):

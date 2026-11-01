@@ -8,12 +8,13 @@ import {
     PIPELINE_CONFIG,
     PipelineCommand,
     assertExists,
+    copyFileWithFolders,
     describeError,
     formatMegabytes,
     isWithin,
     toMegabytes,
 } from "../pipeline";
-import { ASSET_CATALOGUE } from "./AssetCategories";
+import { ASSET_CATEGORIES, assetCategory } from "./AssetCategories";
 import { Findings } from "./AssetValidation";
 import {
     COOKED_EXTENSIONS,
@@ -69,7 +70,7 @@ export class AssetCooker extends PipelineCommand {
                 `stray file ${strayFile}: sources must sit inside a category folder, delete or move it`
             );
         for (const folder of new Set(source.files.map((file) => source.topFolderOf(file))))
-            ASSET_CATALOGUE.get(folder);
+            assetCategory(folder);
         return source;
     }
 
@@ -80,7 +81,7 @@ export class AssetCooker extends PipelineCommand {
         );
 
         let encoded = 0;
-        await this.forEachConcurrently(texturesToEncode, async ([sourceFile, role]) => {
+        for (const [sourceFile, role] of texturesToEncode) {
             const outputFile = source
                 .mirrorPath(sourceFile, PIPELINE_CONFIG.outputRoot)
                 .replace(/\.(png|jpe?g)$/i, ".ktx2");
@@ -88,14 +89,14 @@ export class AssetCooker extends PipelineCommand {
                 sourceFile,
                 role,
                 outputFile,
-                ASSET_CATALOGUE.ownerOfSourceFile(sourceFile).maxTextureSizeFor(
+                assetCategory(source.topFolderOf(sourceFile)).maxTextureSizeFor(
                     source.relativePath(sourceFile)
                 )
             );
 
             encoded += 1;
             if (encoded % 10 === 0) console.log(`  encoded ${encoded}/${texturesToEncode.length}`);
-        });
+        }
     }
 
     private rewriteDocuments(
@@ -113,8 +114,7 @@ export class AssetCooker extends PipelineCommand {
     private copyPassthroughFiles(source: FileTree): void {
         for (const file of source.withExtensions(".bin", ".glb")) {
             const destinationPath = source.mirrorPath(file, PIPELINE_CONFIG.outputRoot);
-            fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-            fs.copyFileSync(file, destinationPath);
+            copyFileWithFolders(file, destinationPath);
         }
     }
 
@@ -124,13 +124,13 @@ export class AssetCooker extends PipelineCommand {
         const output = FileTree.scan(PIPELINE_CONFIG.outputRoot);
         const compressible = output
             .withExtensions(".gltf")
-            .filter((file) => ASSET_CATALOGUE.get(output.topFolderOf(file)).compressesGeometry);
+            .filter((file) => assetCategory(output.topFolderOf(file)).compressesGeometry);
 
-        await this.forEachConcurrently(compressible, async (gltfPath) => {
+        for (const gltfPath of compressible) {
             const document = await io.read(gltfPath);
             await document.transform(meshopt({ encoder: MeshoptEncoder, level: "high" }));
             await io.write(gltfPath, document);
-        });
+        }
         console.log("meshopt complete");
     }
 
@@ -139,7 +139,7 @@ export class AssetCooker extends PipelineCommand {
 
         console.log("");
         for (const [name, bytes] of [...bytesByCategory].sort()) {
-            const budget = ASSET_CATALOGUE.get(name).budgetMegabytes;
+            const budget = assetCategory(name).budgetMegabytes;
             const over = toMegabytes(bytes) > budget ? " OVER BUDGET" : "";
             console.log(`  ${name}: ${formatMegabytes(bytes)} MB / ${budget} MB${over}`);
         }
@@ -150,22 +150,6 @@ export class AssetCooker extends PipelineCommand {
         );
         console.log(
             `\nsource ${formatMegabytes(source.totalBytes())} MB -> cooked ${formatMegabytes(cookedTotal)} MB`
-        );
-    }
-
-    private async forEachConcurrently<Item>(
-        items: readonly Item[],
-        task: (item: Item) => Promise<void>
-    ): Promise<void> {
-        let nextIndex = 0;
-        const worker = async (): Promise<void> => {
-            while (nextIndex < items.length) await task(items[nextIndex++]);
-        };
-        await Promise.all(
-            Array.from(
-                { length: Math.min(PIPELINE_CONFIG.encodeConcurrency, items.length) },
-                worker
-            )
         );
     }
 }
@@ -201,7 +185,6 @@ export class AssetVerifier extends PipelineCommand {
     private failures = new Findings();
 
     async run(): Promise<void> {
-        this.failures = new Findings();
         const output = FileTree.scan(PIPELINE_CONFIG.outputRoot);
 
         this.checkTextureBindings(output);
@@ -228,9 +211,7 @@ export class AssetVerifier extends PipelineCommand {
             const textures = json.textures ?? [];
 
             for (const [textureIndex, texture] of textures.entries()) {
-                const source = (
-                    texture.extensions as { KHR_texture_basisu?: { source?: number } } | undefined
-                )?.KHR_texture_basisu?.source;
+                const source = texture.extensions?.KHR_texture_basisu?.source;
                 const image = source === undefined ? undefined : images[source];
                 const ktx2Path = image?.uri && path.join(directory, decodeURIComponent(image.uri));
 
@@ -273,7 +254,7 @@ export class AssetVerifier extends PipelineCommand {
         const bytesByCategory = output.bytesByTopFolder();
 
         for (const [name, bytes] of [...bytesByCategory].sort()) {
-            const category = ASSET_CATALOGUE.find(name);
+            const category = ASSET_CATEGORIES.find((candidate) => candidate.name === name);
             if (!category) {
                 console.log(`  category ${name}: UNREGISTERED`);
                 this.failures.push(
@@ -284,7 +265,7 @@ export class AssetVerifier extends PipelineCommand {
             this.checkBudget(`category ${name}`, toMegabytes(bytes), category.budgetMegabytes);
         }
 
-        for (const category of ASSET_CATALOGUE.categories) {
+        for (const category of ASSET_CATEGORIES) {
             if (bytesByCategory.has(category.name)) continue;
             console.log(`  category ${category.name}: MISSING`);
             this.failures.push(`category ${category.name}: missing from cooked output`);
@@ -292,7 +273,7 @@ export class AssetVerifier extends PipelineCommand {
     }
 
     private checkFileBudgets(): void {
-        for (const category of ASSET_CATALOGUE.categories)
+        for (const category of ASSET_CATEGORIES)
             for (const [relativePath, budget] of category.budgetedFiles) {
                 const cookedFile = path.join(
                     PIPELINE_CONFIG.outputRoot,
@@ -399,5 +380,24 @@ export class AssetVerifier extends PipelineCommand {
                 this.failures.push(`transcoder file missing: ${transcoderPath}`);
         }
         console.log(`transcoder files: checked ${files.length}`);
+    }
+}
+
+export class SourceImporter extends PipelineCommand {
+    readonly name = "import";
+    readonly usage = "<category> [category arguments]";
+    readonly summary = "Convert a raw download into glTF-ready source under assets-src/models";
+
+    async run(args: readonly string[]): Promise<void> {
+        const [categoryName, ...categoryArgs] = args;
+        if (!categoryName) {
+            console.log("importable categories:");
+            for (const category of ASSET_CATEGORIES)
+                if (category.importUsage) console.log(`  ${category.name} ${category.importUsage}`);
+            throw new Error("import needs a category");
+        }
+
+        await assetCategory(categoryName).importSource(categoryArgs);
+        console.log("\nnext: npm run cook && npm run verify:assets");
     }
 }

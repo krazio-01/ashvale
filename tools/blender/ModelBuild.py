@@ -4,10 +4,10 @@ import bpy
 import numpy as np
 from mathutils import Vector
 from scipy.spatial import cKDTree
+from scipy.spatial.transform import Rotation
 
-import PhysicsLattice as lattice
-from Geometry import compose, matrices_to_blender, normalised, quaternion_matrix, to_blender
-from ModelConfig import HeightScale, SkeletonDescriptor, read_json, write_json
+from Geometry import SkinInfluences, compose, normalised, quaternion_matrix, to_blender
+from ModelConfig import read_json, write_json
 
 WELD_DECIMALS = 5
 TILE = 360
@@ -25,6 +25,23 @@ def read_attribute(items, name, columns, dtype):
     values = np.zeros(len(items) * columns, dtype)
     items.foreach_get(name, values)
     return values.reshape(-1, columns)
+
+
+def read_image(path, colour_space=None):
+    image = bpy.data.images.load(str(path))
+    if colour_space is not None:
+        image.colorspace_settings.name = colour_space
+    width, height = image.size
+    pixels = np.empty(width * height * 4, np.float32)
+    image.pixels.foreach_get(pixels)
+    bpy.data.images.remove(image)
+    return pixels.reshape(height, width, 4)
+
+
+def save_png(image, path):
+    image.filepath_raw = str(path)
+    image.file_format = "PNG"
+    image.save()
 
 
 def mesh_positions(mesh):
@@ -167,7 +184,7 @@ class Skeleton:
 
 
 class SkeletonFit:
-    def __init__(self, skeleton, targets, placed=()):
+    def __init__(self, skeleton, targets, placed):
         descriptor = skeleton.descriptor
         chains = descriptor.chains
         placed_joints = descriptor.placed_joints
@@ -211,7 +228,7 @@ class SkeletonFit:
             current = normalised(world[row][:3, :3] @ local_direction)
             desired = normalised(target - world[row][:3, 3])
             world_rotation = quaternion_matrix(self.quaternion_between(current, desired)) @ world[row][:3, :3]
-            bind_rotations[row] = self.matrix_quaternion(parent_world[:3, :3].T @ world_rotation)
+            bind_rotations[row] = Rotation.from_matrix(parent_world[:3, :3].T @ world_rotation).as_quat()
             world[row] = parent_world @ compose(bind_translations[row], bind_rotations[row], skeleton.rest_scales[row])
 
         self.skeleton = skeleton
@@ -228,29 +245,12 @@ class SkeletonFit:
         heads = {name: to_blender(self.bind_world[row][:3, 3]) for row, name in enumerate(skeleton.names)}
         tails = {}
         for name in skeleton.names:
-            tail = self.chains.get(name) or self.segment_tails.get(name) or next((child for child in skeleton.children(name) if not child.startswith(lattice.LATTICE_PREFIX)), None)
+            tail = self.chains.get(name) or self.segment_tails.get(name) or next((child for child in skeleton.children(name) if not child.startswith(skeleton.descriptor.physics_bone_prefix)), None)
             if tail in heads:
                 tails[name] = heads[tail]
             elif tail is not None:
                 tails[name] = to_blender(self.targets[tail])
         return heads, tails
-
-    @staticmethod
-    def matrix_quaternion(matrix):
-        trace = np.trace(matrix)
-        if trace > 0:
-            s = math.sqrt(trace + 1.0) * 2
-            quaternion = [(matrix[2, 1] - matrix[1, 2]) / s, (matrix[0, 2] - matrix[2, 0]) / s, (matrix[1, 0] - matrix[0, 1]) / s, 0.25 * s]
-        elif matrix[0, 0] > matrix[1, 1] and matrix[0, 0] > matrix[2, 2]:
-            s = math.sqrt(1.0 + matrix[0, 0] - matrix[1, 1] - matrix[2, 2]) * 2
-            quaternion = [0.25 * s, (matrix[0, 1] + matrix[1, 0]) / s, (matrix[0, 2] + matrix[2, 0]) / s, (matrix[2, 1] - matrix[1, 2]) / s]
-        elif matrix[1, 1] > matrix[2, 2]:
-            s = math.sqrt(1.0 + matrix[1, 1] - matrix[0, 0] - matrix[2, 2]) * 2
-            quaternion = [(matrix[0, 1] + matrix[1, 0]) / s, 0.25 * s, (matrix[1, 2] + matrix[2, 1]) / s, (matrix[0, 2] - matrix[2, 0]) / s]
-        else:
-            s = math.sqrt(1.0 + matrix[2, 2] - matrix[0, 0] - matrix[1, 1]) * 2
-            quaternion = [(matrix[0, 2] + matrix[2, 0]) / s, (matrix[1, 2] + matrix[2, 1]) / s, 0.25 * s, (matrix[1, 0] - matrix[0, 1]) / s]
-        return normalised(np.array(quaternion))
 
     @staticmethod
     def quaternion_between(start, end):
@@ -342,7 +342,7 @@ class ReferenceAlignment:
 
     def __init__(self, points, target, facing_yaw_degrees, height):
         yaw = math.radians(facing_yaw_degrees)
-        self.rotation = np.array([[math.cos(yaw), -math.sin(yaw), 0.0], [math.sin(yaw), math.cos(yaw), 0.0], [0.0, 0.0, 1.0]])
+        self.rotation = Rotation.from_euler("z", yaw).as_matrix()
         turned = points @ self.rotation.T
         self.scale = height / np.ptp(turned[:, 2])
         turned *= self.scale
@@ -435,9 +435,7 @@ class TextureBaker:
             use_clear=True,
             **options,
         )
-        image.filepath_raw = str(work / f"{name}.png")
-        image.file_format = "PNG"
-        image.save()
+        save_png(image, work / f"{name}.png")
         return image
 
     def wire_baked_material(self, material, albedo, normal):
@@ -484,14 +482,15 @@ def add_ortho_camera(name, scale=None):
 
 class Studio:
     CAMERA_DISTANCE = 5.0
+    SAMPLES = 12
 
 
-    def __init__(self, samples=12, engine="CYCLES"):
+    def __init__(self, engine="CYCLES"):
         scene = bpy.context.scene
         scene.render.engine = engine
         if engine == "CYCLES":
             scene.cycles.device = "CPU"
-            scene.cycles.samples = samples
+            scene.cycles.samples = self.SAMPLES
             scene.cycles.use_denoising = False
         scene.world = bpy.data.worlds.new("qa_world")
         scene.world.color = (0.55, 0.55, 0.6)
@@ -502,7 +501,7 @@ class Studio:
             scene.collection.objects.link(light)
         self.camera = add_ortho_camera("qa_camera")
 
-    def shot(self, centre, scale, view, path, size=TILE):
+    def shot(self, centre, scale, view, path, size):
         scene = bpy.context.scene
         scene.render.resolution_x = size
         scene.render.resolution_y = size
@@ -521,29 +520,37 @@ class ContactSheet:
         self.pixels[..., 3] = 1.0
 
     def place(self, path, column, row):
-        image = bpy.data.images.load(str(path))
-        width, height = image.size
-        data = np.empty(width * height * 4, np.float32)
-        image.pixels.foreach_get(data)
-        data = data.reshape(height, width, 4)
+        data = read_image(path)
+        height, width = data.shape[:2]
         bottom = (self.rows - 1 - row) * self.tile
         rows, columns = min(height, self.tile), min(width, self.tile)
         self.pixels[bottom:bottom + rows, column * self.tile:column * self.tile + columns] = data[:rows, :columns]
-        bpy.data.images.remove(image)
 
     def save(self, path):
         image = bpy.data.images.new("contact_sheet", self.columns * self.tile, self.rows * self.tile, alpha=True)
         image.pixels.foreach_set(self.pixels.ravel())
-        image.filepath_raw = str(path)
-        image.file_format = "PNG"
-        image.save()
+        save_png(image, path)
         bpy.data.images.remove(image)
 
 
+def body_regions(descriptor, length, joint):
+    left_hand, right_hand = (descriptor.arm(side)[-1] for side in descriptor.SIDES)
+    head = joint(descriptor.head) + Vector((0.0, 0.0, length(0.08)))
+    return {
+        "face": (head, length(0.36), "front"),
+        "face_side": (head, length(0.36), "side"),
+        "hand_l": (joint(left_hand) + Vector((0.0, 0.0, length(-0.08))), length(0.34), "front"),
+        "hand_r": (joint(right_hand) + Vector((0.0, 0.0, length(-0.08))), length(0.34), "front"),
+        "back": (joint(descriptor.chest) + Vector((0.0, 0.0, length(0.05))), length(1.0), "back"),
+        "chest": (joint(descriptor.chest) + Vector((0.0, 0.0, length(0.02))), length(0.62), "front"),
+        "legs": (joint(descriptor.pelvis) * 0.3 + Vector((0.0, 0.0, length(0.22))), length(0.95), "front"),
+    }
+
+
 class SkinnedPreview:
-    def __init__(self, work, config):
-        self.descriptor = SkeletonDescriptor.from_config(config)
-        self.height_scale = HeightScale.from_config(config)
+    def __init__(self, work, settings):
+        self.descriptor = settings.descriptor
+        self.height_scale = settings.height_scale
         bpy.ops.wm.open_mainfile(filepath=str(work / "lo.blend"))
         bpy.data.objects.remove(bpy.data.objects["hi"])
         self.mesh = bpy.data.objects["lo"].data
@@ -552,8 +559,7 @@ class SkinnedPreview:
         self.skeleton = Skeleton.load(work, self.descriptor)
         self.poses = ClipSampler(self.skeleton, rig["rest_translations"])
         self.bind_inverse = np.linalg.inv(rig["bind_world"])
-        self.joints = final["joints"]
-        self.weights = final["weights"]
+        self.influences = SkinInfluences(np.arange(len(self.bind_inverse)), final["joints"], final["weights"])
         self.rest = mesh_positions(self.mesh)
         self.rest_normals = np.load(work / "lo_split.npz")["normals"]
         self.loop_vertices = loop_vertex_indices(self.mesh)
@@ -568,8 +574,7 @@ class SkinnedPreview:
 
     def pose(self, clip, fraction):
         self.world = self.poses.sample(clip, fraction * self.poses.duration(clip))
-        skinning = matrices_to_blender(self.world @ self.bind_inverse)
-        blended = np.einsum("nk,nkij->nij", self.weights, skinning[self.joints])
+        blended = self.influences.blend(self.world @ self.bind_inverse)
         positions = np.einsum("nij,nj->ni", blended, np.c_[self.rest, np.ones(len(self.rest))])[:, :3]
         normals = np.einsum("nij,nj->ni", blended[:, :3, :3], self.rest_normals)
         normals /= np.linalg.norm(normals, axis=1, keepdims=True)
@@ -583,13 +588,4 @@ class SkinnedPreview:
         self.mesh.update()
 
     def region_centres(self):
-        descriptor, length = self.descriptor, self.height_scale.length
-        left_hand, right_hand = (descriptor.arm(side)[-1] for side in descriptor.SIDES)
-        return {
-            "face": (self.joint(descriptor.head) + Vector((0.0, 0.0, length(0.08))), length(0.36), "front"),
-            "hand_l": (self.joint(left_hand) + Vector((0.0, 0.0, length(-0.08))), length(0.34), "front"),
-            "hand_r": (self.joint(right_hand) + Vector((0.0, 0.0, length(-0.08))), length(0.34), "front"),
-            "back": (self.joint(descriptor.chest) + Vector((0.0, 0.0, length(0.05))), length(1.0), "back"),
-            "chest": (self.joint(descriptor.chest) + Vector((0.0, 0.0, length(0.02))), length(0.62), "front"),
-            "legs": (self.joint(descriptor.pelvis) * 0.3 + Vector((0.0, 0.0, length(0.22))), length(0.95), "front"),
-        }
+        return body_regions(self.descriptor, self.height_scale.length, self.joint)
