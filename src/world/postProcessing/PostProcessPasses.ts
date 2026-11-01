@@ -2,21 +2,38 @@ import { BlendFunction, Effect, EffectAttribute } from "postprocessing";
 import {
     Matrix4,
     Uniform,
+    Color,
+    Vector2,
     Camera,
-    WebGLRenderer,
     Layers,
     MeshBasicMaterial,
     Scene,
+    WebGLRenderer,
     WebGLRenderTarget,
-    Color,
-    Vector2,
 } from "three";
 import type { Texture } from "three";
-import { sunDirectionOf } from "@/themes/Themes";
+import { sunDirectionFromSky } from "@/themes/Themes";
 import type { ISkyGradient } from "@/types/world";
-import { ATMOSPHERE, OUTLINE } from "@/constants/world";
+import { ATMOSPHERE, OUTLINE, FOLIAGE_LAYER } from "@/constants/world";
 
-const VIEW_POSITION_FUNCTION = `
+const foliageOnlyLayers = new Layers();
+
+export const SCENE_LIGHT_LAYERS = new Layers();
+
+interface IAtmosphereEffectOptions {
+    camera: Camera;
+    sky: ISkyGradient;
+    fogDensity: number;
+}
+
+interface IOutlineEffectOptions {
+    camera: Camera;
+    foliageMask: Texture | null;
+    outlineColor: string;
+}
+
+abstract class ViewPositionEffect extends Effect {
+    private static readonly VIEW_POSITION_FUNCTION = `
     uniform mat4 inverseProjectionMatrix;
 
     vec3 viewPositionAt(const in vec2 uv) {
@@ -27,7 +44,6 @@ const VIEW_POSITION_FUNCTION = `
     }
 `;
 
-export abstract class ViewPositionEffect extends Effect {
     protected readonly camera: Camera;
     private readonly inverseProjectionMatrix: Uniform<Matrix4>;
 
@@ -39,7 +55,7 @@ export abstract class ViewPositionEffect extends Effect {
     ) {
         uniforms.set("inverseProjectionMatrix", new Uniform(new Matrix4()));
 
-        super(name, VIEW_POSITION_FUNCTION + fragmentShader, {
+        super(name, ViewPositionEffect.VIEW_POSITION_FUNCTION + fragmentShader, {
             blendFunction: BlendFunction.NORMAL,
             attributes: EffectAttribute.DEPTH,
             uniforms,
@@ -54,54 +70,8 @@ export abstract class ViewPositionEffect extends Effect {
     }
 }
 
-export const FOLIAGE_LAYER = 1;
-
-const maskLayers = new Layers();
-maskLayers.set(FOLIAGE_LAYER);
-
-export const SCENE_LIGHT_LAYERS = new Layers();
-SCENE_LIGHT_LAYERS.enable(FOLIAGE_LAYER);
-
-export class FoliageMaskPass {
-    readonly renderTarget: WebGLRenderTarget;
-
-    private readonly maskMaterial = new MeshBasicMaterial({ color: 0xffffff });
-
-    constructor(width: number, height: number) {
-        this.renderTarget = new WebGLRenderTarget(width, height);
-    }
-
-    setSize(width: number, height: number): void {
-        this.renderTarget.setSize(width, height);
-    }
-
-    render(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {
-        const previousCameraLayerMask = camera.layers.mask;
-        const previousOverrideMaterial = scene.overrideMaterial;
-        const previousRenderTarget = renderer.getRenderTarget();
-        const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
-
-        renderer.shadowMap.autoUpdate = false;
-        camera.layers.mask = maskLayers.mask;
-        scene.overrideMaterial = this.maskMaterial;
-
-        renderer.setRenderTarget(this.renderTarget);
-        renderer.clear();
-        renderer.render(scene, camera);
-
-        renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
-        camera.layers.mask = previousCameraLayerMask;
-        scene.overrideMaterial = previousOverrideMaterial;
-        renderer.setRenderTarget(previousRenderTarget);
-    }
-
-    dispose(): void {
-        this.renderTarget.dispose();
-        this.maskMaterial.dispose();
-    }
-}
-
-const atmosphereEffectFragmentShader = `
+export class AtmosphereEffect extends ViewPositionEffect {
+    private static readonly ATMOSPHERE_FRAGMENT_SHADER = `
     uniform mat4 cameraWorldMatrix;
     uniform vec3 horizonColor;
     uniform vec3 sunGlowColor;
@@ -139,13 +109,6 @@ const atmosphereEffectFragmentShader = `
     }
 `;
 
-interface IAtmosphereEffectOptions {
-    camera: Camera;
-    sky: ISkyGradient;
-    fogDensity: number;
-}
-
-export class AtmosphereEffect extends ViewPositionEffect {
     private readonly cameraWorldMatrix: Uniform<Matrix4>;
 
     constructor({ camera, sky, fogDensity }: IAtmosphereEffectOptions) {
@@ -154,7 +117,7 @@ export class AtmosphereEffect extends ViewPositionEffect {
             ["cameraWorldMatrix", cameraWorldMatrixUniform],
             ["horizonColor", new Uniform(new Color(sky.horizon))],
             ["sunGlowColor", new Uniform(new Color(sky.glow))],
-            ["sunDirection", new Uniform(sunDirectionOf(sky))],
+            ["sunDirection", new Uniform(sunDirectionFromSky(sky))],
             ["density", new Uniform(fogDensity)],
             ["baseHeight", new Uniform(ATMOSPHERE.hazeBaseHeight)],
             ["heightFadeRate", new Uniform(ATMOSPHERE.hazeHeightFadeRate)],
@@ -163,7 +126,7 @@ export class AtmosphereEffect extends ViewPositionEffect {
             ["sunGlowFalloff", new Uniform(ATMOSPHERE.sunGlowFalloff)],
         ]);
 
-        super("AtmosphereEffect", atmosphereEffectFragmentShader, uniforms, camera);
+        super("AtmosphereEffect", AtmosphereEffect.ATMOSPHERE_FRAGMENT_SHADER, uniforms, camera);
         this.cameraWorldMatrix = cameraWorldMatrixUniform;
     }
 
@@ -174,7 +137,8 @@ export class AtmosphereEffect extends ViewPositionEffect {
     }
 }
 
-const outlineEffectFragmentShader = `
+export class OutlineEffect extends ViewPositionEffect {
+    private static readonly OUTLINE_FRAGMENT_SHADER = `
     uniform sampler2D foliageMask;
     uniform vec3 outlineColor;
     uniform float edgeThreshold;
@@ -185,7 +149,6 @@ const outlineEffectFragmentShader = `
     uniform float opacity;
     uniform float thickness;
     uniform vec2 texelSize;
-    uniform float debugView;
 
     bool isFoliage(const in vec2 uv) {
         return texture2D(foliageMask, uv).r > 0.5;
@@ -255,24 +218,12 @@ const outlineEffectFragmentShader = `
         float scaledThreshold = edgeThreshold * centerDistance;
         float edge = smoothstep(scaledThreshold, scaledThreshold * 2.0, max(widestGap, 0.0));
 
-        if (debugView > 0.5) {
-            outputColor = vec4(edge, edge, edge, 1.0);
-            return;
-        }
-
         float edgeStrength = edge * distanceFade * foliageFade * opacity;
 
         outputColor = vec4(mix(inputColor.rgb, outlineColor, edgeStrength), inputColor.a);
     }
 `;
 
-interface IOutlineEffectOptions {
-    camera: Camera;
-    foliageMask: Texture | null;
-    outlineColor: string;
-}
-
-export class OutlineEffect extends ViewPositionEffect {
     private readonly texelSize: Uniform<Vector2>;
     private readonly scratchBufferSize = new Vector2();
 
@@ -289,10 +240,9 @@ export class OutlineEffect extends ViewPositionEffect {
             ["opacity", new Uniform(OUTLINE.opacity)],
             ["thickness", new Uniform(OUTLINE.thickness)],
             ["texelSize", texelSizeUniform],
-            ["debugView", new Uniform(OUTLINE.debugView ? 1 : 0)],
         ]);
 
-        super("OutlineEffect", outlineEffectFragmentShader, uniforms, camera);
+        super("OutlineEffect", OutlineEffect.OUTLINE_FRAGMENT_SHADER, uniforms, camera);
         this.texelSize = texelSizeUniform;
     }
 
@@ -303,3 +253,46 @@ export class OutlineEffect extends ViewPositionEffect {
         this.texelSize.value.set(1 / this.scratchBufferSize.x, 1 / this.scratchBufferSize.y);
     }
 }
+
+export class FoliageMaskPass {
+    readonly renderTarget: WebGLRenderTarget;
+
+    private readonly maskMaterial = new MeshBasicMaterial({ color: 0xffffff });
+
+    constructor(width: number, height: number) {
+        this.renderTarget = new WebGLRenderTarget(width, height);
+    }
+
+    setSize(width: number, height: number): void {
+        this.renderTarget.setSize(width, height);
+    }
+
+    render(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {
+        const previousCameraLayerMask = camera.layers.mask;
+        const previousOverrideMaterial = scene.overrideMaterial;
+        const previousRenderTarget = renderer.getRenderTarget();
+        const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+
+        renderer.shadowMap.autoUpdate = false;
+        camera.layers.mask = foliageOnlyLayers.mask;
+        scene.overrideMaterial = this.maskMaterial;
+
+        renderer.setRenderTarget(this.renderTarget);
+        renderer.clear();
+        renderer.render(scene, camera);
+
+        renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
+        camera.layers.mask = previousCameraLayerMask;
+        scene.overrideMaterial = previousOverrideMaterial;
+        renderer.setRenderTarget(previousRenderTarget);
+    }
+
+    dispose(): void {
+        this.renderTarget.dispose();
+        this.maskMaterial.dispose();
+    }
+}
+
+foliageOnlyLayers.set(FOLIAGE_LAYER);
+
+SCENE_LIGHT_LAYERS.enable(FOLIAGE_LAYER);

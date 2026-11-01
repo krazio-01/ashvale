@@ -5,8 +5,13 @@ import { store } from "@/store/store";
 import { HUD } from "@/constants/ui";
 import type { AlertMarkerKind } from "@/types/ui";
 import type { IWorldEntity } from "@/types/world";
-import type { CombatEvents } from "@/events/CombatEvents";
-import { metres } from "@/lib/helpers";
+import type { GameEvents } from "@/events/EventEmitter";
+import { metresToUnits } from "@/lib/helpers";
+
+const DAMAGE_NUMBER_SPAWN_HEIGHT = metresToUnits(0.4);
+const DAMAGE_NUMBER_RISE_PER_SECOND = metresToUnits(HUD.damageNumberRise * 10);
+const scratchProjection = new Vector3();
+const scratchCameraPosition = new Vector3();
 
 export interface IAlertMarkerSource {
     readonly sceneObject: Object3D;
@@ -23,21 +28,33 @@ export function alertMarkerKindFor(meter: AwarenessMeter, isDead: boolean): Aler
 }
 
 export function alertMarkerFillFor(meter: AwarenessMeter): number {
-    return meter.phase === "searching" ? 1 : meter.level;
+    return meter.phase === "searching" ? 1 : meter.awarenessLevel;
 }
 
-const alertMarkerProjectorScratchProjection = new Vector3();
-const scratchCameraPosition = new Vector3();
-
-export class AlertMarkerProjector implements IWorldEntity {
+abstract class HudTracker implements IWorldEntity {
     readonly sceneObject = new Group();
+    protected screenX = 0;
+    protected screenY = 0;
 
-    private readonly camera: Camera;
-    private readonly sources = new Set<IAlertMarkerSource>();
+    constructor(protected readonly camera: Camera) {}
 
-    constructor(camera: Camera) {
-        this.camera = camera;
+    abstract update(deltaSeconds: number): void;
+    abstract dispose(): void;
+
+    protected projectToScreen(x: number, y: number, z: number, margin: number): boolean {
+        scratchProjection.set(x, y, z).project(this.camera);
+        this.screenX = (scratchProjection.x + 1) / 2;
+        this.screenY = (1 - scratchProjection.y) / 2;
+        return (
+            scratchProjection.z < 1 &&
+            Math.abs(scratchProjection.x) <= margin &&
+            Math.abs(scratchProjection.y) <= margin
+        );
     }
+}
+
+export class AlertMarkerTracker extends HudTracker {
+    private readonly sources = new Set<IAlertMarkerSource>();
 
     track(source: IAlertMarkerSource): void {
         this.sources.add(source);
@@ -58,22 +75,15 @@ export class AlertMarkerProjector implements IWorldEntity {
             const position = source.sceneObject.position;
             if (position.distanceTo(scratchCameraPosition) > HUD.alertMarkerRange) continue;
 
-            alertMarkerProjectorScratchProjection
-                .set(position.x, position.y + source.alertMarkerHeight, position.z)
-                .project(this.camera);
-            const isOnScreen =
-                alertMarkerProjectorScratchProjection.z < 1 &&
-                Math.abs(alertMarkerProjectorScratchProjection.x) <= 1.05 &&
-                Math.abs(alertMarkerProjectorScratchProjection.y) <= 1.05;
+            const isOnScreen = this.projectToScreen(
+                position.x,
+                position.y + source.alertMarkerHeight,
+                position.z,
+                HUD.alertMarkerScreenMargin
+            );
             if (!isOnScreen) continue;
 
-            hud.showAlertMarker(
-                slot,
-                kind,
-                source.alertMarkerFill,
-                (alertMarkerProjectorScratchProjection.x + 1) / 2,
-                (1 - alertMarkerProjectorScratchProjection.y) / 2
-            );
+            hud.showAlertMarker(slot, kind, source.alertMarkerFill, this.screenX, this.screenY);
             slot += 1;
         }
 
@@ -86,18 +96,11 @@ export class AlertMarkerProjector implements IWorldEntity {
     }
 }
 
-const SPAWN_HEIGHT = metres(0.4);
-const RISE_PER_SECOND = metres(HUD.damageNumberRise * 10);
-const damageNumberProjectorScratchProjection = new Vector3();
-
-export class DamageNumberProjector implements IWorldEntity {
-    readonly sceneObject = new Group();
-
-    private readonly camera: Camera;
+export class DamageNumberTracker extends HudTracker {
     private readonly unsubscribe: () => void;
 
-    constructor(events: CombatEvents, camera: Camera) {
-        this.camera = camera;
+    constructor(events: GameEvents, camera: Camera) {
+        super(camera);
         this.unsubscribe = events.on("hitLanded", (event) => {
             if (event.attacker.team !== "player" && event.defender.team !== "player") return;
 
@@ -106,7 +109,7 @@ export class DamageNumberProjector implements IWorldEntity {
                 .getState()
                 .hud.spawnDamageNumber(
                     point.x,
-                    point.y + SPAWN_HEIGHT,
+                    point.y + DAMAGE_NUMBER_SPAWN_HEIGHT,
                     point.z,
                     Math.round(event.outcome.damageDealt),
                     event.impact !== "light" || event.outcome.kind !== "damaged"
@@ -126,15 +129,14 @@ export class DamageNumberProjector implements IWorldEntity {
             const number = numbers[index];
             if (!number?.active) continue;
 
-            damageNumberProjectorScratchProjection
-                .set(number.worldX, number.worldY + number.age * RISE_PER_SECOND, number.worldZ)
-                .project(this.camera);
-            number.onScreen =
-                damageNumberProjectorScratchProjection.z < 1 &&
-                Math.abs(damageNumberProjectorScratchProjection.x) <= 1.1 &&
-                Math.abs(damageNumberProjectorScratchProjection.y) <= 1.1;
-            number.screenX = (damageNumberProjectorScratchProjection.x + 1) / 2;
-            number.screenY = (1 - damageNumberProjectorScratchProjection.y) / 2;
+            number.onScreen = this.projectToScreen(
+                number.worldX,
+                number.worldY + number.age * DAMAGE_NUMBER_RISE_PER_SECOND,
+                number.worldZ,
+                HUD.damageNumberScreenMargin
+            );
+            number.screenX = this.screenX;
+            number.screenY = this.screenY;
         }
     }
 

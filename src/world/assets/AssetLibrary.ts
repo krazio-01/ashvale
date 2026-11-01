@@ -1,5 +1,4 @@
 import {
-    Cache,
     AnimationClip,
     Bone,
     Box3,
@@ -11,23 +10,18 @@ import {
     SkinnedMesh,
     Vector3,
     VectorKeyframeTrack,
+    Cache,
 } from "three";
-import type { WebGLRenderer, BufferGeometry, KeyframeTrack } from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { BufferGeometry, KeyframeTrack, WebGLRenderer } from "three";
+import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
+import type { IThemeConfig, IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
+import { PLAYER_ASSETS, CREATURE_MODELS, CLIP, SKELETON_BONES } from "@/constants/characters";
+import { LOG_MESSAGES } from "@/constants/strings";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
-import type { IThemeManifest, IModelPart, IModelTemplate, ISkinnedModel } from "@/types/world";
-import { CHARACTER, CREATURE, CLIP, SKELETON_BONES } from "@/constants/characters";
-
-const IMAGE_BITMAP_KEY_PREFIX = "image-bitmap:";
-
-const TRANSCODER_PATH = "/vendor/basis/";
-
-let ktx2Loader: KTX2Loader | null = null;
-
-let isCacheFixInstalled = false;
+import { asArray } from "@/lib/helpers";
 
 const FOLIAGE_MATERIAL_PATTERN = /leaves|leaf|foliage/i;
 
@@ -40,6 +34,14 @@ const PELVIS_POSITION_TRACK = `${SKELETON_BONES.pelvis}.position`;
 const PELVIS_RATIO_EPSILON = 1e-4;
 
 const POSITION_VARIANCE_EPSILON = 1e-4;
+
+const IMAGE_BITMAP_KEY_PREFIX = "image-bitmap:";
+
+const TRANSCODER_PATH = "/vendor/basis/";
+
+let ktx2Loader: KTX2Loader | null = null;
+
+let isCacheFixInstalled = false;
 
 export class AssetLibrary {
     private static async loadPropScene(
@@ -57,7 +59,7 @@ export class AssetLibrary {
     private readonly skinnedModelsByPath = new Map<string, ISkinnedModel>();
 
     static async create(
-        manifest: IThemeManifest,
+        manifest: IThemeConfig,
         materialLibrary: MaterialLibrary,
         renderer: WebGLRenderer
     ): Promise<AssetLibrary> {
@@ -70,14 +72,14 @@ export class AssetLibrary {
             ]),
         ];
 
-        const creatureModelPaths = [CREATURE.impModelPath, CREATURE.puglinModelPath];
+        const creatureModelPaths = Object.values(CREATURE_MODELS);
 
         const [loadedModels, characterModel, clipLibraries, creatureModels] = await Promise.all([
             Promise.all(
                 uniqueModelPaths.map((modelPath) => AssetLibrary.loadPropScene(loader, modelPath))
             ),
-            loader.loadAsync(CHARACTER.modelPath),
-            Promise.all(CHARACTER.clipLibraryPaths.map((path) => loader.loadAsync(path))),
+            loader.loadAsync(PLAYER_ASSETS.modelPath),
+            Promise.all(PLAYER_ASSETS.clipLibraryPaths.map((path) => loader.loadAsync(path))),
             Promise.all(creatureModelPaths.map((path) => loader.loadAsync(path))),
         ]);
 
@@ -96,16 +98,14 @@ export class AssetLibrary {
         }
 
         if (unavailablePaths.length > 0)
-            console.error(
-                `[AssetLibrary] ${unavailablePaths.length} prop model(s) failed to load and will not render:\n  ${unavailablePaths.join("\n  ")}`
-            );
+            console.error(LOG_MESSAGES.propModelsFailed(unavailablePaths));
 
         const preparedCharacterModel = prepareSkinnedModel(
             characterModel,
             clipLibraries,
             materialLibrary
         );
-        library.skinnedModelsByPath.set(CHARACTER.modelPath, preparedCharacterModel);
+        library.skinnedModelsByPath.set(PLAYER_ASSETS.modelPath, preparedCharacterModel);
 
         const creatureClipLibraries = [characterModel, ...clipLibraries];
         const mannequinHeight =
@@ -141,44 +141,23 @@ export class AssetLibrary {
     }
 
     dispose(): void {
-        for (const template of this.templatesByPath.values())
-            for (const part of template.parts) part.geometry.dispose();
-
-        for (const model of this.skinnedModelsByPath.values())
-            model.scene.traverse((object) => {
-                if (object instanceof SkinnedMesh) object.geometry.dispose();
-            });
+        for (const template of this.templatesByPath.values()) disposeModelTemplate(template);
+        for (const model of this.skinnedModelsByPath.values()) disposeSkinnedModel(model);
 
         this.templatesByPath.clear();
         this.skinnedModelsByPath.clear();
     }
 }
 
-function installImageBitmapCacheFix(): void {
-    if (isCacheFixInstalled) return;
-    isCacheFixInstalled = true;
-
-    const addToCache = Cache.add.bind(Cache);
-
-    Cache.add = (key: string, file: unknown): void => {
-        const isPendingImageBitmap =
-            key.startsWith(IMAGE_BITMAP_KEY_PREFIX) && file instanceof Promise;
-        addToCache(key, isPendingImageBitmap ? file.then(() => Cache.get(key)) : file);
-    };
-
-    Cache.enabled = true;
+export function disposeModelTemplate(template: IModelTemplate): void {
+    for (const part of template.parts) part.geometry.dispose();
 }
 
-export function createGltfLoader(renderer: WebGLRenderer): GLTFLoader {
-    installImageBitmapCacheFix();
-
-    if (!ktx2Loader) ktx2Loader = new KTX2Loader().setTranscoderPath(TRANSCODER_PATH);
-    ktx2Loader.detectSupport(renderer);
-
-    return new GLTFLoader().setKTX2Loader(ktx2Loader).setMeshoptDecoder(MeshoptDecoder);
+export function disposeSkinnedModel(model: ISkinnedModel): void {
+    model.scene.traverse((object) => {
+        if (object instanceof SkinnedMesh) object.geometry.dispose();
+    });
 }
-
-const asArray = <T>(value: T | T[]): T[] => (Array.isArray(value) ? value : [value]);
 
 const boundsHeight = (bounds: Box3): number => (bounds.isEmpty() ? 0 : bounds.max.y - bounds.min.y);
 
@@ -270,10 +249,10 @@ function hasVaryingValues(track: KeyframeTrack): boolean {
     if (!Number.isFinite(stride) || stride <= 0) return false;
 
     for (let component = 0; component < stride; component += 1) {
-        const baseline = values[component] ?? 0;
+        const baseline = values[component];
 
         for (let index = component; index < values.length; index += stride)
-            if (Math.abs((values[index] ?? 0) - baseline) > POSITION_VARIANCE_EPSILON) return true;
+            if (Math.abs(values[index] - baseline) > POSITION_VARIANCE_EPSILON) return true;
     }
 
     return false;
@@ -326,14 +305,12 @@ function remapPositionTrack(
     scaleFactor: number
 ): KeyframeTrack {
     const rest = [restPosition.x, restPosition.y, restPosition.z];
-    const baseline = [track.values[0] ?? 0, track.values[1] ?? 0, track.values[2] ?? 0];
+    const baseline = [track.values[0], track.values[1], track.values[2]];
     const values = new Float32Array(track.values.length);
 
     for (let index = 0; index < values.length; index += 1) {
         const component = index % 3;
-        values[index] =
-            (rest[component] ?? 0) +
-            ((track.values[index] ?? 0) - (baseline[component] ?? 0)) * scaleFactor;
+        values[index] = rest[component] + (track.values[index] - baseline[component]) * scaleFactor;
     }
 
     return new VectorKeyframeTrack(track.name, track.times, values);
@@ -416,9 +393,9 @@ function applyCanopyNormals(geometry: BufferGeometry): void {
 
     for (let index = 0; index < positions.count; index += 1) {
         const offset = index * 3;
-        const radialX = (positionArray[offset] ?? 0) - centerX;
-        const radialY = (positionArray[offset + 1] ?? 0) - centerY;
-        const radialZ = (positionArray[offset + 2] ?? 0) - centerZ;
+        const radialX = positionArray[offset] - centerX;
+        const radialY = positionArray[offset + 1] - centerY;
+        const radialZ = positionArray[offset + 2] - centerZ;
 
         const inverseLength =
             1 / (Math.sqrt(radialX * radialX + radialY * radialY + radialZ * radialZ) || 1);
@@ -442,4 +419,28 @@ function toToonMaterial(
     );
 
     return toonMaterials.length === 1 ? toonMaterials[0] : toonMaterials;
+}
+
+function installImageBitmapCacheFix(): void {
+    if (isCacheFixInstalled) return;
+    isCacheFixInstalled = true;
+
+    const addToCache = Cache.add.bind(Cache);
+
+    Cache.add = (key: string, file: unknown): void => {
+        const isPendingImageBitmap =
+            key.startsWith(IMAGE_BITMAP_KEY_PREFIX) && file instanceof Promise;
+        addToCache(key, isPendingImageBitmap ? file.then(() => Cache.get(key)) : file);
+    };
+
+    Cache.enabled = true;
+}
+
+export function createGltfLoader(renderer: WebGLRenderer): GLTFLoader {
+    installImageBitmapCacheFix();
+
+    if (!ktx2Loader) ktx2Loader = new KTX2Loader().setTranscoderPath(TRANSCODER_PATH);
+    ktx2Loader.detectSupport(renderer);
+
+    return new GLTFLoader().setKTX2Loader(ktx2Loader).setMeshoptDecoder(MeshoptDecoder);
 }

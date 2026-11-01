@@ -1,54 +1,196 @@
 import type { Camera, Vector3Tuple } from "three";
-import { PropBatch } from "@/world/props/PropChunk";
+import { PropChunk } from "@/world/props/PropChunk";
 import { TerrainSurface } from "@/world/terrain/TerrainSurface";
-import { GrassField, BloomField } from "@/world/vegetation/GroundCoverField";
+import { GROUND_COVER_KINDS, GroundCoverField } from "@/world/vegetation/GroundCoverField";
+import type { IGroundCoverKind } from "@/world/vegetation/GroundCoverField";
 import { Player } from "@/entities/characters/player/Player";
-import { composeBoss } from "@/entities/characters/bosses/BossComposer";
+import { buildBossFromChapter } from "@/entities/characters/bosses/BossComposer";
 import { CombatDiagnostics } from "@/systems/combat/CombatDiagnostics";
-import { AlertMarkerProjector, DamageNumberProjector } from "@/world/HudTrackers";
-import { CombatNoise } from "@/systems/enemyBehaviour/perception/CombatNoiseEmitter";
-import { HitSparks, TelegraphFlares } from "@/systems/effects/Effects";
+import { AlertMarkerTracker, DamageNumberTracker } from "@/world/HudTrackers";
+import { CombatNoiseEmitter } from "@/systems/enemyBehaviour/perception/CombatNoiseEmitter";
 import { Enemy } from "@/entities/characters/enemies/Enemy";
-import { spawnEnemy, placeRegionEnemies } from "@/entities/characters/enemies/EnemySpawner";
+import {
+    placeRegionEnemies,
+    standingSpawnHeight,
+} from "@/entities/characters/enemies/EnemySpawner";
 import { buildPropField } from "@/world/props/PropField";
-import type { ICorridorLane, IRegionSite } from "@/world/props/PropField";
-import { resolveThemeManifest } from "@/themes/Themes";
 import {
     CorridorClimbStyle,
-    TerrainGenerator,
+    type IRegionFloor,
+    type ICorridorPath,
+    type ICorridorLane,
+    type IRegionLink,
+} from "@/types/world";
+import { resolveTheme } from "@/themes/Themes";
+import {
+    TerrainHeightField,
     TerrainSampleGrid,
     WALKABLE_REACH,
 } from "@/world/terrain/TerrainGeneration";
-import type { IRegionFloor, ICorridorPath } from "@/world/terrain/TerrainGeneration";
 import { plotWaterCourses } from "@/world/water/WaterCourse";
-import type { IRegionLink } from "@/world/water/WaterCourse";
 import { WaterSurface } from "@/world/water/WaterSurface";
 import type { World } from "@/world/World";
 import type { ChapterResponse } from "@/responses/realm/RealmResponse";
-import { ChapterTheme } from "@/types/realm";
-import type { IChapterRegion, IRegionPathway } from "@/types/realm";
+import { ChapterTheme, type IChapterRegion, type IRegionPathway } from "@/types/realm";
 import type {
     ISettlementLayoutResult,
-    IPropGroup,
-    IThemeManifest,
     SpawnProgressListener,
+    IPropGroup,
+    IThemeConfig,
+    IWaterCourse,
+    IGroundSurface,
 } from "@/types/world";
 import { buildSettlementLayout } from "@/world/settlement/SettlementLayout";
 import { SettlementColliders } from "@/world/settlement/SettlementColliders";
 import type { CombatCharacter } from "@/entities/characters/CombatCharacter";
-import { ENEMY_PLACEMENT, SPAWNING } from "@/constants/enemies";
+import { ENEMY_PLACEMENT, SPAWNING, ARCHETYPES } from "@/constants/enemies";
 import { PLAYER } from "@/constants/player";
-import { TERRAIN } from "@/constants/world";
-import { createSeededRandom, hashString, yieldToBrowser } from "@/lib/helpers";
-import { TerrainEdgeBarrier, TerrainLedges } from "@/world/terrain/TerrainFeatures";
+import { TERRAIN, CHAPTER_SEED_OFFSETS } from "@/constants/world";
+import { createSeededRandom, hashString, yawFromDirection } from "@/lib/helpers";
+import { TerrainEdgeBarrier, TerrainLedges } from "./terrain/TerrainFeatures";
 import {
     buildGroundDetailTexture,
     buildGroundSplatTexture,
     deriveGroundMaterials,
-} from "@/world/terrain/TerrainMaterials";
+} from "./terrain/TerrainMaterials";
+import { LOADING_TEXT } from "@/constants/strings";
+import type { PropOccupancy } from "@/world/props/PropPlacement";
 
 const SPAWN_TIME_SLICE_MS = 8;
+
 const MAX_SETTLED_REGIONS = 4;
+
+const WORLD_LAYERS: readonly IWorldLayer[] = [
+    {
+        stage: LOADING_TEXT.stages.ground,
+        build: ({ world, center, surface, corridorPaths }) => {
+            world.addEntity(new TerrainSurface(world.context, center, surface));
+            world.addEntity(new TerrainEdgeBarrier(world.context, center, surface.sampleGrid));
+            world.addEntity(new TerrainLedges(world.context, center, corridorPaths));
+        },
+    },
+    {
+        stage: LOADING_TEXT.stages.river,
+        isPresent: (build) => build.waterCourses.length > 0,
+        build: (build) => {
+            build.waterSurface = new WaterSurface(
+                build.world.context,
+                build.center,
+                build.waterCourses,
+                build.surface.sampleGrid
+            );
+            build.world.addEntity(build.waterSurface);
+        },
+    },
+    {
+        stage: LOADING_TEXT.stages.grasslands,
+        build: (build) => addGroundCover(build, GROUND_COVER_KINDS.grass),
+    },
+    {
+        stage: LOADING_TEXT.stages.wildflowers,
+        build: (build) => addGroundCover(build, GROUND_COVER_KINDS.flowers),
+    },
+    {
+        build: (build) => {
+            const { layout, settledRegionIds } = settleRegions(
+                build.chapter,
+                build.regionSites,
+                build.corridorPaths,
+                build.surface.sampleGrid,
+                build.seed + CHAPTER_SEED_OFFSETS.settlement
+            );
+            build.settlement = layout;
+            build.settledRegionIds = settledRegionIds;
+        },
+    },
+    {
+        stage: LOADING_TEXT.stages.woodland,
+        build: async (build) => {
+            const [centerX, , centerZ] = build.center;
+            const { chunks, occupancy } = buildPropField({
+                manifest: build.manifest,
+                sampleGrid: build.surface.sampleGrid,
+                sites: build.regionSites,
+                lanes: build.corridorPaths,
+                chapterSpawnPoints: spawnAndBossPoints(
+                    build.chapter,
+                    build.positionsByRegionId,
+                    centerX,
+                    centerZ
+                ),
+                center: build.center,
+                fieldRadius: build.terrainRadius,
+                seed: build.seed + CHAPTER_SEED_OFFSETS.props,
+                waterCourses: build.waterCourses,
+                settlement: build.settlement,
+            });
+            build.propOccupancy = occupancy;
+            await addPropChunks(build.world, build.camera, chunks);
+        },
+    },
+    {
+        isPresent: (build) => (build.settlement?.colliders.length ?? 0) > 0,
+        build: ({ world, center, settlement }) => {
+            if (settlement)
+                world.addEntity(
+                    new SettlementColliders(world.context, center, settlement.colliders)
+                );
+        },
+    },
+];
+
+interface IWorldBuild {
+    readonly world: World;
+    readonly camera: Camera;
+    readonly chapter: ChapterResponse;
+    readonly manifest: IThemeConfig;
+    readonly seed: number;
+    readonly center: Vector3Tuple;
+    readonly terrainRadius: number;
+    readonly positionsByRegionId: Map<string, Vector3Tuple>;
+    readonly regionSites: IRegionFloor[];
+    readonly corridorPaths: ICorridorPath[];
+    readonly surface: IGroundSurface;
+    readonly waterCourses: IWaterCourse[];
+    waterSurface: WaterSurface | null;
+    settlement: ISettlementLayoutResult | null;
+    settledRegionIds: Set<string>;
+    propOccupancy: PropOccupancy | null;
+}
+
+interface IWorldLayer {
+    stage?: string;
+    isPresent?(build: IWorldBuild): boolean;
+    build(build: IWorldBuild): void | Promise<void>;
+}
+
+type StageReporter = (stageLabel: string) => Promise<void>;
+
+interface IRegionGeometry {
+    regionFloors: IRegionFloor[];
+    furthestDistance: number;
+}
+
+interface ICorridorGeometry {
+    corridorPaths: ICorridorPath[];
+    regionLinks: IRegionLink[];
+}
+
+interface IChapterGround {
+    waterSurface: WaterSurface | null;
+    groundHeightAt: GroundSampler;
+    groundSteepnessAt: GroundSampler;
+    propIsClear: (worldX: number, worldZ: number, radius: number) => boolean;
+    settledRegionIds: Set<string>;
+}
+
+type GroundSampler = (worldX: number, worldZ: number) => number;
+
+function yieldToBrowser(): Promise<void> {
+    return new Promise((resolve) => {
+        requestAnimationFrame(() => setTimeout(resolve, 0));
+    });
+}
 
 export async function spawnChapterWorld(
     world: World,
@@ -56,8 +198,8 @@ export async function spawnChapterWorld(
     chapter: ChapterResponse,
     reportProgress?: SpawnProgressListener
 ): Promise<void> {
-    const beginStage = createStageRunner(reportProgress);
-    const manifest = resolveThemeManifest(chapter.theme, chapter.season);
+    const reportStage = createStageReporter(reportProgress);
+    const manifest = resolveTheme(chapter.theme, chapter.season);
     const positionsByRegionId = new Map<string, Vector3Tuple>();
 
     for (const region of chapter.regions)
@@ -69,192 +211,130 @@ export async function spawnChapterWorld(
         chapter,
         manifest,
         positionsByRegionId,
-        beginStage
+        reportStage
     );
 
-    await beginStage("Waking the inhabitants");
+    await reportStage(LOADING_TEXT.stages.inhabitants);
 
     const player = spawnPlayer(world, camera, chapter, positionsByRegionId, terrain);
 
     if (player) terrain.waterSurface?.follow(player.sceneObject, PLAYER.height / 2);
-    world.addEntity(new HitSparks(world.context.combatEvents));
-    world.addEntity(new TelegraphFlares(world.context.combatEvents));
-    world.addEntity(new CombatNoise(world.context.combatEvents));
-    world.addEntity(new DamageNumberProjector(world.context.combatEvents, camera));
+    world.addEntity(new CombatNoiseEmitter(world.context.events));
+    world.addEntity(new DamageNumberTracker(world.context.events, camera));
     if (process.env.NODE_ENV !== "production")
-        world.addEntity(new CombatDiagnostics(world.context, world.root, player));
+        world.addEntity(new CombatDiagnostics(world.context, player));
 
-    const alertMarkers = new AlertMarkerProjector(camera);
+    const alertMarkers = new AlertMarkerTracker(camera);
     world.addEntity(alertMarkers);
     spawnRegionEnemies(world, chapter, terrain, positionsByRegionId, player, alertMarkers);
     spawnBoss(world, chapter, positionsByRegionId, terrain, player);
 }
 
-function createStageRunner(reportProgress?: SpawnProgressListener): StageRunner {
+function createStageReporter(reportProgress?: SpawnProgressListener): StageReporter {
     return async (stageLabel: string) => {
         reportProgress?.(stageLabel);
         await yieldToBrowser();
     };
 }
 
+function addGroundCover(build: IWorldBuild, kind: IGroundCoverKind): void {
+    build.world.addEntity(
+        new GroundCoverField(kind, build.world.context, build.camera, build.center, build.surface)
+    );
+}
+
 async function spawnTerrain(
     world: World,
     camera: Camera,
     chapter: ChapterResponse,
-    manifest: IThemeManifest,
+    manifest: IThemeConfig,
     positionsByRegionId: Map<string, Vector3Tuple>,
-    beginStage: StageRunner
-): Promise<ITerrainContext> {
+    reportStage: StageReporter
+): Promise<IChapterGround> {
     const [centerX, centerZ] = computeChapterCenter(chapter.regions);
-    const { regionFloors, regionSites, furthestDistance } = buildRegionGeometry(
+    const { regionFloors, furthestDistance } = buildRegionGeometry(
         chapter.regions,
         centerX,
         centerZ,
-        chapter.bossRegionId,
-        chapter.spawnRegionId
+        chapter.bossRegionId
     );
     const seed = hashString(`${chapter.title}-${chapter.chapterIndex}`);
-    const { corridorPaths, corridorLanes, regionLinks } = buildCorridorGeometry(
+    const { corridorPaths, regionLinks } = buildCorridorGeometry(
         chapter.pathways,
         chapter.regions,
         positionsByRegionId,
         centerX,
         centerZ,
-        createSeededRandom(seed + 17)
+        createSeededRandom(seed + CHAPTER_SEED_OFFSETS.corridors)
     );
 
-    const mappedRadius = furthestDistance + WALKABLE_REACH;
+    const terrainRadius = furthestDistance + WALKABLE_REACH;
     const center: Vector3Tuple = [centerX, 0, centerZ];
 
-    await beginStage("Sculpting the terrain");
-    const dryHeightField = new TerrainGenerator(regionFloors, corridorPaths, null, seed);
+    await reportStage(LOADING_TEXT.stages.terrain);
+    const dryHeightField = new TerrainHeightField(regionFloors, corridorPaths, null, seed);
     const waterCourses = plotWaterCourses(
         regionFloors,
         regionLinks,
         corridorPaths,
         dryHeightField,
-        seed + 29
+        seed + CHAPTER_SEED_OFFSETS.waterCourses
     );
     const heightField =
         waterCourses.length > 0
-            ? new TerrainGenerator(regionFloors, corridorPaths, waterCourses, seed)
+            ? new TerrainHeightField(regionFloors, corridorPaths, waterCourses, seed)
             : dryHeightField;
-    const heightMap = new TerrainSampleGrid(heightField, mappedRadius);
-    const terrainFieldTexture = heightMap.createShaderTexture();
+    const sampleGrid = new TerrainSampleGrid(heightField, terrainRadius);
+    const fieldTexture = sampleGrid.createShaderTexture();
 
-    await beginStage("Weathering the soil");
-    const groundMaterials = deriveGroundMaterials(world.context.environment.terrain);
+    await reportStage(LOADING_TEXT.stages.soil);
+    const materials = deriveGroundMaterials(world.context.environment.terrain);
     const groundSplat = buildGroundSplatTexture(seed);
     const groundDetail = buildGroundDetailTexture(seed);
 
-    await beginStage("Laying the ground");
-    world.addEntity(
-        new TerrainSurface(
-            world.context,
-            center,
-            heightMap,
-            terrainFieldTexture,
-            groundSplat,
-            groundDetail,
-            groundMaterials
-        )
-    );
-    world.addEntity(new TerrainEdgeBarrier(world.context, center, heightMap));
-    world.addEntity(new TerrainLedges(world.context, center, corridorPaths));
+    const build: IWorldBuild = {
+        world,
+        camera,
+        chapter,
+        manifest,
+        seed,
+        center,
+        terrainRadius,
+        positionsByRegionId,
+        regionSites: regionFloors,
+        corridorPaths,
+        surface: { sampleGrid, fieldTexture, groundSplat, groundDetail, materials },
+        waterCourses,
+        waterSurface: null,
+        settlement: null,
+        settledRegionIds: new Set(),
+        propOccupancy: null,
+    };
 
-    let waterSurface: WaterSurface | null = null;
-
-    if (waterCourses.length > 0) {
-        await beginStage("Letting the river in");
-        waterSurface = new WaterSurface(world.context, center, waterCourses, heightMap);
-        world.addEntity(waterSurface);
+    for (const layer of WORLD_LAYERS) {
+        if (layer.isPresent && !layer.isPresent(build)) continue;
+        if (layer.stage) await reportStage(layer.stage);
+        await layer.build(build);
     }
 
-    await beginStage("Sowing the grasslands");
-    world.addEntity(
-        new GrassField(
-            world.context,
-            camera,
-            center,
-            heightMap,
-            terrainFieldTexture,
-            groundSplat,
-            groundDetail,
-            groundMaterials
-        )
-    );
-
-    await beginStage("Scattering wildflowers");
-    world.addEntity(
-        new BloomField(
-            world.context,
-            camera,
-            center,
-            heightMap,
-            terrainFieldTexture,
-            groundSplat,
-            groundDetail,
-            groundMaterials
-        )
-    );
-
-    const { layout: settlementLayout, settledRegionIds } = buildSettlementLayouts(
-        chapter,
-        regionSites,
-        corridorLanes,
-        heightMap,
-        seed + 4
-    );
-
-    await beginStage("Planting the woodland");
-    const { buckets: propBuckets, occupancy: propOccupancy } = buildPropField({
-        manifest,
-        heightMap,
-        sites: regionSites,
-        lanes: corridorLanes,
-        chapterSpawnPoints: chapterSpawnPointsIn(chapter, positionsByRegionId, centerX, centerZ),
-        center,
-        fieldRadius: mappedRadius,
-        seed: seed + 3,
-        waterCourses,
-        extraReservations: settlementLayout
-            ? { discs: settlementLayout.keepOutDiscs, lanes: settlementLayout.keepOutLanes }
-            : undefined,
-        extraPlacements: settlementLayout?.placements.map((placement) => ({
-            prop: placement.prop,
-            hasCollider: placement.hasCollider,
-            localX: placement.localX,
-            localZ: placement.localZ,
-            elevation: placement.elevation,
-            rotationY: placement.rotationY,
-            scale: placement.scale,
-        })),
-    });
-
-    await addPropBuckets(world, camera, propBuckets);
-
-    if (settlementLayout && settlementLayout.colliders.length > 0)
-        world.addEntity(
-            new SettlementColliders("settlement", world.context, center, settlementLayout.colliders)
-        );
-
+    const propOccupancy = build.propOccupancy;
     return {
-        waterSurface,
+        waterSurface: build.waterSurface,
         groundHeightAt: (worldX, worldZ) =>
-            heightMap.surfaceElevationAt(worldX - centerX, worldZ - centerZ),
+            sampleGrid.surfaceElevationAt(worldX - centerX, worldZ - centerZ),
         groundSteepnessAt: (worldX, worldZ) =>
-            heightMap.steepnessAt(worldX - centerX, worldZ - centerZ),
+            sampleGrid.steepnessAt(worldX - centerX, worldZ - centerZ),
         propIsClear: (worldX, worldZ, radius) =>
-            propOccupancy.isClear(worldX - centerX, worldZ - centerZ, radius),
-        settledRegionIds,
+            propOccupancy?.isClear(worldX - centerX, worldZ - centerZ, radius) ?? true,
+        settledRegionIds: build.settledRegionIds,
     };
 }
 
-function buildSettlementLayouts(
+function settleRegions(
     chapter: ChapterResponse,
-    regionSites: IRegionSite[],
+    regionSites: IRegionFloor[],
     lanes: ICorridorLane[],
-    heightMap: TerrainSampleGrid,
+    sampleGrid: TerrainSampleGrid,
     seed: number
 ): { layout: ISettlementLayoutResult | null; settledRegionIds: Set<string> } {
     const settledRegionIds = new Set<string>();
@@ -286,7 +366,12 @@ function buildSettlementLayouts(
         const region = chapter.regions[candidate.index];
         if (!site || !region) continue;
 
-        const layout = buildSettlementLayout({ site, lanes, heightMap, seed: seed + order * 101 });
+        const layout = buildSettlementLayout({
+            site,
+            lanes,
+            sampleGrid,
+            seed: seed + order * CHAPTER_SEED_OFFSETS.perSettledRegion,
+        });
         if (layout.placements.length === 0) continue;
 
         merged.placements.push(...layout.placements);
@@ -299,18 +384,17 @@ function buildSettlementLayouts(
     return { layout: merged.placements.length > 0 ? merged : null, settledRegionIds };
 }
 
-async function addPropBuckets(
+async function addPropChunks(
     world: World,
     camera: Camera,
-    propBuckets: IPropGroup[][]
+    propChunks: IPropGroup[][]
 ): Promise<void> {
     let sliceStartedAt = performance.now();
 
-    for (let index = 0; index < propBuckets.length; index += 1) {
-        const bucket = propBuckets[index];
-        if (!bucket) continue;
+    for (let index = 0; index < propChunks.length; index += 1) {
+        const bucket = propChunks[index];
 
-        world.addEntity(new PropBatch(`props-${index}`, world.context, camera, bucket));
+        world.addEntity(new PropChunk(world.context, camera, bucket));
 
         if (performance.now() - sliceStartedAt < SPAWN_TIME_SLICE_MS) continue;
 
@@ -324,7 +408,7 @@ function spawnPlayer(
     camera: Camera,
     chapter: ChapterResponse,
     positionsByRegionId: Map<string, Vector3Tuple>,
-    terrain: ITerrainContext
+    terrain: IChapterGround
 ): Player | null {
     const spawnPosition = positionsByRegionId.get(chapter.spawnRegionId);
     if (!spawnPosition) return null;
@@ -337,7 +421,7 @@ function spawnPlayer(
             terrain.groundHeightAt(spawnPosition[0], spawnPosition[2]) + SPAWNING.playerSpawnHeight,
             spawnPosition[2],
         ],
-        spawnFacingYaw(chapter, chapter.spawnRegionId, spawnPosition, positionsByRegionId)
+        spawnFacingYaw(chapter, spawnPosition, positionsByRegionId)
     );
 
     world.addEntity(player);
@@ -347,13 +431,12 @@ function spawnPlayer(
 
 function spawnFacingYaw(
     chapter: ChapterResponse,
-    spawnRegionId: string,
     spawnPosition: Vector3Tuple,
     positionsByRegionId: Map<string, Vector3Tuple>
 ): number {
     for (const pathway of chapter.pathways) {
-        const isOutgoing = pathway.fromRegionId === spawnRegionId;
-        const isIncoming = pathway.toRegionId === spawnRegionId;
+        const isOutgoing = pathway.fromRegionId === chapter.spawnRegionId;
+        const isIncoming = pathway.toRegionId === chapter.spawnRegionId;
         if (!isOutgoing && !isIncoming) continue;
 
         const otherRegionId = isOutgoing ? pathway.toRegionId : pathway.fromRegionId;
@@ -364,7 +447,7 @@ function spawnFacingYaw(
         const dz = otherPosition[2] - spawnPosition[2];
         if (dx === 0 && dz === 0) continue;
 
-        return Math.atan2(dx, dz);
+        return yawFromDirection(dx, dz);
     }
 
     return 0;
@@ -374,40 +457,40 @@ function spawnBoss(
     world: World,
     chapter: ChapterResponse,
     positionsByRegionId: Map<string, Vector3Tuple>,
-    terrain: ITerrainContext,
+    terrain: IChapterGround,
     player: CombatCharacter | null
 ): void {
     const bossPosition = positionsByRegionId.get(chapter.bossRegionId);
     if (!chapter.boss || !bossPosition) return;
 
-    const boss = composeBoss(chapter.boss, chapter.chapterIndex);
+    const boss = buildBossFromChapter(chapter.boss, chapter.chapterIndex);
     const archetype = boss.archetype;
 
-    const spawnY =
-        terrain.groundHeightAt(bossPosition[0], bossPosition[2]) +
-        archetype.height / 2 +
-        SPAWNING.spawnClearanceBuffer;
+    const spawnY = standingSpawnHeight(
+        terrain.groundHeightAt(bossPosition[0], bossPosition[2]),
+        archetype.height
+    );
 
-    const bossEnemy = new Enemy({
-        id: boss.id,
-        archetype,
-        context: world.context,
-        spawnPosition: [bossPosition[0], spawnY, bossPosition[2]],
-        spawnYaw: 0,
-        player,
-        passive: true,
-    });
-
-    world.addEntity(bossEnemy);
+    world.addEntity(
+        new Enemy({
+            id: boss.id,
+            archetype,
+            context: world.context,
+            spawnPosition: [bossPosition[0], spawnY, bossPosition[2]],
+            spawnYaw: 0,
+            player,
+            passive: true,
+        })
+    );
 }
 
 function spawnRegionEnemies(
     world: World,
     chapter: ChapterResponse,
-    terrain: ITerrainContext,
+    terrain: IChapterGround,
     positionsByRegionId: Map<string, Vector3Tuple>,
     player: CombatCharacter | null,
-    alertMarkers: AlertMarkerProjector
+    alertMarkers: AlertMarkerTracker
 ): void {
     const playerSpawn = positionsByRegionId.get(chapter.spawnRegionId);
     let enemyIndex = 0;
@@ -434,14 +517,15 @@ function spawnRegionEnemies(
             enemyIndex += 1;
             const enemyId = `${region.regionId}-enemy-${enemyIndex}`;
 
-            const enemy = spawnEnemy(
-                placement.archetype,
-                enemyId,
-                world.context,
-                placement.position,
-                placement.facingYaw,
-                player
-            );
+            const enemy = new Enemy({
+                id: enemyId,
+                archetype: ARCHETYPES[placement.archetype],
+                context: world.context,
+                spawnPosition: placement.position,
+                spawnYaw: placement.facingYaw,
+                player,
+                passive: false,
+            });
 
             alertMarkers.track(enemy);
             world.addEntity(enemy);
@@ -469,14 +553,12 @@ function buildRegionGeometry(
     regions: IChapterRegion[],
     centerX: number,
     centerZ: number,
-    bossRegionId?: string,
-    spawnRegionId?: string
+    bossRegionId?: string
 ): IRegionGeometry {
     const len = regions.length;
     let furthestDistance = 0;
 
     const regionFloors = new Array<IRegionFloor>(len);
-    const regionSites = new Array<IRegionSite>(len);
 
     for (let i = 0; i < len; i++) {
         const region = regions[i];
@@ -488,15 +570,6 @@ function buildRegionGeometry(
         const halfWidth = width / 2;
         const halfDepth = depth / 2;
 
-        regionSites[i] = {
-            centerX: localX,
-            centerZ: localZ,
-            halfWidth,
-            halfDepth,
-            fileCount: region.fileCount,
-            floorElevation: y,
-        };
-
         regionFloors[i] = {
             centerX: localX,
             centerZ: localZ,
@@ -504,15 +577,15 @@ function buildRegionGeometry(
             halfDepth,
             floorElevation: y,
             nestingDepth: region.nestingDepth,
+            fileCount: region.fileCount,
             isBossRegion: region.regionId === bossRegionId,
-            isSpawnRegion: region.regionId === spawnRegionId,
         };
 
         const distance = Math.hypot(localX, localZ) + Math.hypot(halfWidth, halfDepth);
         if (distance > furthestDistance) furthestDistance = distance;
     }
 
-    return { regionFloors, regionSites, furthestDistance };
+    return { regionFloors, furthestDistance };
 }
 
 function buildCorridorGeometry(
@@ -524,7 +597,6 @@ function buildCorridorGeometry(
     nextRandom: () => number
 ): ICorridorGeometry {
     const corridorPaths: ICorridorPath[] = [];
-    const corridorLanes: ICorridorLane[] = [];
     const regionLinks: IRegionLink[] = [];
     const indexByRegionId = new Map<string, number>();
 
@@ -547,8 +619,6 @@ function buildCorridorGeometry(
         const toZ = toPosition[2] - centerZ;
         const halfWidth = pathway.corridorWidth / 2;
 
-        corridorLanes.push({ fromX, fromZ, toX, toZ, halfWidth });
-
         corridorPaths.push({
             fromX,
             fromZ,
@@ -562,10 +632,10 @@ function buildCorridorGeometry(
         });
     }
 
-    return { corridorPaths, corridorLanes, regionLinks };
+    return { corridorPaths, regionLinks };
 }
 
-function chapterSpawnPointsIn(
+function spawnAndBossPoints(
     chapter: ChapterResponse,
     positionsByRegionId: Map<string, Vector3Tuple>,
     centerX: number,
@@ -599,27 +669,3 @@ function pickClimbStyle(nextRandom: () => number): CorridorClimbStyle {
 
     return CorridorClimbStyle.Ramp;
 }
-
-type StageRunner = (stageLabel: string) => Promise<void>;
-
-interface IRegionGeometry {
-    regionFloors: IRegionFloor[];
-    regionSites: IRegionSite[];
-    furthestDistance: number;
-}
-
-interface ICorridorGeometry {
-    corridorPaths: ICorridorPath[];
-    corridorLanes: ICorridorLane[];
-    regionLinks: IRegionLink[];
-}
-
-interface ITerrainContext {
-    waterSurface: WaterSurface | null;
-    groundHeightAt: GroundHeightLookup;
-    groundSteepnessAt: GroundHeightLookup;
-    propIsClear: (worldX: number, worldZ: number, radius: number) => boolean;
-    settledRegionIds: Set<string>;
-}
-
-type GroundHeightLookup = (worldX: number, worldZ: number) => number;
