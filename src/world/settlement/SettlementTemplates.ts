@@ -1,25 +1,20 @@
 import { SettlementCellKind, type ISettlementBuildingTemplate } from "@/types/world";
-import { SETTLEMENT_CLUTTER_PROPS, SETTLEMENT_ROOFS } from "@/world/settlement/SettlementKit";
+import { SETTLEMENT_CLUTTER, SETTLEMENT_ROOFS } from "@/world/settlement/SettlementKit";
 import { QUARTER_TURN } from "@/lib/helpers";
 
-const W = SettlementCellKind.Wall;
-const D = SettlementCellKind.Door;
-const N = SettlementCellKind.Window;
-const F = SettlementCellKind.Floor;
+const WALL = SettlementCellKind.Wall;
+const DOOR = SettlementCellKind.Door;
+const WINDOW = SettlementCellKind.Window;
+const FLOOR = SettlementCellKind.Floor;
 
 const ANCHOR_CLEARANCE = 0.75;
 
-const clutterPathsNamed = (...names: string[]): string[] => {
-    const wanted = new Set(names);
+const { barrel, crate, cart, torch, pot1, pot2, pot3, chest, wagon, propCrate } =
+    SETTLEMENT_CLUTTER;
 
-    return SETTLEMENT_CLUTTER_PROPS.filter((prop) =>
-        wanted.has(prop.modelPath.slice(prop.modelPath.lastIndexOf("/") + 1, -5))
-    ).map((prop) => prop.modelPath);
-};
+const DOORSIDE_CLUTTER = [barrel, crate, pot1, pot2, pot3, propCrate];
 
-const DOORSIDE_CLUTTER = clutterPathsNamed("Barrel", "Crate", "Prop_Crate", "Pot1", "Pot2", "Pot3");
-
-const YARD_CLUTTER = clutterPathsNamed("Cart", "Prop_Wagon", "Chest", "Torch");
+const YARD_CLUTTER = [cart, torch, chest, wagon];
 
 const SMALL_HOUSE: ISettlementBuildingTemplate = {
     id: "small-house",
@@ -28,22 +23,22 @@ const SMALL_HOUSE: ISettlementBuildingTemplate = {
     roof: SETTLEMENT_ROOFS.square6x6,
     roofYaw: 0,
     footprint: [
-        [W, W, W],
-        [W, F, N],
-        [W, D, W],
+        [WALL, WALL, WALL],
+        [WALL, FLOOR, WINDOW],
+        [WALL, DOOR, WALL],
     ],
     clutterAnchors: [
         {
             offsetCellX: 2.25,
             offsetCellZ: 3 + ANCHOR_CLEARANCE,
             rotationY: 0,
-            allowedModelPaths: DOORSIDE_CLUTTER,
+            allowedProps: DOORSIDE_CLUTTER,
         },
         {
             offsetCellX: 3 + ANCHOR_CLEARANCE,
             offsetCellZ: 1.5,
             rotationY: QUARTER_TURN,
-            allowedModelPaths: YARD_CLUTTER,
+            allowedProps: YARD_CLUTTER,
         },
     ],
 };
@@ -55,24 +50,24 @@ const HALL: ISettlementBuildingTemplate = {
     roof: SETTLEMENT_ROOFS.long6x10,
     roofYaw: 0,
     footprint: [
-        [W, W, W],
-        [N, F, N],
-        [W, F, W],
-        [N, F, N],
-        [W, D, W],
+        [WALL, WALL, WALL],
+        [WINDOW, FLOOR, WINDOW],
+        [WALL, FLOOR, WALL],
+        [WINDOW, FLOOR, WINDOW],
+        [WALL, DOOR, WALL],
     ],
     clutterAnchors: [
         {
             offsetCellX: 2.25,
             offsetCellZ: 5 + ANCHOR_CLEARANCE,
             rotationY: 0,
-            allowedModelPaths: DOORSIDE_CLUTTER,
+            allowedProps: DOORSIDE_CLUTTER,
         },
         {
             offsetCellX: 3 + ANCHOR_CLEARANCE,
             offsetCellZ: 2.5,
             rotationY: QUARTER_TURN,
-            allowedModelPaths: YARD_CLUTTER,
+            allowedProps: YARD_CLUTTER,
         },
     ],
 };
@@ -84,22 +79,22 @@ const WIDE_SHOP: ISettlementBuildingTemplate = {
     roof: SETTLEMENT_ROOFS.long6x10,
     roofYaw: QUARTER_TURN,
     footprint: [
-        [W, N, W, N, W],
-        [W, F, F, F, W],
-        [W, W, D, W, W],
+        [WALL, WINDOW, WALL, WINDOW, WALL],
+        [WALL, FLOOR, FLOOR, FLOOR, WALL],
+        [WALL, WALL, DOOR, WALL, WALL],
     ],
     clutterAnchors: [
         {
             offsetCellX: 3.75,
             offsetCellZ: 3 + ANCHOR_CLEARANCE,
             rotationY: 0,
-            allowedModelPaths: DOORSIDE_CLUTTER,
+            allowedProps: DOORSIDE_CLUTTER,
         },
         {
             offsetCellX: 5 + ANCHOR_CLEARANCE,
             offsetCellZ: 1.5,
             rotationY: QUARTER_TURN,
-            allowedModelPaths: YARD_CLUTTER,
+            allowedProps: YARD_CLUTTER,
         },
     ],
 };

@@ -1,19 +1,12 @@
-import { SettlementCellKind } from "@/types/world";
-import type {
-    ISettlementBuildingTemplate,
-    ISettlementColliderDesc,
-    ISettlementPlacement,
-    IThemeProp,
-} from "@/types/world";
+import { SettlementCellKind, type ISettlementBuildingTemplate } from "@/types/world";
+import type { ISettlementCollider, ISettlementPlacement, IThemeProp } from "@/types/world";
 import type { TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
 import {
     CELL_SIZE,
     CHIMNEY_ELEVATION,
     CORNER_COURSE_HEIGHT,
     MODULE_SCALE,
-    ROOF_ELEVATION,
     ROOF_OVERHANG,
-    SETTLEMENT_CLUTTER_BY_PATH,
     SETTLEMENT_MODULES,
     WALL_COURSES,
     WALL_COURSE_HEIGHT,
@@ -21,11 +14,7 @@ import {
     WALL_HALF_THICKNESS,
     WALL_HEIGHT,
 } from "@/world/settlement/SettlementKit";
-import { metres, QUARTER_TURN } from "@/lib/helpers";
-
-const HALF_TURN = Math.PI;
-const THREE_QUARTER_TURN = QUARTER_TURN * 3;
-const CORNER_HALF_EXTENT = metres(0.15);
+import { metresToUnits, QUARTER_TURN } from "@/lib/helpers";
 
 const enum Edge {
     North,
@@ -33,6 +22,12 @@ const enum Edge {
     West,
     East,
 }
+
+const HALF_TURN = Math.PI;
+
+const THREE_QUARTER_TURN = QUARTER_TURN * 3;
+
+const CORNER_HALF_EXTENT = metresToUnits(0.15);
 
 const EDGE_YAW: Record<Edge, number> = {
     [Edge.North]: 0,
@@ -46,48 +41,75 @@ interface IGenerateBuildingInput {
     originLocalX: number;
     originLocalZ: number;
     yaw: number;
-    heightMap: TerrainSampleGrid;
+    sampleGrid: TerrainSampleGrid;
     nextRandom: () => number;
     floorElevation: number;
+    cornerElevations: readonly number[];
 }
 
 interface IGeneratedBuilding {
     placements: ISettlementPlacement[];
-    colliders: ISettlementColliderDesc[];
+    colliders: ISettlementCollider[];
     footprintRadius: number;
     doorLocalX: number;
     doorLocalZ: number;
 }
 
-export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuilding {
-    const { template, originLocalX, originLocalZ, yaw, heightMap, nextRandom, floorElevation } =
-        input;
-    const { widthCells, depthCells, footprint } = template;
-
+export const buildingFrame = (originX: number, originZ: number, yaw: number) => {
     const cosYaw = Math.cos(yaw);
     const sinYaw = Math.sin(yaw);
+    return {
+        x: (cellX: number, cellZ: number): number => originX + cellX * cosYaw + cellZ * sinYaw,
+        z: (cellX: number, cellZ: number): number => originZ - cellX * sinYaw + cellZ * cosYaw,
+    };
+};
+
+export function footprintCornerElevations(
+    sampleGrid: TerrainSampleGrid,
+    originLocalX: number,
+    originLocalZ: number,
+    yaw: number,
+    eastEdgeLocalX: number,
+    southEdgeLocalZ: number
+): number[] {
+    const frame = buildingFrame(originLocalX, originLocalZ, yaw);
+    const elevationAt = (cellX: number, cellZ: number): number =>
+        sampleGrid.surfaceElevationAt(frame.x(cellX, cellZ), frame.z(cellX, cellZ));
+
+    return [
+        elevationAt(0, 0),
+        elevationAt(eastEdgeLocalX, 0),
+        elevationAt(0, southEdgeLocalZ),
+        elevationAt(eastEdgeLocalX, southEdgeLocalZ),
+    ];
+}
+
+export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuilding {
+    const {
+        template,
+        originLocalX,
+        originLocalZ,
+        yaw,
+        sampleGrid,
+        nextRandom,
+        floorElevation,
+        cornerElevations,
+    } = input;
+    const { widthCells, depthCells, footprint } = template;
+
     const eastEdgeLocalX = widthCells * CELL_SIZE;
     const southEdgeLocalZ = depthCells * CELL_SIZE;
 
     const placements: ISettlementPlacement[] = [];
-    const colliders: ISettlementColliderDesc[] = [];
+    const colliders: ISettlementCollider[] = [];
     let doorLocalX = originLocalX;
     let doorLocalZ = originLocalZ;
 
-    const rotatedX = (cellX: number, cellZ: number): number =>
-        originLocalX + cellX * cosYaw + cellZ * sinYaw;
-    const rotatedZ = (cellX: number, cellZ: number): number =>
-        originLocalZ - cellX * sinYaw + cellZ * cosYaw;
+    const { x: rotatedX, z: rotatedZ } = buildingFrame(originLocalX, originLocalZ, yaw);
 
     const groundElevations = [
-        heightMap.surfaceElevationAt(rotatedX(0, 0), rotatedZ(0, 0)),
-        heightMap.surfaceElevationAt(rotatedX(eastEdgeLocalX, 0), rotatedZ(eastEdgeLocalX, 0)),
-        heightMap.surfaceElevationAt(rotatedX(0, southEdgeLocalZ), rotatedZ(0, southEdgeLocalZ)),
-        heightMap.surfaceElevationAt(
-            rotatedX(eastEdgeLocalX, southEdgeLocalZ),
-            rotatedZ(eastEdgeLocalX, southEdgeLocalZ)
-        ),
-        heightMap.surfaceElevationAt(
+        ...cornerElevations,
+        sampleGrid.surfaceElevationAt(
             rotatedX(eastEdgeLocalX / 2, southEdgeLocalZ / 2),
             rotatedZ(eastEdgeLocalX / 2, southEdgeLocalZ / 2)
         ),
@@ -233,16 +255,14 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
     const centreCellX = eastEdgeLocalX / 2;
     const centreCellZ = southEdgeLocalZ / 2;
 
-    addPlacement(template.roof, centreCellX, centreCellZ, template.roofYaw, ROOF_ELEVATION);
+    addPlacement(template.roof, centreCellX, centreCellZ, template.roofYaw, WALL_HEIGHT);
     addPlacement(SETTLEMENT_MODULES.chimney, centreCellX, centreCellZ, 0, CHIMNEY_ELEVATION);
 
     for (const anchor of template.clutterAnchors) {
-        const { allowedModelPaths } = anchor;
-        if (allowedModelPaths.length === 0) continue;
+        const { allowedProps } = anchor;
+        if (allowedProps.length === 0) continue;
 
-        const modelPath = allowedModelPaths[Math.floor(nextRandom() * allowedModelPaths.length)];
-        const clutter = modelPath ? SETTLEMENT_CLUTTER_BY_PATH.get(modelPath) : undefined;
-        if (!clutter) continue;
+        const clutter = allowedProps[Math.floor(nextRandom() * allowedProps.length)];
 
         const anchorCellX = anchor.offsetCellX * CELL_SIZE;
         const anchorCellZ = anchor.offsetCellZ * CELL_SIZE;
@@ -253,7 +273,7 @@ export function generateBuilding(input: IGenerateBuildingInput): IGeneratedBuild
             prop: clutter,
             localX: anchorX,
             localZ: anchorZ,
-            elevation: heightMap.surfaceElevationAt(anchorX, anchorZ),
+            elevation: sampleGrid.surfaceElevationAt(anchorX, anchorZ),
             rotationY: yaw + anchor.rotationY,
             scale: MODULE_SCALE,
             hasCollider: true,

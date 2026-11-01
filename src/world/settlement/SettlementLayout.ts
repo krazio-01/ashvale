@@ -2,35 +2,44 @@ import type {
     ISettlementKeepOutDisc,
     ISettlementLayoutResult,
     ISettlementPlacement,
+    ICorridorLane,
+    IRegionFloor,
 } from "@/types/world";
-import type { ICorridorLane, IRegionSite } from "@/world/props/PropField";
 import { createGridSample, type TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
-import { generateBuilding } from "@/world/settlement/SettlementBuilding";
+import { generateBuilding, footprintCornerElevations } from "@/world/settlement/SettlementBuilding";
 import { SETTLEMENT_TEMPLATES } from "@/world/settlement/SettlementTemplates";
 import { CELL_SIZE, ROOF_OVERHANG } from "@/world/settlement/SettlementKit";
-import { clamp, createSeededRandom, FULL_TURN, metres } from "@/lib/helpers";
+import {
+    clamp,
+    createSeededRandom,
+    FULL_TURN,
+    metresToUnits,
+    yawFromDirection,
+    distanceToSegmentSquared,
+} from "@/lib/helpers";
+import { LOG_MESSAGES } from "@/constants/strings";
 
 const MAX_BUILDINGS = 8;
-const AREA_PER_BUILDING = metres(15) * metres(15);
-const SITE_MARGIN = metres(2.5);
-const BUILDING_GAP = metres(1.5);
+const AREA_PER_BUILDING = metresToUnits(15) * metresToUnits(15);
+const SITE_MARGIN = metresToUnits(2.5);
+const BUILDING_GAP = metresToUnits(1.5);
 const ANGLE_ATTEMPTS = 8;
 const RADIUS_ATTEMPTS = 6;
 const GOLDEN_ANGLE = FULL_TURN * 0.618034;
 const RING_RADIUS_RATIO = 0.7;
 const ANGLE_JITTER = 0.3;
-const DOOR_LANE_HALF_WIDTH = metres(1.2);
-const TRAIL_AVOIDANCE_CLEARANCE = metres(3);
+const DOOR_LANE_HALF_WIDTH = metresToUnits(1.2);
+const TRAIL_AVOIDANCE_CLEARANCE = metresToUnits(3);
 
 interface ISettlementLayoutInput {
-    site: IRegionSite;
+    site: IRegionFloor;
     lanes: ICorridorLane[];
-    heightMap: TerrainSampleGrid;
+    sampleGrid: TerrainSampleGrid;
     seed: number;
 }
 
 export function buildSettlementLayout(input: ISettlementLayoutInput): ISettlementLayoutResult {
-    const { site, lanes, heightMap, seed } = input;
+    const { site, lanes, sampleGrid, seed } = input;
     const nextRandom = createSeededRandom(seed);
     const gridSample = createGridSample();
 
@@ -51,7 +60,6 @@ export function buildSettlementLayout(input: ISettlementLayoutInput): ISettlemen
 
     for (let index = 0; index < buildingCount; index += 1) {
         const template = SETTLEMENT_TEMPLATES[index % SETTLEMENT_TEMPLATES.length];
-        if (!template) continue;
 
         const halfWidth = (template.widthCells * CELL_SIZE) / 2;
         const halfDepth = (template.depthCells * CELL_SIZE) / 2;
@@ -77,50 +85,28 @@ export function buildSettlementLayout(input: ISettlementLayoutInput): ISettlemen
 
                 if (overlapsPlaced(keepOutDiscs, centerX, centerZ, circumRadius)) continue;
                 if (blocksLane(lanes, centerX, centerZ, circumRadius)) continue;
-                heightMap.sampleAt(centerX, centerZ, gridSample);
+                sampleGrid.sampleAt(centerX, centerZ, gridSample);
                 if (gridSample.trailDistance < TRAIL_AVOIDANCE_CLEARANCE) continue;
                 if (gridSample.steepness > 0.12) continue;
 
-                const yaw = Math.atan2(site.centerX - centerX, site.centerZ - centerZ);
+                const yaw = yawFromDirection(site.centerX - centerX, site.centerZ - centerZ);
                 const cosYaw = Math.cos(yaw);
                 const sinYaw = Math.sin(yaw);
 
                 const originLocalX = centerX - halfWidth * cosYaw - halfDepth * sinYaw;
                 const originLocalZ = centerZ + halfWidth * sinYaw - halfDepth * cosYaw;
 
-                const corner1Elevation = heightMap.surfaceElevationAt(originLocalX, originLocalZ);
-                const corner2Elevation = heightMap.surfaceElevationAt(
-                    originLocalX + template.widthCells * CELL_SIZE * cosYaw,
-                    originLocalZ - template.widthCells * CELL_SIZE * sinYaw
+                const cornerElevations = footprintCornerElevations(
+                    sampleGrid,
+                    originLocalX,
+                    originLocalZ,
+                    yaw,
+                    template.widthCells * CELL_SIZE,
+                    template.depthCells * CELL_SIZE
                 );
-                const corner3Elevation = heightMap.surfaceElevationAt(
-                    originLocalX + template.depthCells * CELL_SIZE * sinYaw,
-                    originLocalZ + template.depthCells * CELL_SIZE * cosYaw
-                );
-                const corner4Elevation = heightMap.surfaceElevationAt(
-                    originLocalX +
-                        template.widthCells * CELL_SIZE * cosYaw +
-                        template.depthCells * CELL_SIZE * sinYaw,
-                    originLocalZ -
-                        template.widthCells * CELL_SIZE * sinYaw +
-                        template.depthCells * CELL_SIZE * cosYaw
-                );
-
                 const elevationSpread =
-                    Math.max(
-                        corner1Elevation,
-                        corner2Elevation,
-                        corner3Elevation,
-                        corner4Elevation,
-                        gridSample.elevation
-                    ) -
-                    Math.min(
-                        corner1Elevation,
-                        corner2Elevation,
-                        corner3Elevation,
-                        corner4Elevation,
-                        gridSample.elevation
-                    );
+                    Math.max(...cornerElevations, gridSample.elevation) -
+                    Math.min(...cornerElevations, gridSample.elevation);
                 if (elevationSpread > 0.35) continue;
 
                 const building = generateBuilding({
@@ -128,9 +114,10 @@ export function buildSettlementLayout(input: ISettlementLayoutInput): ISettlemen
                     originLocalX,
                     originLocalZ,
                     yaw,
-                    heightMap,
+                    sampleGrid,
                     nextRandom,
                     floorElevation: site.floorElevation,
+                    cornerElevations,
                 });
 
                 placements.push(...building.placements);
@@ -158,7 +145,12 @@ export function buildSettlementLayout(input: ISettlementLayoutInput): ISettlemen
 
     if (placements.length === 0)
         console.warn(
-            `[settlement] no buildings fit region at (${site.centerX.toFixed(1)}, ${site.centerZ.toFixed(1)}) - half extents ${site.halfWidth.toFixed(1)} x ${site.halfDepth.toFixed(1)}`
+            LOG_MESSAGES.settlementDidNotFit(
+                site.centerX.toFixed(1),
+                site.centerZ.toFixed(1),
+                site.halfWidth.toFixed(1),
+                site.halfDepth.toFixed(1)
+            )
         );
 
     return { placements, colliders, keepOutDiscs, keepOutLanes };
@@ -171,27 +163,17 @@ function blocksLane(
     radius: number
 ): boolean {
     for (const lane of lanes) {
-        const spanX = lane.toX - lane.fromX;
-        const spanZ = lane.toZ - lane.fromZ;
-        const spanLengthSquared = spanX * spanX + spanZ * spanZ;
-        const toCenterX = centerX - lane.fromX;
-        const toCenterZ = centerZ - lane.fromZ;
-
-        const along =
-            spanLengthSquared > 0
-                ? Math.min(
-                      1,
-                      Math.max(0, (toCenterX * spanX + toCenterZ * spanZ) / spanLengthSquared)
-                  )
-                : 0;
-
-        const nearestX = lane.fromX + spanX * along;
-        const nearestZ = lane.fromZ + spanZ * along;
-        const gapX = centerX - nearestX;
-        const gapZ = centerZ - nearestZ;
         const reach = radius + lane.halfWidth;
+        const gapSquared = distanceToSegmentSquared(
+            centerX,
+            centerZ,
+            lane.fromX,
+            lane.fromZ,
+            lane.toX,
+            lane.toZ
+        );
 
-        if (gapX * gapX + gapZ * gapZ < reach * reach) return true;
+        if (gapSquared < reach * reach) return true;
     }
 
     return false;

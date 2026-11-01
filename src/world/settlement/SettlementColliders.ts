@@ -1,32 +1,24 @@
 import RAPIER from "@dimforge/rapier3d-compat";
+import { createFixedBody } from "@/systems/physics/RapierWorld";
 import type { RigidBody, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import { Group } from "three";
 import type { Vector3Tuple } from "three";
-import { Entity } from "@/entities/Entity";
-import type { IWorldContext, IWorldEntity, ISettlementColliderDesc } from "@/types/world";
+import type { IWorldContext, IWorldEntity, ISettlementCollider } from "@/types/world";
+import { yawQuaternion } from "@/lib/helpers";
 
-export class SettlementColliders extends Entity implements IWorldEntity {
+export class SettlementColliders implements IWorldEntity {
     readonly sceneObject = new Group();
 
     private readonly physicsWorld: PhysicsWorld;
     private readonly rigidBody: RigidBody;
 
-    constructor(
-        id: string,
-        context: IWorldContext,
-        center: Vector3Tuple,
-        colliders: ISettlementColliderDesc[]
-    ) {
-        super(id);
-
+    constructor(context: IWorldContext, center: Vector3Tuple, colliders: ISettlementCollider[]) {
         this.physicsWorld = context.physicsWorld;
-        this.rigidBody = context.physicsWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+        this.rigidBody = createFixedBody(context.physicsWorld);
 
         const [centerX, , centerZ] = center;
 
         for (const desc of colliders) {
-            const halfYaw = desc.rotationY / 2;
-
             this.physicsWorld.createCollider(
                 RAPIER.ColliderDesc.cuboid(desc.halfWidth, desc.halfHeight, desc.halfDepth)
                     .setTranslation(
@@ -34,7 +26,7 @@ export class SettlementColliders extends Entity implements IWorldEntity {
                         desc.elevation + desc.halfHeight,
                         centerZ + desc.localZ
                     )
-                    .setRotation({ x: 0, y: Math.sin(halfYaw), z: 0, w: Math.cos(halfYaw) }),
+                    .setRotation(yawQuaternion(desc.rotationY)),
                 this.rigidBody
             );
         }
