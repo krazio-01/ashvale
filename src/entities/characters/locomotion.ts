@@ -1,4 +1,4 @@
-import { CLIP, IDLE_VARIATION, STRIDE } from "@/constants/characters";
+import { CLIP, IDLE_VARIATION, GAIT_SPEED_PER_HEIGHT } from "@/constants/characters";
 import { PLAYER } from "@/constants/player";
 import type {
     IDirectionalClip,
@@ -10,6 +10,11 @@ const EIGHTH_TURN = Math.PI / 4;
 
 const PLAYER_RELAXED_FIDGETS = [CLIP.idleFidgetSwordInspect, CLIP.idleFidgetSwordRoll];
 const UNARMED_RELAXED_FIDGETS = [CLIP.idleFidgetScratchArm, CLIP.idleFidgetLookAround];
+
+const PLAYER_GAITS = [
+    { clip: CLIP.walk, speed: PLAYER.walkSpeed },
+    { clip: CLIP.sprint, speed: PLAYER.sprintSpeed },
+];
 
 const STRAFE_DIRECTIONS: readonly IDirectionalClip[] = [
     { clip: CLIP.strafeForward, angle: 0 },
@@ -27,34 +32,23 @@ function freeLocomotion(
     gaits: IFreeLocomotion["gaits"],
     idleVariation?: IFreeLocomotion["idleVariation"]
 ): IFreeLocomotion {
-    return { kind: "free", idle, ...(idleVariation && { idleVariation }), gaits };
+    return { kind: "free", idle, idleVariation, gaits };
 }
 
 function strafeLocomotion(speed: number): IStrafeLocomotion {
     return { kind: "strafe", idle: CLIP.combatIdle, speed, directions: STRAFE_DIRECTIONS };
 }
 
-export const PLAYER_FREE_LOCOMOTION = freeLocomotion(
-    CLIP.idle,
-    [
-        { clip: CLIP.walk, speed: PLAYER.walkSpeed },
-        { clip: CLIP.sprint, speed: PLAYER.sprintSpeed },
-    ],
-    {
-        clips: PLAYER_RELAXED_FIDGETS,
-        afterSeconds: IDLE_VARIATION.relaxedDelaySeconds,
-        weaponGazeClips: [CLIP.idleFidgetSwordInspect],
-    }
-);
+export const PLAYER_FREE_LOCOMOTION = freeLocomotion(CLIP.idle, PLAYER_GAITS, {
+    clips: PLAYER_RELAXED_FIDGETS,
+    afterSeconds: IDLE_VARIATION.relaxedDelaySeconds,
+    weaponGazeClips: [CLIP.idleFidgetSwordInspect],
+});
 
-export const PLAYER_SHEATHED_FREE_LOCOMOTION = freeLocomotion(
-    CLIP.idle,
-    [
-        { clip: CLIP.walk, speed: PLAYER.walkSpeed },
-        { clip: CLIP.sprint, speed: PLAYER.sprintSpeed },
-    ],
-    { clips: UNARMED_RELAXED_FIDGETS, afterSeconds: IDLE_VARIATION.relaxedDelaySeconds }
-);
+export const PLAYER_SHEATHED_FREE_LOCOMOTION = freeLocomotion(CLIP.idle, PLAYER_GAITS, {
+    clips: UNARMED_RELAXED_FIDGETS,
+    afterSeconds: IDLE_VARIATION.relaxedDelaySeconds,
+});
 
 export const PLAYER_CROUCH_LOCOMOTION = freeLocomotion(CLIP.crouchIdle, [
     { clip: CLIP.crouchWalk, speed: PLAYER.crouchSpeed },
@@ -63,12 +57,16 @@ export const PLAYER_CROUCH_LOCOMOTION = freeLocomotion(CLIP.crouchIdle, [
 export const PLAYER_STRAFE_LOCOMOTION = strafeLocomotion(PLAYER.strafeSpeed);
 
 export function enemyRelaxedLocomotion(height: number, idleDelaySeconds: number): IFreeLocomotion {
-    return freeLocomotion(CLIP.idle, [{ clip: CLIP.walk, speed: height * STRIDE.walk }], {
-        clips: UNARMED_RELAXED_FIDGETS,
-        afterSeconds: idleDelaySeconds,
-    });
+    return freeLocomotion(
+        CLIP.idle,
+        [{ clip: CLIP.walk, speed: height * GAIT_SPEED_PER_HEIGHT.walk }],
+        {
+            clips: UNARMED_RELAXED_FIDGETS,
+            afterSeconds: idleDelaySeconds,
+        }
+    );
 }
 
 export function enemyCombatLocomotion(height: number): IStrafeLocomotion {
-    return strafeLocomotion(height * STRIDE.strafe);
+    return strafeLocomotion(height * GAIT_SPEED_PER_HEIGHT.strafe);
 }

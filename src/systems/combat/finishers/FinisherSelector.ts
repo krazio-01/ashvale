@@ -1,4 +1,4 @@
-import { FINISHER_RULES } from "@/constants/combat";
+import { COMBAT_MOVEMENT, FINISHER_RULES } from "@/constants/combat";
 import type { AwarenessState, FinisherKind, IFinisherDefinition } from "@/types/combat";
 
 interface IFinisherCandidate {
@@ -19,7 +19,7 @@ export function isBehind(
     const dx = attackerX - victimX;
     const dz = attackerZ - victimZ;
     const length = Math.hypot(dx, dz);
-    if (length < 1e-4) return false;
+    if (length < COMBAT_MOVEMENT.minimumPlanarLength) return false;
 
     const facingDot = (Math.sin(victimYaw) * dx + Math.cos(victimYaw) * dz) / length;
     return facingDot <= -FINISHER_RULES.backstabConeCos;
@@ -29,7 +29,7 @@ export function finisherKindFor(
     victim: IFinisherCandidate,
     edgeGap: number,
     attackerIsBehind: boolean,
-    inStreak: boolean
+    inChainKillWindow: boolean
 ): FinisherKind | null {
     if (victim.isDead) return null;
 
@@ -42,8 +42,8 @@ export function finisherKindFor(
     const isOpened = victim.isStaggered || victim.healthFraction <= executeBelow;
 
     if (
-        inStreak &&
-        edgeGap <= FINISHER_RULES.streakReach &&
+        inChainKillWindow &&
+        edgeGap <= FINISHER_RULES.chainKillReach &&
         (victim.canBeCounterKilled || isOpened)
     )
         return "execution";

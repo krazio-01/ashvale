@@ -1,9 +1,111 @@
 import path from "node:path";
-import { CLIP } from "@/constants/characters";
+import type { Vector3Tuple } from "three";
+import { CLIP, PLAYER_ASSETS } from "@/constants/characters";
 import type { ClipName } from "@/constants/characters";
-import { GRIP } from "@/constants/combat";
+import { HAND_GRIP } from "@/constants/combat";
 import { PLAYER, PLAYER_STARTING_WEAPON } from "@/constants/player";
-import { PIPELINE_CONFIG } from "../pipeline";
+import { PIPELINE_CONFIG, sourcePathOf } from "../pipeline";
+
+const takesIn =
+    (folder: string) =>
+    (file: string): string =>
+        path.join(PIPELINE_CONFIG.combatAssetsRoot, folder, file);
+
+const mocap = (output: ClipName, take: Omit<IRetargetJob, "output">): IRetargetJob => ({
+    output,
+    ...take,
+});
+
+const take = <Output extends string>(
+    output: Output,
+    rig: SourceRig,
+    source: string,
+    settings: Partial<Omit<IRetargetJob, "output" | "rig" | "source">> = {}
+) => {
+    const { frames = WHOLE_TAKE, rootMotion = "inPlace", ...rest } = settings;
+    return { output, source, rig, frames, rootMotion, ...rest };
+};
+
+const libraryPose = (library: string, clip: string, frame: number): IPoseReference => ({
+    library,
+    clip,
+    frame,
+});
+
+const bakedPose = (clip: ClipName, frame: number): IPoseReference => ({ clip, frame });
+
+const sourcePose = (job: IPoseSourceJob, frame: number): IPoseReference => ({
+    clip: job.output,
+    frame,
+});
+
+const ungrounded = (jobs: IRetargetJob[]): IRetargetJob[] =>
+    jobs.map((job) => ({ ...job, grounding: "none" }));
+
+const beatClipJobs =
+    <Stance extends string>(stances: Readonly<Record<Stance, IStance>>, fingers?: IPoseReference) =>
+    (
+        output: ClipName,
+        start: Stance,
+        beats: IBeat<Stance>[],
+        endMatches: IPoseReference,
+        startMatches?: IPoseReference
+    ): IBeatClipJob<Stance> => ({
+        output,
+        rootMotion: "inPlace",
+        stances,
+        start,
+        beats,
+        ...(fingers && { fingers }),
+        endMatches,
+        ...(startMatches && { startMatches }),
+    });
+
+const returnToIdle = (loweredSeconds: number, idleSeconds: number): IBeat<PlayerStance>[] => [
+    { pose: "lowered", seconds: loweredSeconds, feel: "ease", mark: "lowering" },
+    { pose: "idle", seconds: idleSeconds, feel: "ease", mark: "idle" },
+    { pose: "idle", seconds: 0.04, feel: "hold" },
+];
+
+const parryDeflect = (side: ParrySide): IBeatClipJob =>
+    playerBeatClip(
+        CLIP[`parryDeflect${side}`],
+        `deflect${side}`,
+        [
+            { pose: `deflect${side}`, seconds: 0.1, feel: "movingHold", contact: true },
+            { pose: `deflect${side}Out`, seconds: 0.13, feel: "overshoot", mark: "out" },
+            { pose: "lowGuard", seconds: 0.07, feel: "ease" },
+            ...returnToIdle(0.1, 0.11),
+        ],
+        IDLE_POSE
+    );
+
+const parryPerfect = (side: ParrySide): IBeatClipJob =>
+    playerBeatClip(
+        CLIP[`parryPerfect${side}`],
+        `deflect${side}`,
+        [
+            { pose: `deflect${side}`, seconds: 0.05, feel: "movingHold", contact: true },
+            { pose: PERFECT_PARRY_RELEASE[side], seconds: 0.08, feel: "snap" },
+            { pose: "counterStart", seconds: 0.24, feel: "ease" },
+            { pose: "counterStart", seconds: 0.08, feel: "hold", mark: "counter" },
+        ],
+        COUNTER_KILL_START_POSE
+    );
+
+const reactGuardBroken = (side: ParrySide): IBeatClipJob =>
+    enemyBeatClip(
+        CLIP[`reactGuardBroken${side}`],
+        `strike${side}`,
+        [
+            { pose: `recoil${side}`, seconds: 0.13, feel: "ease", contact: true },
+            { pose: `stumble${side}`, seconds: 0.3, feel: "overshoot" },
+            { pose: "offBalance", seconds: 0.45, feel: "movingHold" },
+            { pose: "victimStart", seconds: 0.4, feel: "ease" },
+            { pose: "victimStart", seconds: 0.12, feel: "hold" },
+        ],
+        KICKDOWN_VICTIM_START_POSE
+    );
 
 export const SOURCE_RIGS = [
     "ue",
@@ -16,147 +118,18 @@ export const SOURCE_RIGS = [
     "atlas",
 ] as const;
 
-export type SourceRig = (typeof SOURCE_RIGS)[number];
-
-export type RootMotion = "extract" | "inPlace";
-
-export interface IRetargetJob {
-    output: ClipName;
-    source: string;
-    rig: SourceRig;
-    frames: [number, number];
-    rootMotion: RootMotion;
-    action?: string;
-    calibrationFrame?: number;
-    calibrationReason?: string;
-    alignToTravel?: boolean;
-    speed?: number;
-    holdFeet?: boolean;
-    grounding?: "auto" | "none";
-}
-
-export type CharacterVector = [number, number, number];
-
-export interface IPoseReference {
-    clip: string;
-    frame: number;
-    library?: string;
-}
-
-export interface IAuthoredKey {
-    time: number;
-    pose: IPoseReference;
-    ease?: "linear" | "in" | "out" | "inOut";
-    adjust?: Partial<Record<string, CharacterVector>>;
-    pelvis?: CharacterVector;
-    travel?: CharacterVector;
-}
-
-export interface IAuthoredClipJob {
-    output: ClipName;
-    rootMotion: RootMotion;
-    keys: IAuthoredKey[];
-    plants?: { foot: "left" | "right"; from: number; to: number; pose?: IPoseReference }[];
-    grips?: { from: number; to: number; pose?: IPoseReference }[];
-    fingers?: IPoseReference;
-    grounding?: "auto" | "none";
-}
-
-export type Feel = "snap" | "hold" | "movingHold" | "overshoot" | "anticipate" | "ease";
-
-export interface IHandIntent {
-    position: CharacterVector;
-    blade: CharacterVector;
-    edge?: CharacterVector;
-}
-
-export interface ICarriedHand {
-    pull: number;
-    edge?: CharacterVector;
-}
-
-export interface IStance {
-    base: IPoseReference;
-    pelvis?: CharacterVector;
-    pelvisTurn?: CharacterVector;
-    chest?: CharacterVector;
-    head?: CharacterVector;
-    shoulder?: CharacterVector;
-    feet?: { left?: CharacterVector; right?: CharacterVector };
-    hand?: IHandIntent | ICarriedHand;
-    elbow?: CharacterVector;
-    feetFrom?: IPoseReference;
-    offHandElbow?: CharacterVector;
-    offHand?: CharacterVector | "grip" | IPoseReference;
-    gripHold?: number;
-}
-
-export interface IBeat<Stance extends string = string> {
-    pose: Stance;
-    seconds: number;
-    feel: Feel;
-    arc?: number;
-    travel?: CharacterVector;
-    contact?: true;
-    mark?: string;
-}
-
-export interface IBeatClipJob<Stance extends string = string> {
-    output: ClipName;
-    rootMotion: RootMotion;
-    stances: Readonly<Record<Stance, IStance>>;
-    start: Stance;
-    beats: IBeat<Stance>[];
-    reversed?: true;
-    fingers?: IPoseReference;
-    grounding?: "auto" | "none";
-    startMatches?: IPoseReference;
-    endMatches?: IPoseReference;
-}
-
-export interface IPoseSourceJob extends Omit<IRetargetJob, "output"> {
-    output: string;
-    poseSource: true;
-}
-
-export type ClipJob = IRetargetJob | IAuthoredClipJob | IBeatClipJob | IPoseSourceJob;
-
-export const isAuthoredJob = (job: ClipJob): job is IAuthoredClipJob => "keys" in job;
-
-export const isBeatJob = (job: ClipJob): job is IBeatClipJob => "beats" in job;
-
-const stancePoseReferences = (stance: IStance): IPoseReference[] => [
-    ...(stance.feetFrom ? [stance.feetFrom] : []),
-    ...(typeof stance.offHand === "object" && "clip" in stance.offHand ? [stance.offHand] : []),
-];
-
-export const authoredPoses = (job: IAuthoredClipJob | IBeatClipJob): IPoseReference[] => [
-    ...("keys" in job
-        ? job.keys.map((key) => key.pose)
-        : [job.start, ...job.beats.map((beat) => beat.pose)].map((name) => job.stances[name].base)),
-    ...(job.fingers ? [job.fingers] : []),
-    ...("stances" in job ? Object.values<IStance>(job.stances).flatMap(stancePoseReferences) : []),
-    ...("startMatches" in job && job.startMatches ? [job.startMatches] : []),
-    ...("endMatches" in job && job.endMatches ? [job.endMatches] : []),
-    ...("keys" in job ? [...(job.plants ?? []), ...(job.grips ?? [])] : []).flatMap((contact) =>
-        contact.pose ? [contact.pose] : []
-    ),
-];
-
-export const CLIP_LIBRARY = {
-    target: "assets-src/models/characters/UAL1_Standard.glb",
-    output: "assets-src/models/characters/CombatClips.glb",
-};
-
-export const CLIP_TUNING = {
-    headRadiusHips: 0.12,
-    headClearanceMetres: 0.1,
-    gripGapMetres: 0.05,
+export const CLIP_BAKE_FILES = {
+    target: sourcePathOf(PLAYER_ASSETS.clipLibraryPaths[0]),
+    output: sourcePathOf(PLAYER_ASSETS.clipLibraryPaths[1]),
 };
 
 export const GAME_FIT = {
-    tuning: CLIP_TUNING,
-    grip: GRIP,
+    tuning: {
+        headRadiusHips: 0.12,
+        headClearanceMetres: 0.1,
+        gripGapMetres: 0.05,
+    },
+    grip: HAND_GRIP,
     bladeToCharacterHeight: PLAYER_STARTING_WEAPON.worldLength / PLAYER.height,
 };
 
@@ -171,15 +144,13 @@ export const CLIPS_PROVIDED_BY_CHARACTER_MODEL: readonly string[] = [
     CLIP.crouchWalk,
 ];
 
-const UAL1 = path.resolve(CLIP_LIBRARY.target);
-const UAL2 = path.resolve("assets-src/models/characters/UAL2_Standard.glb");
-export const OUTPUT_FPS = 30;
-const WHOLE_TAKE: [number, number] = [0, 0];
+const UAL_LIBRARY_1 = path.resolve(CLIP_BAKE_FILES.target);
 
-const takesIn =
-    (folder: string) =>
-    (file: string): string =>
-        path.join(PIPELINE_CONFIG.combatAssetsRoot, folder, file);
+const UAL_LIBRARY_2 = path.resolve("assets-src/models/characters/UAL2_Standard.glb");
+
+export const OUTPUT_FPS = 30;
+
+const WHOLE_TAKE: [number, number] = [0, 0];
 
 const TAKES = {
     mocapOnlineSword: takesIn("mco_sword/TC_Sword_Free_Pack/FBX_Pack/Animation"),
@@ -199,60 +170,22 @@ const TAKES = {
     atlas: takesIn("atlas"),
 };
 
-type UalSettings = Partial<Pick<IRetargetJob, "frames" | "rootMotion" | "speed">>;
-
-const mocap = (output: ClipName, take: Omit<IRetargetJob, "output">): IRetargetJob => ({
-    output,
-    ...take,
-});
-
-const ual = (
-    output: ClipName,
-    library: string,
-    action: string,
-    settings: UalSettings = {}
-): IRetargetJob => {
-    const { frames = WHOLE_TAKE, rootMotion = "inPlace", ...rest } = settings;
-    return { output, source: library, rig: "ual", frames, rootMotion, action, ...rest };
-};
-
-const kevinTake = (output: ClipName, source: string): IRetargetJob => ({
-    output,
-    source,
-    rig: "kevin",
-    frames: WHOLE_TAKE,
-    rootMotion: "inPlace",
-});
-
-export const libraryPose = (library: string, clip: string, frame: number): IPoseReference => ({
-    library,
-    clip,
-    frame,
-});
-
-export const bakedPose = (clip: ClipName, frame: number): IPoseReference => ({ clip, frame });
-
-export const sourcePose = (job: IPoseSourceJob, frame: number): IPoseReference => ({
-    clip: job.output,
-    frame,
-});
-
 const LOCOMOTION_JOBS: IRetargetJob[] = [
-    mocap(CLIP.combatIdle, {
-        source: TAKES.mocapOnlineSword("KBS_Ready_Idle_001.fbx"),
-        rig: "motus",
-        frames: WHOLE_TAKE,
-        rootMotion: "inPlace",
+    take(CLIP.combatIdle, "motus", TAKES.mocapOnlineSword("KBS_Ready_Idle_001.fbx"), {
         holdFeet: true,
     }),
-    kevinTake(CLIP.strafeForward, TAKES.kevinRun("HumanM@Run01_Forward.fbx")),
-    kevinTake(CLIP.strafeForwardRight, TAKES.kevinStrafe("HumanM@StrafeRun01_ForwardRight.fbx")),
-    kevinTake(CLIP.strafeRight, TAKES.kevinStrafe("HumanM@StrafeRun01_Right.fbx")),
-    kevinTake(CLIP.strafeBackRight, TAKES.kevinStrafe("HumanM@StrafeRun01_BackwardRight.fbx")),
-    kevinTake(CLIP.strafeBack, TAKES.kevinRun("HumanM@Run01_Backward.fbx")),
-    kevinTake(CLIP.strafeBackLeft, TAKES.kevinStrafe("HumanM@StrafeRun01_BackwardLeft.fbx")),
-    kevinTake(CLIP.strafeLeft, TAKES.kevinStrafe("HumanM@StrafeRun01_Left.fbx")),
-    kevinTake(CLIP.strafeForwardLeft, TAKES.kevinStrafe("HumanM@StrafeRun01_ForwardLeft.fbx")),
+    take(CLIP.strafeForward, "kevin", TAKES.kevinRun("HumanM@Run01_Forward.fbx")),
+    take(
+        CLIP.strafeForwardRight,
+        "kevin",
+        TAKES.kevinStrafe("HumanM@StrafeRun01_ForwardRight.fbx")
+    ),
+    take(CLIP.strafeRight, "kevin", TAKES.kevinStrafe("HumanM@StrafeRun01_Right.fbx")),
+    take(CLIP.strafeBackRight, "kevin", TAKES.kevinStrafe("HumanM@StrafeRun01_BackwardRight.fbx")),
+    take(CLIP.strafeBack, "kevin", TAKES.kevinRun("HumanM@Run01_Backward.fbx")),
+    take(CLIP.strafeBackLeft, "kevin", TAKES.kevinStrafe("HumanM@StrafeRun01_BackwardLeft.fbx")),
+    take(CLIP.strafeLeft, "kevin", TAKES.kevinStrafe("HumanM@StrafeRun01_Left.fbx")),
+    take(CLIP.strafeForwardLeft, "kevin", TAKES.kevinStrafe("HumanM@StrafeRun01_ForwardLeft.fbx")),
 ];
 
 const SWORD_COMBO_TAKE = TAKES.mocapOnlineSword("KBS_Sword_ATK_Combo_01_001.fbx");
@@ -271,8 +204,6 @@ const PLAYER_ATTACK_JOBS: IRetargetJob[] = [
         frames: [36, 60],
         rootMotion: "extract",
         calibrationFrame: 1,
-        calibrationReason:
-            "shares Sword_Light_1's idle calibration so the combo chain lines up; in-range calibration slides this slice ~1m sideways (auditions-sword.md)",
     }),
     mocap(CLIP.swordLight3, {
         source: SWORD_COMBO_TAKE,
@@ -280,8 +211,6 @@ const PLAYER_ATTACK_JOBS: IRetargetJob[] = [
         frames: [60, 87],
         rootMotion: "extract",
         calibrationFrame: 1,
-        calibrationReason:
-            "shares the combo's shared idle calibration for the same reason as Sword_Light_2",
     }),
     mocap(CLIP.swordLight4, {
         source: TAKES.rokokoLegacy("Destiny/Destiny_DrawSwordFight_HUMANIK_769.fbx"),
@@ -296,8 +225,6 @@ const PLAYER_ATTACK_JOBS: IRetargetJob[] = [
         frames: [57, 145],
         rootMotion: "extract",
         calibrationFrame: 57,
-        calibrationReason:
-            "the take's low-guard start, closest neutral pose before the wind-up begins",
     }),
     mocap(CLIP.swordHeavyFinisher, {
         source: TAKES.mocapinFight("05_04_008_attack_03.fbx"),
@@ -305,8 +232,6 @@ const PLAYER_ATTACK_JOBS: IRetargetJob[] = [
         frames: [12, 120],
         rootMotion: "extract",
         calibrationFrame: 12,
-        calibrationReason:
-            "the take's guard-idle hold before the leap windup begins, closest neutral pose",
     }),
     mocap(CLIP.swordCounter, {
         source: TAKES.rokokoCombat("Sword_Generic_ue.fbx"),
@@ -348,34 +273,35 @@ const MOVEMENT_JOBS: IRetargetJob[] = [
         rootMotion: "extract",
         calibrationFrame: 58,
     }),
-    ual(CLIP.parry, UAL2, "Sword_Block", { frames: [0, 18] }),
-    ual(CLIP.slideStart, UAL2, "Slide_Start", { rootMotion: "extract" }),
-    ual(CLIP.slideHold, UAL2, "Slide_Loop", { frames: [0, 10] }),
-    ual(CLIP.slideExit, UAL2, "Slide_Exit", { rootMotion: "extract" }),
+    take(CLIP.parry, "ual", UAL_LIBRARY_2, { action: "Sword_Block", frames: [0, 18] }),
+    take(CLIP.slideStart, "ual", UAL_LIBRARY_2, { action: "Slide_Start", rootMotion: "extract" }),
+    take(CLIP.slideHold, "ual", UAL_LIBRARY_2, { action: "Slide_Loop", frames: [0, 10] }),
+    take(CLIP.slideExit, "ual", UAL_LIBRARY_2, { action: "Slide_Exit", rootMotion: "extract" }),
 ];
 
 const KNOCKDOWN_TAKE = TAKES.mocapCentral("Fight/am_Ready_Fight_01_Knockdown_A.FBX");
 
 const HIT_JOBS: IRetargetJob[] = [
-    ual(CLIP.reactFlinch, UAL1, "Hit_Chest"),
-    ual(CLIP.reactHitHead, UAL1, "Hit_Head"),
-    mocap(CLIP.reactCombatDamage, {
-        source: TAKES.kevinCombat("HumanM@CombatDamage01.fbx"),
-        rig: "kevin",
-        frames: WHOLE_TAKE,
-        rootMotion: "inPlace",
+    take(CLIP.reactFlinch, "ual", UAL_LIBRARY_1, { action: "Hit_Chest" }),
+    take(CLIP.reactHitHead, "ual", UAL_LIBRARY_1, { action: "Hit_Head" }),
+    take(CLIP.reactCombatDamage, "kevin", TAKES.kevinCombat("HumanM@CombatDamage01.fbx"), {
         speed: 1.35,
     }),
-    ual(CLIP.deathCollapse, UAL1, "Death01", { rootMotion: "extract", speed: 1.5 }),
-    ual(CLIP.deathKnockback, UAL2, "Hit_Knockback", { rootMotion: "extract" }),
+    take(CLIP.deathCollapse, "ual", UAL_LIBRARY_1, {
+        action: "Death01",
+        rootMotion: "extract",
+        speed: 1.5,
+    }),
+    take(CLIP.deathKnockback, "ual", UAL_LIBRARY_2, {
+        action: "Hit_Knockback",
+        rootMotion: "extract",
+    }),
     mocap(CLIP.reactKnockback, {
         source: KNOCKDOWN_TAKE,
         rig: "manny",
         frames: [505, 556],
         rootMotion: "extract",
         calibrationFrame: 500,
-        calibrationReason:
-            "calibrates on the guard stance just before the hit; the slice starts already reacting",
     }),
     mocap(CLIP.reactKnockdown, {
         source: KNOCKDOWN_TAKE,
@@ -383,8 +309,6 @@ const HIT_JOBS: IRetargetJob[] = [
         frames: [645, 740],
         rootMotion: "extract",
         calibrationFrame: 590,
-        calibrationReason:
-            "calibrates on the same guard stance as React_Knockback, from earlier in the same take",
     }),
     mocap(CLIP.reactStagger, {
         source: TAKES.rokokoLegacy("Combat/Fight_GettingKickedinBalls_HUMANIK_WHS_segment.fbx"),
@@ -392,8 +316,6 @@ const HIT_JOBS: IRetargetJob[] = [
         frames: [653, 797],
         rootMotion: "inPlace",
         calibrationFrame: 300,
-        calibrationReason:
-            "the doubled-over hold has no upright frame; calibrates on the take's earlier neutral stance (auditions-reactions.md)",
     }),
     mocap(CLIP.reactParried, {
         source: TAKES.rokokoLegacy("Combat/Boxing_GettingKnockedOut_HUMANIK_WHS.fbx"),
@@ -447,44 +369,47 @@ const FINISHER_JOBS: IRetargetJob[] = [
         rootMotion: "extract",
         calibrationFrame: 430,
     }),
-    ual(CLIP.finisherExecution, UAL2, "Sword_Regular_C", {
+    take(CLIP.finisherExecution, "ual", UAL_LIBRARY_2, {
+        action: "Sword_Regular_C",
         frames: [4, 48],
         rootMotion: "extract",
     }),
-    ual(CLIP.finisherExecutionSlam, UAL2, "Sword_Heavy_Combo", {
+    take(CLIP.finisherExecutionSlam, "ual", UAL_LIBRARY_2, {
+        action: "Sword_Heavy_Combo",
         frames: [55, 104],
         rootMotion: "extract",
     }),
 ];
 
 const ENEMY_JOBS: IRetargetJob[] = [
-    ual(CLIP.enemyPunch, UAL1, "Punch_Cross"),
+    take(CLIP.enemyPunch, "ual", UAL_LIBRARY_1, { action: "Punch_Cross" }),
     mocap(CLIP.enemySwipe, {
         source: TAKES.rokokoCombatPack("KnifeFight_mixamo.fbx"),
         rig: "mixamo",
         frames: [238, 290],
         rootMotion: "extract",
         calibrationFrame: 20,
-        calibrationReason:
-            "calibrates on the take's neutral ready stance before the slash; the slice itself starts mid-guard",
     }),
-    ual(CLIP.enemySlashA, UAL2, "Sword_Regular_A"),
-    ual(CLIP.enemySlashARecover, UAL2, "Sword_Regular_A_Rec"),
-    ual(CLIP.enemySlashB, UAL2, "Sword_Regular_B"),
-    ual(CLIP.enemySlashBRecover, UAL2, "Sword_Regular_B_Rec"),
-    ual(CLIP.enemySlashC, UAL2, "Sword_Regular_C"),
-    ual(CLIP.enemyCleave, UAL1, "Sword_Attack"),
-    kevinTake(CLIP.enemyRisingCut, TAKES.kevinCombat("1H/HumanM@Attack1H01_R.fbx")),
-    kevinTake(CLIP.enemyBackhand, TAKES.kevinCombat("1H/HumanM@Attack1H01_L.fbx")),
-    ual(CLIP.swordDash, UAL2, "Sword_Dash"),
-    kevinTake(CLIP.enemyThrust, TAKES.kevinCombat("Polearm/HumanM@AttackPolearm01.fbx")),
-    kevinTake(CLIP.enemyGreatCleave, TAKES.kevinCombat("2H/HumanM@Attack2H01.fbx")),
-    ual(CLIP.enemyLowSweep, UAL2, "Sword_Heavy_Combo", { frames: [0, 34] }),
-    ual(CLIP.enemyJab, UAL1, "Punch_Jab"),
-    ual(CLIP.enemyHook, UAL2, "Melee_Hook"),
-    ual(CLIP.enemyHookRecover, UAL2, "Melee_Hook_Rec"),
-    ual(CLIP.enemyScratch, UAL2, "Zombie_Scratch"),
-    ual(CLIP.enemyHurl, UAL2, "OverhandThrow"),
+    take(CLIP.enemySlashA, "ual", UAL_LIBRARY_2, { action: "Sword_Regular_A" }),
+    take(CLIP.enemySlashARecover, "ual", UAL_LIBRARY_2, { action: "Sword_Regular_A_Rec" }),
+    take(CLIP.enemySlashB, "ual", UAL_LIBRARY_2, { action: "Sword_Regular_B" }),
+    take(CLIP.enemySlashBRecover, "ual", UAL_LIBRARY_2, { action: "Sword_Regular_B_Rec" }),
+    take(CLIP.enemySlashC, "ual", UAL_LIBRARY_2, { action: "Sword_Regular_C" }),
+    take(CLIP.enemyCleave, "ual", UAL_LIBRARY_1, { action: "Sword_Attack" }),
+    take(CLIP.enemyRisingCut, "kevin", TAKES.kevinCombat("1H/HumanM@Attack1H01_R.fbx")),
+    take(CLIP.enemyBackhand, "kevin", TAKES.kevinCombat("1H/HumanM@Attack1H01_L.fbx")),
+    take(CLIP.enemyLunge, "ual", UAL_LIBRARY_2, { action: "Sword_Dash" }),
+    take(CLIP.enemyThrust, "kevin", TAKES.kevinCombat("Polearm/HumanM@AttackPolearm01.fbx")),
+    take(CLIP.enemyGreatCleave, "kevin", TAKES.kevinCombat("2H/HumanM@Attack2H01.fbx")),
+    take(CLIP.enemyLowSweep, "ual", UAL_LIBRARY_2, {
+        action: "Sword_Heavy_Combo",
+        frames: [0, 34],
+    }),
+    take(CLIP.enemyJab, "ual", UAL_LIBRARY_1, { action: "Punch_Jab" }),
+    take(CLIP.enemyHook, "ual", UAL_LIBRARY_2, { action: "Melee_Hook" }),
+    take(CLIP.enemyHookRecover, "ual", UAL_LIBRARY_2, { action: "Melee_Hook_Rec" }),
+    take(CLIP.enemyScratch, "ual", UAL_LIBRARY_2, { action: "Zombie_Scratch" }),
+    take(CLIP.enemyHurl, "ual", UAL_LIBRARY_2, { action: "OverhandThrow" }),
 ];
 
 const SWORD_IDLE_TAKE = TAKES.rokokoCombatPack("SwordIdleMedium_mixamo.fbx");
@@ -524,22 +449,17 @@ const IDLE_FIDGET_JOBS: IRetargetJob[] = [
     }),
 ];
 
-const ungrounded = (jobs: IRetargetJob[]): IRetargetJob[] =>
-    jobs.map((job) => ({ ...job, grounding: "none" }));
-
 const TWO_HANDED_GRIP_POSE_JOB: IPoseSourceJob = {
-    output: "Pose_TwoHandedGrip",
+    ...take("Pose_TwoHandedGrip", "kevin", TAKES.kevinCombat("2H/HumanM@CombatIdle2H01.fbx")),
     poseSource: true,
-    source: TAKES.kevinCombat("2H/HumanM@CombatIdle2H01.fbx"),
-    rig: "kevin",
-    frames: WHOLE_TAKE,
-    rootMotion: "inPlace",
 };
 
 const POSE_SOURCE_JOBS: IPoseSourceJob[] = [TWO_HANDED_GRIP_POSE_JOB];
 
-const IDLE_POSE = libraryPose(UAL1, "Idle_Loop", 0);
+const IDLE_POSE = libraryPose(UAL_LIBRARY_1, "Idle_Loop", 0);
+
 const COUNTER_KILL_START_POSE = bakedPose(CLIP.finisherKickdownAttacker, 1);
+
 const TWO_HANDED_GRIP = sourcePose(TWO_HANDED_GRIP_POSE_JOB, 1);
 
 const IDLE_BODY = {
@@ -548,10 +468,12 @@ const IDLE_BODY = {
     offHand: IDLE_POSE,
     offHandElbow: [-0.5, -0.5, -1],
 } satisfies Partial<IStance>;
-const GUARD_ELBOW: CharacterVector = [0.9, -0.7, -0.2];
-const BLADE_RAISED_SHOULDER: CharacterVector = [5, -15, 0];
 
-const PLAYER_POSES = {
+const GUARD_ELBOW: Vector3Tuple = [0.9, -0.7, -0.2];
+
+const BLADE_RAISED_SHOULDER: Vector3Tuple = [5, -15, 0];
+
+const PLAYER_BASE_STANCES = {
     idle: { base: IDLE_POSE },
     lowGuard: {
         base: IDLE_POSE,
@@ -622,7 +544,11 @@ const PLAYER_POSES = {
     raisedHand: {
         ...IDLE_BODY,
         shoulder: [2, -6, 0],
-        hand: { position: [0.63, -0.24, 1.42], blade: [-0.78, 0.4, -0.48], edge: [0.69, 0.45, 0.56] },
+        hand: {
+            position: [0.63, -0.24, 1.42],
+            blade: [-0.78, 0.4, -0.48],
+            edge: [0.69, 0.45, 0.56],
+        },
         elbow: [-0.86, -0.51, 0.08],
     },
     carriedHilt: {
@@ -642,46 +568,64 @@ const PLAYER_POSES = {
     liftedBlade: {
         ...IDLE_BODY,
         shoulder: BLADE_RAISED_SHOULDER,
-        hand: { position: [0.41, -0.26, 1.97], blade: [0.12, 0.18, -0.98], edge: [0.74, 0.54, -0.4] },
+        hand: {
+            position: [0.41, -0.26, 1.97],
+            blade: [0.12, 0.18, -0.98],
+            edge: [0.74, 0.54, -0.4],
+        },
         elbow: [-0.52, -0.83, -0.21],
     },
     bladeOut: {
         ...IDLE_BODY,
         shoulder: BLADE_RAISED_SHOULDER,
-        hand: { position: [0.44, -0.05, 1.92], blade: [0.89, 0.44, 0.08], edge: [-0.1, 0.54, 0.84] },
+        hand: {
+            position: [0.44, -0.05, 1.92],
+            blade: [0.89, 0.44, 0.08],
+            edge: [-0.1, 0.54, 0.84],
+        },
         elbow: [-0.21, -0.54, 0.82],
     },
     bladeRising: {
         ...IDLE_BODY,
         shoulder: BLADE_RAISED_SHOULDER,
-        hand: { position: [0.44, -0.09, 1.99], blade: [0.77, 0.13, 0.62], edge: [-0.72, -0.48, 0.49] },
+        hand: {
+            position: [0.44, -0.09, 1.99],
+            blade: [0.77, 0.13, 0.62],
+            edge: [-0.72, -0.48, 0.49],
+        },
         elbow: [-0.31, -0.9, 0.32],
     },
     bladeUp: {
         ...IDLE_BODY,
         shoulder: BLADE_RAISED_SHOULDER,
-        hand: { position: [0.37, -0.15, 2.05], blade: [0.22, 0.45, 0.87], edge: [0.11, -0.85, -0.51] },
+        hand: {
+            position: [0.37, -0.15, 2.05],
+            blade: [0.22, 0.45, 0.87],
+            edge: [0.11, -0.85, -0.51],
+        },
         elbow: [-0.52, -0.82, -0.24],
     },
     bladeForward: {
         ...IDLE_BODY,
-        hand: { position: [0.56, 0.12, 1.75], blade: [-0.48, 0.87, 0.08], edge: [0.83, -0.52, -0.21] },
+        hand: {
+            position: [0.56, 0.12, 1.75],
+            blade: [-0.48, 0.87, 0.08],
+            edge: [0.83, -0.52, -0.21],
+        },
         elbow: [-0.12, -0.98, -0.15],
     },
 } satisfies Record<string, IStance>;
 
 const PLAYER_STANCES = {
-    ...PLAYER_POSES,
-    guardReach: { ...PLAYER_POSES.lowGuard, gripHold: 0.8 },
+    ...PLAYER_BASE_STANCES,
+    guardReach: { ...PLAYER_BASE_STANCES.lowGuard, gripHold: 0.8 },
     shedHighRelease: {
-        ...PLAYER_POSES.deflectHighOut,
+        ...PLAYER_BASE_STANCES.deflectHighOut,
         hand: { position: [0.16, 0.26, 1.12], blade: [0.7, 0.5, 0.3] },
         gripHold: 0.5,
     },
-    perfectSideReleaseRight: { ...PLAYER_POSES.deflectHighOut, gripHold: 0.5 },
+    perfectSideReleaseRight: { ...PLAYER_BASE_STANCES.deflectHighOut, gripHold: 0.5 },
 } satisfies Record<string, IStance>;
-
-type PlayerStance = keyof typeof PLAYER_STANCES;
 
 const KICKDOWN_VICTIM_START_POSE = bakedPose(CLIP.finisherKickdownVictim, 1);
 
@@ -763,82 +707,16 @@ const ENEMY_STANCES = {
     victimStart: { base: KICKDOWN_VICTIM_START_POSE },
 } satisfies Record<string, IStance>;
 
-const beatClips =
-    <Stance extends string>(stances: Readonly<Record<Stance, IStance>>, fingers?: IPoseReference) =>
-    (
-        output: ClipName,
-        start: Stance,
-        beats: IBeat<Stance>[],
-        endMatches: IPoseReference,
-        startMatches?: IPoseReference
-    ): IBeatClipJob<Stance> => ({
-        output,
-        rootMotion: "inPlace",
-        stances,
-        start,
-        beats,
-        ...(fingers && { fingers }),
-        endMatches,
-        ...(startMatches && { startMatches }),
-    });
+const playerBeatClip = beatClipJobs(PLAYER_STANCES, TWO_HANDED_GRIP);
 
-const playerBeats = beatClips(PLAYER_STANCES, TWO_HANDED_GRIP);
-const enemyBeats = beatClips(ENEMY_STANCES);
-
-type ParrySide = "High" | "Side";
+const enemyBeatClip = beatClipJobs(ENEMY_STANCES);
 
 const PERFECT_PARRY_RELEASE = {
     High: "shedHighRelease",
     Side: "perfectSideReleaseRight",
 } as const satisfies Record<ParrySide, PlayerStance>;
 
-const returnToIdle = (loweredSeconds: number, idleSeconds: number): IBeat<PlayerStance>[] => [
-    { pose: "lowered", seconds: loweredSeconds, feel: "ease", mark: "lowering" },
-    { pose: "idle", seconds: idleSeconds, feel: "ease", mark: "idle" },
-    { pose: "idle", seconds: 0.04, feel: "hold" },
-];
-
-const parryDeflect = (side: ParrySide): IBeatClipJob =>
-    playerBeats(
-        CLIP[`parryDeflect${side}`],
-        `deflect${side}`,
-        [
-            { pose: `deflect${side}`, seconds: 0.1, feel: "movingHold", contact: true },
-            { pose: `deflect${side}Out`, seconds: 0.13, feel: "overshoot", mark: "out" },
-            { pose: "lowGuard", seconds: 0.07, feel: "ease" },
-            ...returnToIdle(0.1, 0.11),
-        ],
-        IDLE_POSE
-    );
-
-const parryPerfect = (side: ParrySide): IBeatClipJob =>
-    playerBeats(
-        CLIP[`parryPerfect${side}`],
-        `deflect${side}`,
-        [
-            { pose: `deflect${side}`, seconds: 0.05, feel: "movingHold", contact: true },
-            { pose: PERFECT_PARRY_RELEASE[side], seconds: 0.08, feel: "snap" },
-            { pose: "counterStart", seconds: 0.24, feel: "ease" },
-            { pose: "counterStart", seconds: 0.08, feel: "hold", mark: "counter" },
-        ],
-        COUNTER_KILL_START_POSE
-    );
-
-const reactGuardBroken = (side: ParrySide): IBeatClipJob =>
-    enemyBeats(
-        CLIP[`reactGuardBroken${side}`],
-        `strike${side}`,
-        [
-            { pose: `recoil${side}`, seconds: 0.13, feel: "ease", contact: true },
-            { pose: `stumble${side}`, seconds: 0.3, feel: "overshoot" },
-            { pose: "offBalance", seconds: 0.45, feel: "movingHold" },
-            { pose: "victimStart", seconds: 0.4, feel: "ease" },
-            { pose: "victimStart", seconds: 0.12, feel: "hold" },
-        ],
-        KICKDOWN_VICTIM_START_POSE
-    );
-
-const DRAW = {
+const SWORD_DRAW_BEATS = {
     start: "idleFeet",
     beats: [
         { pose: "raisedHand", seconds: 0.2, feel: "ease" },
@@ -855,12 +733,24 @@ const DRAW = {
 } satisfies { start: PlayerStance; beats: IBeat<PlayerStance>[] };
 
 const BEAT_CLIP_JOBS: IBeatClipJob[] = [
-    playerBeats(CLIP.swordDraw, DRAW.start, DRAW.beats, IDLE_POSE, IDLE_POSE),
+    playerBeatClip(
+        CLIP.swordDraw,
+        SWORD_DRAW_BEATS.start,
+        SWORD_DRAW_BEATS.beats,
+        IDLE_POSE,
+        IDLE_POSE
+    ),
     {
-        ...playerBeats(CLIP.swordSheathe, DRAW.start, DRAW.beats, IDLE_POSE, IDLE_POSE),
+        ...playerBeatClip(
+            CLIP.swordSheathe,
+            SWORD_DRAW_BEATS.start,
+            SWORD_DRAW_BEATS.beats,
+            IDLE_POSE,
+            IDLE_POSE
+        ),
         reversed: true,
     },
-    playerBeats(
+    playerBeatClip(
         CLIP.parryGuard,
         "idle",
         [
@@ -872,13 +762,13 @@ const BEAT_CLIP_JOBS: IBeatClipJob[] = [
         IDLE_POSE,
         IDLE_POSE
     ),
-    playerBeats(
+    playerBeatClip(
         CLIP.parryReguard,
         "lowGuard",
         [{ pose: "lowGuard", seconds: 0.3, feel: "movingHold" }, ...returnToIdle(0.12, 0.14)],
         IDLE_POSE
     ),
-    playerBeats(
+    playerBeatClip(
         CLIP.jumpAbsorb,
         "idle",
         [
@@ -890,7 +780,7 @@ const BEAT_CLIP_JOBS: IBeatClipJob[] = [
         IDLE_POSE
     ),
     parryDeflect("High"),
-    enemyBeats(
+    enemyBeatClip(
         CLIP.reactParriedHigh,
         "strikeHigh",
         [
@@ -905,7 +795,7 @@ const BEAT_CLIP_JOBS: IBeatClipJob[] = [
     parryDeflect("Side"),
     parryPerfect("High"),
     parryPerfect("Side"),
-    enemyBeats(
+    enemyBeatClip(
         CLIP.reactParriedSide,
         "strikeSide",
         [
@@ -930,4 +820,105 @@ export const CLIP_JOBS: ClipJob[] = [
     ...IDLE_FIDGET_JOBS,
     ...POSE_SOURCE_JOBS,
     ...BEAT_CLIP_JOBS,
+];
+
+export type SourceRig = (typeof SOURCE_RIGS)[number];
+
+type RootMotion = "extract" | "inPlace";
+
+export interface IRetargetJob {
+    output: ClipName;
+    source: string;
+    rig: SourceRig;
+    frames: [number, number];
+    rootMotion: RootMotion;
+    action?: string;
+    calibrationFrame?: number;
+    alignToTravel?: boolean;
+    speed?: number;
+    holdFeet?: boolean;
+    grounding?: "auto" | "none";
+}
+
+interface IPoseReference {
+    clip: string;
+    frame: number;
+    library?: string;
+}
+
+type Feel = "snap" | "hold" | "movingHold" | "overshoot" | "ease";
+
+interface IHandIntent {
+    position: Vector3Tuple;
+    blade: Vector3Tuple;
+    edge?: Vector3Tuple;
+}
+
+interface ICarriedHand {
+    pull: number;
+    edge?: Vector3Tuple;
+}
+
+interface IStance {
+    base: IPoseReference;
+    pelvis?: Vector3Tuple;
+    pelvisTurn?: Vector3Tuple;
+    chest?: Vector3Tuple;
+    head?: Vector3Tuple;
+    shoulder?: Vector3Tuple;
+    feet?: { left?: Vector3Tuple; right?: Vector3Tuple };
+    hand?: IHandIntent | ICarriedHand;
+    elbow?: Vector3Tuple;
+    feetFrom?: IPoseReference;
+    offHandElbow?: Vector3Tuple;
+    offHand?: "grip" | IPoseReference;
+    gripHold?: number;
+}
+
+interface IBeat<Stance extends string = string> {
+    pose: Stance;
+    seconds: number;
+    feel: Feel;
+    arc?: number;
+    contact?: true;
+    mark?: string;
+}
+
+interface IBeatClipJob<Stance extends string = string> {
+    output: ClipName;
+    rootMotion: RootMotion;
+    stances: Readonly<Record<Stance, IStance>>;
+    start: Stance;
+    beats: IBeat<Stance>[];
+    reversed?: true;
+    fingers?: IPoseReference;
+    grounding?: "auto" | "none";
+    startMatches?: IPoseReference;
+    endMatches?: IPoseReference;
+}
+
+interface IPoseSourceJob extends Omit<IRetargetJob, "output"> {
+    output: string;
+    poseSource: true;
+}
+
+export type ClipJob = IRetargetJob | IBeatClipJob | IPoseSourceJob;
+
+type PlayerStance = keyof typeof PLAYER_STANCES;
+
+type ParrySide = "High" | "Side";
+
+export const isBeatJob = (job: ClipJob): job is IBeatClipJob => "beats" in job;
+
+const stancePoseReferences = (stance: IStance): IPoseReference[] => [
+    ...(stance.feetFrom ? [stance.feetFrom] : []),
+    ...(typeof stance.offHand === "object" && "clip" in stance.offHand ? [stance.offHand] : []),
+];
+
+export const authoredPoses = (job: IBeatClipJob): IPoseReference[] => [
+    ...[job.start, ...job.beats.map((beat) => beat.pose)].map((name) => job.stances[name].base),
+    ...(job.fingers ? [job.fingers] : []),
+    ...Object.values<IStance>(job.stances).flatMap(stancePoseReferences),
+    ...(job.startMatches ? [job.startMatches] : []),
+    ...(job.endMatches ? [job.endMatches] : []),
 ];

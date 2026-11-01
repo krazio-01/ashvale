@@ -1,7 +1,7 @@
 import "server-only";
 import axios from "axios";
 import { HttpStatus } from "@/constants/strings";
-import { ErrorWrapper } from "@/lib/ResponseWrapper";
+import { HttpError } from "@/lib/ResponseWrapper";
 
 const DEFAULT_TIMEOUT_MS = 15000;
 
@@ -57,7 +57,7 @@ async function dispatchRequest<T>(
             ? `timed out after ${timeoutMs ?? DEFAULT_TIMEOUT_MS}ms`
             : (error.code ?? error.message);
 
-        throw new ErrorWrapper(
+        throw new HttpError(
             `${method.toUpperCase()} ${url} failed: ${failureReason}`,
             HttpStatus.BAD_GATEWAY
         );

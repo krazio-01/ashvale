@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import json
 import math
 from pathlib import Path
 
@@ -15,32 +14,33 @@ from scipy.spatial import cKDTree
 import PhysicsLattice as lattice
 from Geometry import (
     SkinInfluences,
+    axis_distance,
     face_edges,
-    multi_source_distance,
+    graph_distance_to_sources,
     normalised,
     principal_axes,
     rounded,
     segment_distance,
-    smooth_unit,
     smoothstep,
     to_blender,
     to_gltf,
     triangle_areas,
 )
-from ModelConfig import ModelSettings, detected_bodies, write_detection
+from ModelConfig import ModelSettings, read_detection, read_json, write_detection, write_json
+from Rig import import_model, reset_scene
 from ModelDetection import (
     BodyNamer,
-    ClothDetector,
-    PropDetector,
     apply_overrides,
     assert_detection_current,
-    detection_stamp,
+    detect_cloth,
+    detect_props,
+    detection_inputs_hash,
     resolve_anchors,
 )
 from ModelBuild import (
-    ClipPoses,
+    ClipSampler,
     ContactSheet,
-    ReferenceFrame,
+    ReferenceAlignment,
     Skeleton,
     SkeletonFit,
     SkinnedPreview,
@@ -48,11 +48,14 @@ from ModelBuild import (
     Studio,
     TextureBaker,
     WELD_DECIMALS,
+    body_regions,
     decimate,
     loop_vertex_indices,
     mesh_corners,
     mesh_positions,
     read_attribute,
+    read_image,
+    save_png,
     select_only,
     weld_ids,
     weld_labels,
@@ -70,7 +73,7 @@ def save_blend(path):
     bpy.ops.wm.save_as_mainfile(filepath=str(path))
 
 
-def components(first, second, count):
+def connected_component_labels(first, second, count):
     graph = coo_matrix((np.ones(len(first)), (first, second)), shape=(count, count))
     return connected_components(graph, directed=False)[1]
 
@@ -91,7 +94,7 @@ def segmented_prop_mask(prop, positions, edges, work, reach, settings):
         share = np.bincount(both[:, 0], weights=mask[both[:, 1]].astype(float), minlength=count) / np.maximum(degree, 1)
         mask = share >= 0.5
     inside = mask[edges[:, 0]] & mask[edges[:, 1]]
-    islands = components(edges[inside, 0], edges[inside, 1], count)
+    islands = connected_component_labels(edges[inside, 0], edges[inside, 1], count)
     mask &= (np.bincount(islands) >= prepare.propMinPiece)[islands]
     if not mask.any():
         raise ValueError(f"prop {prop['name']}: no sculpt vertex lies inside segmented parts {prop['segmentedParts']}")
@@ -103,20 +106,19 @@ def body_namer(settings, taken=None):
     return BodyNamer(axis, settings.length(settings.section("detection").sideDeadZone), taken)
 
 
-def high_pieces(work):
+def high_poly_islands(work):
     high = np.load(work / "hi.npz")
     positions = high["positions"].astype(np.float64)
     edges = high["edges"]
     count = len(positions)
-    return positions, components(edges[:, 0], edges[:, 1], count)
+    return positions, edges, connected_component_labels(edges[:, 0], edges[:, 1], count)
 
 
 def high_prop_labels(settings, work):
     reach = settings.length(settings.section("prepare").propPartReach)
-    positions, pieces = high_pieces(work)
-    edges = np.load(work / "hi.npz")["edges"]
+    positions, edges, pieces = high_poly_islands(work)
     labels = np.zeros(len(positions), np.int8)
-    for index, prop in enumerate(detected_bodies(work)["props"], start=1):
+    for index, prop in enumerate(read_detection(work)["props"], start=1):
         chosen = segmented_prop_mask(prop, positions, edges, work, reach, settings)
         labels[(labels == 0) & chosen] = index
         print(f"CHECK prop {prop['name']} vertices={int(chosen.sum())}")
@@ -131,11 +133,6 @@ def high_prop_labels(settings, work):
         grown = grow_prop_along_axis(positions, pieces, labels, index, settings)
         print(f"CHECK prop {index} grew {grown} vertices of touching pieces inside its axis cylinder")
     return positions, pieces, labels
-
-
-def axis_distance(points, centre, axis):
-    offset = points - centre
-    return np.linalg.norm(offset - np.outer(offset @ axis, axis), axis=1)
 
 
 def grow_prop_along_axis(positions, pieces, labels, index, settings):
@@ -177,7 +174,7 @@ def grow_prop_along_axis(positions, pieces, labels, index, settings):
 def absorb_small_garment_islands(node_side, links, smallest):
     count = len(node_side)
     same = node_side[links[:, 0]] == node_side[links[:, 1]]
-    component = components(links[same, 0], links[same, 1], count)
+    component = connected_component_labels(links[same, 0], links[same, 1], count)
     sizes = np.bincount(component)
     component_side = np.zeros(len(sizes), np.int64)
     component_side[component] = node_side
@@ -197,9 +194,19 @@ def absorb_small_garment_islands(node_side, links, smallest):
     return node_side, int(sizes[adopt].sum()), sizes[stranded]
 
 
+def unique_edges(edges):
+    edges = np.unique(np.sort(edges, axis=1), axis=0)
+    return edges[edges[:, 0] != edges[:, 1]]
+
+
+def coincident(points, others):
+    keys = {tuple(key) for key in np.round(others, WELD_DECIMALS)}
+    return np.array([tuple(key) in keys for key in np.round(points, WELD_DECIMALS)], bool)
+
+
 def garment_labels(settings, work, positions, pieces, prop_labels):
     prepare = settings.section("prepare")
-    garments = [body for body in detected_bodies(work)["physics"] if body.get("segmentedParts")]
+    garments = [body for body in read_detection(work)["physics"] if body.get("segmentedParts")]
     labels = np.zeros(len(positions), np.int64)
     if garments:
         reference = np.load(work / "reference.npz")
@@ -214,9 +221,8 @@ def garment_labels(settings, work, positions, pieces, prop_labels):
             )
             labels[(labels == 0) & (prop_labels == 0) & (share[pieces] > prepare.garmentPieceMajority)] = index
         edges = np.load(work / "hi.npz")["edges"]
-        welded = np.unique(np.round(positions, WELD_DECIMALS), axis=0, return_inverse=True)[1].ravel()
-        links = np.unique(np.sort(welded[edges], axis=1), axis=0)
-        links = links[links[:, 0] != links[:, 1]]
+        welded = weld_ids(positions, np.zeros(len(positions)))[0]
+        links = unique_edges(welded[edges])
         node_side = np.zeros(int(welded.max()) + 1, np.int64)
         node_side[welded] = np.where(prop_labels > 0, -1, labels)
         moved = -1
@@ -264,39 +270,42 @@ def face_pieces(corners, vertex_count, allowed=None):
     if allowed is not None:
         both = allowed[first] & allowed[second]
         first, second = first[both], second[both]
-    return components(first, second, face_count)
+    return connected_component_labels(first, second, face_count)
 
 
-def claimed_faces(centres, settings, work):
-    positions, _, labels = high_prop_labels(settings, work)
+def claimed_faces(centres, work, high_props):
+    positions, _, labels = high_props
     claimed = (labels > 0) | (np.load(work / "garment.npz")["labels"] > 0)
     return nearest_values(positions, centres, claimed)
 
 
-def lo_islands(work, faces):
+def low_poly_islands(work, faces):
     low_ids = np.load(work / "atlas.npz")["vertex_map"]
     corners = low_ids[faces]
     count = int(low_ids.max()) + 1
     links = face_edges(corners)
-    return components(links[:, 0], links[:, 1], count)[low_ids]
+    return connected_component_labels(links[:, 0], links[:, 1], count)[low_ids]
 
 
 def final_joints(config, work):
-    stored = json.loads((work / "joints.json").read_text())
+    stored = read_json(work / "joints.json")
     expected = config["joints"]["positions"] if config["joints"] else stored["measured"]
     if stored["final"] != expected:
         raise ValueError("joints.json differs from the manifest's confirmed joints: re-run from the joints stage")
     return {name: np.array(position, np.float64) for name, position in expected.items()}
 
 
-def open_label_masks(work, labels):
+def render_label_masks(settings, work, labels, name, decorate=None):
     bpy.ops.wm.open_mainfile(filepath=str(work / "lo.blend"))
     bpy.data.objects["hi"].hide_render = True
     colours = np.tile(np.array(PLAIN_COLOUR, np.float32), (len(labels), 1))
     colours[np.load(work / "skin.npy")] = SKIN_COLOUR
     for index in range(1, int(labels.max()) + 1):
         colours[labels == index] = MASK_COLOURS[(index - 1) % len(MASK_COLOURS)]
-    return bpy.data.objects["lo"], colours
+    if decorate is not None:
+        decorate(colours)
+    colour_vertices(bpy.data.objects["lo"].data, colours)
+    shoot_sheet(workbench_studio("VERTEX"), overview_shots(settings, ("front", "back", "side"), 2.0), 3, 640, work, name)
 
 
 def add_segment_tubes(name, segments, settings, colour):
@@ -321,8 +330,8 @@ def shoot_tile(studio, sheet, work, name, column, row, centre, scale, view):
     path.unlink()
 
 
-def shoot_sheet(studio, shots, columns, rows, tile, work, name):
-    sheet = ContactSheet(columns, rows, tile)
+def shoot_sheet(studio, shots, columns, tile, work, name):
+    sheet = ContactSheet(columns, 1, tile)
     for column, row, centre, scale, view in shots:
         shoot_tile(studio, sheet, work, name, column, row, centre, scale, view)
     sheet.save(work / "validation" / f"{name}.png")
@@ -356,7 +365,7 @@ def limb_reach(positions, segments, settings):
 
 
 def overview_shots(settings, views, scale):
-    centre = tuple(settings.proportions.vector([0.0, 0.0, 0.9]))
+    centre = tuple(settings.height_scale.vector([0.0, 0.0, 0.9]))
     return [(column, 0, centre, settings.length(scale), view) for column, view in enumerate(views)]
 
 
@@ -716,10 +725,11 @@ class PrepareStage(BuildStage):
         bpy.context.collection.objects.link(low)
         low.data.materials.clear()
         self.build_references(config, work, positions)
-        self.detect_props(config, work)
-        detached = self.detach_prop_faces(low.data, settings, work)
-        debris = self.decimate_without_debris(low, config["triangles"], settings, work)
-        clothed = self.detach_cloth_bodies(low, high, config, work)
+        self.detect_props(config, settings, work)
+        high_props = high_prop_labels(settings, work)
+        detached = self.detach_prop_faces(low.data, settings, work, high_props)
+        debris = self.decimate_without_debris(low, config["triangles"], settings, work, high_props)
+        clothed = self.detach_cloth_bodies(low, high, config, settings, work, high_props)
 
         np.savez(
             work / "lo.npz",
@@ -735,8 +745,8 @@ class PrepareStage(BuildStage):
         )
 
     def import_high(self, config):
-        self.reset_scene()
-        meshes = [obj for obj in self.import_gltf(Path(config["source"]).expanduser()) if obj.type == "MESH"]
+        reset_scene()
+        meshes = [obj for obj in import_model(Path(config["source"]).expanduser()) if obj.type == "MESH"]
         if not meshes:
             raise ValueError(f"{config['source']} contains no meshes")
         select_only(meshes[0], *meshes[1:])
@@ -758,7 +768,7 @@ class PrepareStage(BuildStage):
         positions[:, 2] -= positions[:, 2].min()
         for axis in (0, 1):
             positions[:, axis] -= (positions[:, axis].min() + positions[:, axis].max()) / 2
-        band_bottom, band_top = settings.proportions.lengths(prepare.torsoBand)
+        band_bottom, band_top = settings.height_scale.lengths(prepare.torsoBand)
         torso = positions[
             (positions[:, 2] > band_bottom)
             & (positions[:, 2] < band_top)
@@ -780,23 +790,23 @@ class PrepareStage(BuildStage):
         welded.to_mesh(high.data)
         welded.free()
 
-    def decimate_without_debris(self, low, triangles, settings, work):
+    def decimate_without_debris(self, low, triangles, settings, work, high_props):
         source_faces = len(low.data.polygons)
         ratio = triangles / source_faces
         pristine = low.data.copy()
         decimate(low, ratio)
-        debris = self.debris_faces(low.data, settings, work)
+        debris = self.debris_faces(low.data, settings, work, high_props)
         if debris.any():
             low.data = pristine
             decimate(low, ratio + int(debris.sum()) / source_faces)
-            debris = self.debris_faces(low.data, settings, work)
+            debris = self.debris_faces(low.data, settings, work, high_props)
             self.remove_faces(low.data, debris)
         else:
             bpy.data.meshes.remove(pristine)
         return debris
 
     @staticmethod
-    def debris_faces(mesh, settings, work):
+    def debris_faces(mesh, settings, work, high_props):
         prepare = settings.section("prepare")
         corners = mesh_corners(mesh)
         face_count = len(corners)
@@ -805,31 +815,29 @@ class PrepareStage(BuildStage):
 
         centres = mesh_positions(mesh)[corners].mean(axis=1)
         prop_share = (
-            np.bincount(piece, weights=claimed_faces(centres, settings, work), minlength=len(piece_faces)) / piece_faces
+            np.bincount(piece, weights=claimed_faces(centres, work, high_props), minlength=len(piece_faces)) / piece_faces
         )
 
         small = piece_faces[piece] < prepare.debrisFaceFraction * face_count
         return (small & (prop_share[piece] < prepare.debrisPropShare)) | (piece_faces[piece] < prepare.debrisTinyFaces)
 
     @staticmethod
-    def detect_props(config, work):
-        settings = ModelSettings.from_config(config)
+    def detect_props(config, settings, work):
         reference = np.load(work / "reference.npz")
-        props = PropDetector(settings, body_namer(settings)).detect(
-            config["props"], reference["part_points"].astype(np.float64), reference["part_ids"]
+        props = detect_props(
+            config["props"], reference["part_points"].astype(np.float64), reference["part_ids"], body_namer(settings)
         )
         dropped = []
         props, physics = apply_overrides(config["overrides"], props, [], dropped, final=False)
         write_detection(
             work,
-            {"stamp": detection_stamp(config), "props": props, "physics": physics, "candidates": [], "dropped": dropped},
+            {"stamp": detection_inputs_hash(config), "props": props, "physics": physics, "candidates": [], "dropped": dropped},
         )
         for prop in props:
             print(f"CHECK detected prop {prop['name']} parts={prop['segmentedParts']}")
 
     @staticmethod
-    def detach_cloth_bodies(low, high, config, work):
-        settings = ModelSettings.from_config(config)
+    def detach_cloth_bodies(low, high, config, settings, work, high_props):
         prepare = settings.section("prepare")
         thin_to = settings.length(prepare.thinTo)
         mesh = low.data
@@ -837,15 +845,14 @@ class PrepareStage(BuildStage):
         positions = mesh_positions(mesh)
         normals = read_attribute(mesh.vertex_normals, "vector", 3, np.float32).astype(np.float64)
         centres = positions[corners].mean(axis=1)
-        claimed = claimed_faces(centres, settings, work)
+        claimed = claimed_faces(centres, work, high_props)
         thin_face = (surface_thickness(high, positions, normals, settings) < thin_to)[corners].all(
             axis=1
         ) & ~claimed
         piece = face_pieces(corners, len(positions), thin_face)
-        detected = detected_bodies(work)
-        cloth, candidates = ClothDetector(
-            settings, body_namer(settings, {entry["name"] for entry in detected["props"] + detected["physics"]})
-        ).detect(centres, triangle_areas(positions, corners), thin_face, piece, claimed)
+        detected = read_detection(work)
+        namer = body_namer(settings, {entry["name"] for entry in detected["props"] + detected["physics"]})
+        cloth, candidates = detect_cloth(settings, namer, centres, triangle_areas(positions, corners), thin_face, piece, claimed)
         props, physics = apply_overrides(
             config["overrides"], detected["props"], detected["physics"] + cloth, detected["dropped"], final=True
         )
@@ -953,18 +960,8 @@ class PrepareStage(BuildStage):
         print(f"CHECK dropped {int(mask.sum())} faces of detached debris")
 
     @staticmethod
-    def reset_scene():
-        bpy.ops.wm.read_factory_settings(use_empty=True)
-
-    @staticmethod
-    def import_gltf(path):
-        before = set(bpy.data.objects)
-        bpy.ops.import_scene.gltf(filepath=str(path))
-        return [obj for obj in bpy.data.objects if obj not in before]
-
-    @staticmethod
     def import_reference(path):
-        objects = PrepareStage.import_gltf(path)
+        objects = import_model(path)
         clouds = []
         for obj in objects:
             if obj.type != "MESH" or obj.name.startswith("Icosphere"):
@@ -990,7 +987,7 @@ class PrepareStage(BuildStage):
         references = config["references"]
         rig_clouds, rig_bones = PrepareStage.import_reference(Path(references["riggedModel"]).expanduser())
         rig_points = np.concatenate([cloud for _, cloud in rig_clouds])
-        rig_frame = ReferenceFrame(rig_points, target, config["facingYawDegrees"], config["heightMetres"])
+        rig_frame = ReferenceAlignment(rig_points, target, config["facingYawDegrees"], config["heightMetres"])
         joints = {name: rig_frame.apply(rig_bones[name]) for name in references["jointsFromRiggedModel"]}
 
         part_clouds, _ = PrepareStage.import_reference(Path(references["segmentedModel"]).expanduser())
@@ -998,13 +995,11 @@ class PrepareStage(BuildStage):
         part_ids = np.concatenate(
             [np.full(len(cloud), int(name.rsplit("_", 1)[1].split(".")[0]), np.int16) for name, cloud in part_clouds]
         )
-        part_frame = ReferenceFrame(part_points, target, config["facingYawDegrees"], config["heightMetres"])
+        part_frame = ReferenceAlignment(part_points, target, config["facingYawDegrees"], config["heightMetres"])
         np.savez(
             work / "reference.npz", part_points=part_frame.apply(part_points).astype(np.float32), part_ids=part_ids
         )
-        (work / "reference.json").write_text(
-            json.dumps({name: rounded(position, 4) for name, position in joints.items()}, indent=2)
-        )
+        write_json(work / "reference.json", {name: rounded(position, 4) for name, position in joints.items()}, indent=2)
         print(
             f"CHECK reference rig scale={rig_frame.scale:.4f} residual mean {rig_frame.residual[0] * 1000:.1f} mm p99 "
             f"{rig_frame.residual[1] * 1000:.1f} mm; "
@@ -1013,10 +1008,10 @@ class PrepareStage(BuildStage):
         )
 
     @staticmethod
-    def detach_prop_faces(mesh, settings, work):
-        positions, pieces, labels = high_prop_labels(settings, work)
+    def detach_prop_faces(mesh, settings, work, high_props):
+        positions, pieces, labels = high_props
         garment_labels(settings, work, positions, pieces, labels)
-        if not detected_bodies(work)["props"]:
+        if not read_detection(work)["props"]:
             return 0
         return PrepareStage.split_faces_by_label(
             mesh,
@@ -1129,7 +1124,7 @@ class JointsStage(BuildStage):
         estimator = JointEstimator(
             positions, body, skin, Skeleton.load(work, settings.descriptor), config["heightMetres"], settings
         )
-        rigged = json.loads((work / "reference.json").read_text())
+        rigged = read_json(work / "reference.json")
         measured, hand_counts = estimator.estimate(
             {name: rigged[name] for name in config["references"]["jointsFromRiggedModel"]}
         )
@@ -1139,15 +1134,15 @@ class JointsStage(BuildStage):
                 f"cm from the estimate"
             )
             measured[name] = np.array(rigged[name])
-        if sorted(measured) != sorted(config["jointNames"]):
+        if sorted(measured) != sorted(settings.descriptor.measured_joints):
             raise ValueError(
                 f"measured joints {sorted(measured)} differ from the manifest's joint list "
-                f"{sorted(config['jointNames'])}"
+                f"{sorted(settings.descriptor.measured_joints)}"
             )
-        measured = {name: rounded(measured[name], 4) for name in config["jointNames"]}
+        measured = {name: rounded(measured[name], 4) for name in settings.descriptor.measured_joints}
         confirmed = config["joints"] and config["joints"]["positions"]
-        (work / "joints.json").write_text(
-            json.dumps({"measured": measured, "confirmed": confirmed, "final": confirmed or measured}, indent=2)
+        write_json(
+            work / "joints.json", {"measured": measured, "confirmed": confirmed, "final": confirmed or measured}, indent=2
         )
         np.save(work / "props.npy", props)
         np.save(work / "pieces.npy", pieces)
@@ -1156,7 +1151,7 @@ class JointsStage(BuildStage):
         resolved = resolve_anchors(
             settings.descriptor,
             {name: np.array(position) for name, position in (confirmed or measured).items()},
-            detected_bodies(work),
+            read_detection(work),
             reference["part_points"].astype(np.float64),
             reference["part_ids"],
         )
@@ -1179,12 +1174,8 @@ class JointsStage(BuildStage):
 
     @staticmethod
     def skin_mask(uvs, albedo_path, tuning):
-        image = bpy.data.images.load(str(albedo_path))
-        width, height = image.size
-        pixels = np.empty(width * height * 4, np.float32)
-        image.pixels.foreach_get(pixels)
-        pixels = pixels.reshape(height, width, 4)
-        bpy.data.images.remove(image)
+        pixels = read_image(albedo_path)
+        height, width = pixels.shape[:2]
         rows = np.clip((uvs[:, 1] * height).astype(int), 0, height - 1)
         columns = np.clip((uvs[:, 0] * width).astype(int), 0, width - 1)
         red, green, blue = pixels[rows, columns, :3].T
@@ -1193,11 +1184,11 @@ class JointsStage(BuildStage):
 
     @staticmethod
     def prop_labels(settings, work, positions, faces):
-        props = detected_bodies(work)["props"]
+        props = read_detection(work)["props"]
         high_positions, pieces, high_labels = high_prop_labels(settings, work)
         nearest = cKDTree(high_positions).query(positions)[1]
         nearest_labels = high_labels[nearest]
-        island = lo_islands(work, faces)
+        island = low_poly_islands(work, faces)
         labels = np.zeros(len(positions), np.int8)
         for index in np.unique(island):
             members = island == index
@@ -1218,22 +1209,8 @@ class CloseupsStage(BuildStage):
         bpy.ops.wm.open_mainfile(filepath=str(work / "lo.blend"))
         high, low = bpy.data.objects["hi"], bpy.data.objects["lo"]
         settings = ModelSettings.from_config(config)
-        descriptor, length, vector = settings.descriptor, settings.length, settings.proportions.vector
         joints = final_joints(config, work)
-        head = joints[descriptor.head] + vector([0.0, 0.0, 0.06])
-        ankles = (joints[descriptor.feet("left")[0]] + joints[descriptor.feet("right")[0]]) / 2 + vector(
-            [0.0, 0.0, 0.02]
-        )
-        left_hand, right_hand = (descriptor.arm(side)[2] for side in descriptor.SIDES)
-        regions = [
-            (head, length(0.36), "front"),
-            (head, length(0.36), "side"),
-            (joints[left_hand] - vector([0.0, 0.0, 0.06]), length(0.34), "front"),
-            (joints[right_hand] - vector([0.0, 0.0, 0.06]), length(0.34), "front"),
-            (vector([0.0, 0.10, 1.30]), length(0.95), "back"),
-            (vector([0.0, -0.05, 1.30]), length(0.55), "front"),
-            (ankles, length(0.9), "front"),
-        ]
+        regions = list(body_regions(settings.descriptor, settings.length, lambda name: Vector(joints[name])).values())
         studio = Studio()
         sheet = ContactSheet(len(regions), 2)
         for row, visible in enumerate((high, low)):
@@ -1249,12 +1226,7 @@ class MasksStage(BuildStage):
     name = "masks"
 
     def run(self, config, work):
-        low, colours = open_label_masks(work, np.load(work / "props.npy"))
-        colour_vertices(low.data, colours)
-        studio = workbench_studio("VERTEX")
-        views = ("front", "back", "side")
-        shots = overview_shots(ModelSettings.from_config(config), views, 2.0)
-        shoot_sheet(studio, shots, len(views), 1, 640, work, "masks")
+        render_label_masks(ModelSettings.from_config(config), work, np.load(work / "props.npy"), "masks")
         print(
             "STAGE masks validation/masks.png (orange skin, red/green/blue/yellow props in detection order (highest "
             "first))"
@@ -1277,7 +1249,7 @@ class PhysicsStage(BuildStage):
             "blend": np.zeros(count),
         }
         bodies = []
-        for index, body in enumerate(detected_bodies(work)["physics"], start=1):
+        for index, body in enumerate(read_detection(work)["physics"], start=1):
             mask = self.body_mask(body, mesh, skinning["labels"], settings)
             skinning["labels"][mask] = index
             build = self.sheet_lattice if body.get("clothSeed") else self.garment_lattice
@@ -1292,7 +1264,7 @@ class PhysicsStage(BuildStage):
                 f"longest={max(record['geodesicDistance']):.3f}m"
             )
         colliders = self.measure_colliders(mesh, skinning["labels"], settings)
-        self.clear_lattices(bodies, colliders, settings.length(settings.section("physics").colliderClearance))
+        self.push_lattices_out_of_colliders(bodies, colliders, settings.length(settings.section("physics").colliderClearance))
         PhysicsWork.save(work, bodies, colliders, skinning, geometry)
         self.render_physics_masks(settings, work, skinning["labels"], bodies, geometry["mantle"])
         radii = [collider["radius"] for collider in colliders]
@@ -1309,7 +1281,7 @@ class PhysicsStage(BuildStage):
         positions = split["positions"]
         joints = final_joints(config, work)
         garment = np.load(work / "garment.npz")
-        garment_low = nearest_values(high_pieces(work)[0], positions, garment["labels"])
+        garment_low = nearest_values(high_poly_islands(work)[0], positions, garment["labels"])
         props = np.load(work / "props.npy")
         chest, neck = joints[descriptor.chest], joints[descriptor.neck]
         return {
@@ -1319,7 +1291,7 @@ class PhysicsStage(BuildStage):
             "props": props,
             "thickness": np.load(work / "thick.npy"),
             "joints": joints,
-            "island": lo_islands(work, split["faces"]),
+            "island": low_poly_islands(work, split["faces"]),
             "garment_low": garment_low,
             "garment_names": [str(name) for name in garment["names"]],
             "garment": (garment_low > 0) & (props == 0),
@@ -1354,18 +1326,17 @@ class PhysicsStage(BuildStage):
         points = mesh["positions"][mask]
         grid = lattice.build_sheet(points, mesh["normals"][mask], columns, rows, mesh["centre"], settings)
         nodes, weights, blend = lattice.sheet_weights(grid, columns, rows, settings)
-        return cls.lattice_record(body, columns, rows, grid, 0, False), nodes, weights, blend
+        return cls.lattice_record(body, columns, rows, grid, 0, False, settings), nodes, weights, blend
 
     @classmethod
     def garment_lattice(cls, body, mesh, geometry, mask, settings):
         physics = settings.section("physics")
         positions = mesh["positions"]
         fade = settings.length(physics.garmentFadeDistance)
-        along = np.clip(geometry["sheet_distance"][mask] / fade, 0.0, 1.0)
-        drop = np.clip((mesh["top"] - positions[mask, 2]) / fade, 0.0, 1.0)
-        blend = along * along * (3.0 - 2.0 * along) * drop * drop * (3.0 - 2.0 * drop)
+        along = smoothstep(0.0, fade, geometry["sheet_distance"][mask])
+        blend = along * smoothstep(0.0, fade, mesh["top"] - positions[mask, 2])
         driven = np.zeros(len(positions), bool)
-        driven[mask] = smooth_unit(along) >= physics.latticeMinBlend
+        driven[mask] = along >= physics.latticeMinBlend
         below = driven & (positions[:, 2] < mesh["top"])
         if below.sum() < physics.minBodyVertices:
             raise ValueError(
@@ -1378,11 +1349,11 @@ class PhysicsStage(BuildStage):
         nodes, weights, column_position = lattice.wrapped_sheet_weights(grid, positions[mask])
         outside = (column_position < -0.5) | (column_position > grid["columns"] - 0.5)
         uncovered = int((outside & (blend >= physics.uncoveredBlend)).sum())
-        record = cls.lattice_record(body, grid["columns"], grid["rows"], grid, uncovered, True)
+        record = cls.lattice_record(body, grid["columns"], grid["rows"], grid, uncovered, True, settings)
         return record, nodes, weights, blend
 
     @classmethod
-    def lattice_record(cls, body, columns, rows, grid, uncovered, wrapped):
+    def lattice_record(cls, body, columns, rows, grid, uncovered, wrapped, settings):
         record = {
             "name": body["name"],
             "kind": "sheet",
@@ -1391,7 +1362,7 @@ class PhysicsStage(BuildStage):
             "columns": columns,
             "rows": rows,
             "nodeBones": [
-                lattice.lattice_bone_name(body["name"], column, row) for row in range(rows) for column in range(columns)
+                lattice.lattice_bone_name(settings.descriptor.physics_bone_prefix, body["name"], column, row) for row in range(rows) for column in range(columns)
             ],
             "nodeNormals": [rounded(row, lattice.NODE_DECIMALS) for row in grid["normals"]],
             "uncovered": uncovered,
@@ -1409,13 +1380,13 @@ class PhysicsStage(BuildStage):
         return {"nodePositions": [rounded(row, lattice.NODE_DECIMALS) for row in nodes], **derived}
 
     @classmethod
-    def clear_lattices(cls, bodies, colliders, clearance):
+    def push_lattices_out_of_colliders(cls, bodies, colliders, clearance):
         shells = [
             {"start": np.asarray(c["start"]), "end": np.asarray(c["end"]), "radius": c["radius"]} for c in colliders
         ]
         for record in bodies:
             nodes = np.asarray(record["nodePositions"])
-            moved, count, largest = lattice.clear_of_colliders(
+            moved, count, largest = lattice.push_out_of_colliders(
                 nodes, np.asarray(record["nodeNormals"]), np.asarray(record["pinned"]), shells, clearance
             )
             record.update(cls.node_values(record["name"], moved, record["columns"], record["rows"]))
@@ -1520,7 +1491,7 @@ class PhysicsStage(BuildStage):
         lengths = np.linalg.norm(
             topology["node_positions"][keys[inside, 0]] - topology["node_positions"][keys[inside, 1]], axis=1
         )
-        distance = multi_source_distance(keys[inside], lengths, count, np.flatnonzero(source_mask))[0]
+        distance = graph_distance_to_sources(keys[inside], lengths, count, np.flatnonzero(source_mask))[0]
         distance[~node_garment] = 0.0
         return distance
 
@@ -1531,23 +1502,20 @@ class PhysicsStage(BuildStage):
         body_nodes = np.unique(corners[topology["body_face"]].ravel())
         garment_only = np.setdiff1d(garment_nodes, body_nodes)
         body_only = np.setdiff1d(body_nodes, garment_nodes)
-        body_keys = {tuple(key) for key in np.round(topology["node_positions"][body_only], WELD_DECIMALS)}
-        return sum(tuple(key) in body_keys for key in np.round(topology["node_positions"][garment_only], WELD_DECIMALS))
+        return int(coincident(topology["node_positions"][garment_only], topology["node_positions"][body_only]).sum())
 
     @staticmethod
     def render_physics_masks(settings, work, labels, bodies, mantle):
-        low, colours = open_label_masks(work, labels)
-        colours[mantle] = MANTLE_COLOUR
-        colour_vertices(low.data, colours)
-        segments = []
-        for body in bodies:
-            edges = lattice.lattice_edges(body["columns"], body["rows"], diagonals=False)
-            nodes = body["nodePositions"]
-            segments += [(nodes[start], nodes[end]) for start, end in edges[np.argsort(edges[:, 0], kind="stable")]]
-        add_segment_tubes("qa_lattice", segments, settings, (0.0, 0.0, 0.0, 1.0))
-        studio = workbench_studio("VERTEX")
-        shots = overview_shots(settings, ("front", "back", "side"), 2.0)
-        shoot_sheet(studio, shots, 3, 1, 640, work, "physics_masks")
+        def decorate(colours):
+            colours[mantle] = MANTLE_COLOUR
+            segments = []
+            for body in bodies:
+                edges = lattice.lattice_edges(body["columns"], body["rows"], diagonals=False)
+                nodes = body["nodePositions"]
+                segments += [(nodes[start], nodes[end]) for start, end in edges[np.argsort(edges[:, 0], kind="stable")]]
+            add_segment_tubes("qa_lattice", segments, settings, (0.0, 0.0, 0.0, 1.0))
+
+        render_label_masks(settings, work, labels, "physics_masks", decorate)
 
 
 class RigStage(BuildStage):
@@ -1570,7 +1538,7 @@ class RigStage(BuildStage):
         bpy.ops.wm.open_mainfile(filepath=str(work / "lo.blend"))
         bpy.data.objects.remove(bpy.data.objects["hi"])
         low = bpy.data.objects["lo"]
-        armature = self.heat_armature(
+        armature = self.build_weighting_armature(
             heads,
             tails,
             [
@@ -1580,7 +1548,7 @@ class RigStage(BuildStage):
             ],
         )
         positions = mesh_positions(low.data)
-        weights = self.heat_weights(low, armature, bones, positions, settings)
+        weights = self.voxel_heat_weights(low, armature, bones, positions, settings)
         weights = self.merge_helper_bones(weights, skeleton, bones)
         weights = self.assign_unweighted(weights, positions, segments, bones, owners)
         props = np.load(work / "props.npy")
@@ -1594,7 +1562,7 @@ class RigStage(BuildStage):
             bones,
             props,
             np.load(work / "pieces.npy"),
-            detected_bodies(work)["props"],
+            read_detection(work)["props"],
             settings,
         )
         weights /= np.maximum(weights.sum(1, keepdims=True), 1e-9)
@@ -1633,7 +1601,7 @@ class RigStage(BuildStage):
         )
 
     @staticmethod
-    def heat_armature(heads, tails, names):
+    def build_weighting_armature(heads, tails, names):
         data = bpy.data.armatures.new("fit")
         armature = bpy.data.objects.new("fit", data)
         bpy.context.collection.objects.link(armature)
@@ -1663,7 +1631,7 @@ class RigStage(BuildStage):
         mesh = obj.data
         edges = read_attribute(mesh.edges, "vertices", 2, np.int32)
         count = len(mesh.vertices)
-        pieces = components(edges[:, 0], edges[:, 1], count)
+        pieces = connected_component_labels(edges[:, 0], edges[:, 1], count)
         largest = np.argmax(np.bincount(pieces))
         detached = set(np.nonzero(pieces != largest)[0].tolist())
         if not detached:
@@ -1677,7 +1645,7 @@ class RigStage(BuildStage):
         print(f"CHECK heat proxy kept its main piece, dropped {len(detached)} vertices in detached pieces")
 
     @staticmethod
-    def heat_weights(low, armature, bones, positions, settings):
+    def voxel_heat_weights(low, armature, bones, positions, settings):
         rig = settings.section("rig")
         proxy = low.copy()
         proxy.data = low.data.copy()
@@ -1759,8 +1727,8 @@ class RigStage(BuildStage):
     def head_zone(positions, heads, settings):
         rig = settings.section("rig")
         head = heads[settings.descriptor.head]
-        below = settings.proportions.lengths(rig.headZoneBelow)
-        radius = settings.proportions.lengths(rig.headZoneRadius)
+        below = settings.height_scale.lengths(rig.headZoneBelow)
+        radius = settings.height_scale.lengths(rig.headZoneRadius)
         radial = np.linalg.norm(positions[:, :2] - head[:2], axis=1)
         rising = smoothstep(head[2] - below[0], head[2] - below[1], positions[:, 2])
         return rising * (1.0 - smoothstep(radius[0], radius[1], radial))
@@ -1773,13 +1741,13 @@ class RigStage(BuildStage):
         elbow = heads[elbow_bone]
         axis = normalised(wrist - elbow)
         along = (positions - wrist) @ axis
-        radial = np.linalg.norm(positions - wrist - np.outer(along, axis), axis=1)
+        radial = axis_distance(positions, wrist, axis)
         finger_length = float((heads[descriptor.hand_tip(side)] - wrist) @ axis) + settings.length(
             rig.fingersPastKnuckles
         )
         return (
-            smoothstep(*settings.proportions.lengths(rig.handZoneAlong), along)
-            * (1.0 - smoothstep(*settings.proportions.lengths(rig.handZoneRadius), radial))
+            smoothstep(*settings.height_scale.lengths(rig.handZoneAlong), along)
+            * (1.0 - smoothstep(*settings.height_scale.lengths(rig.handZoneRadius), radial))
             * (along < finger_length)
         )
 
@@ -1858,7 +1826,7 @@ class RigStage(BuildStage):
         orphaned = loose & (weights.sum(1) < 1e-6)
         weights[orphaned] = RigStage.torso_hang_weights(positions[orphaned], bones, heads, settings)
         core = np.min([segment_distance(positions, *segments[name]) for name in descriptor.core_bones], axis=0)
-        cloth_core_from, cloth_core_to = settings.proportions.lengths(rig.clothCore)
+        cloth_core_from, cloth_core_to = settings.height_scale.lengths(rig.clothCore)
         cloth = (
             (1.0 - smoothstep(settings.length(rig.thinFrom), thin_to, thickness))
             * smoothstep(cloth_core_from, cloth_core_to, core)
@@ -1925,11 +1893,11 @@ class BonesStage(BuildStage):
         bpy.context.scene.display.shading.show_xray = True
         bpy.context.scene.display.shading.xray_alpha = 0.6
         shots = overview_shots(settings, ("front", "side"), 2.1)
-        shoot_sheet(studio, shots, 2, 1, 700, work, "bones")
+        shoot_sheet(studio, shots, 2, 700, work, "bones")
         print("STAGE bones validation/bones.png (fitted skeleton in red)")
 
 
-class PoseAccumulator:
+class PoseDeformationStats:
     def __init__(self, inputs, settings, regions, groups, garment, pose_count):
         tuning = settings.section("weights")
         positions, rest_edges = inputs["node_positions"], inputs["edges"]
@@ -1999,7 +1967,7 @@ class WeightsStage(BuildStage):
         assert_detection_current(config, work)
         settings = ModelSettings.from_config(config)
         inputs = self.load_inputs(work, settings)
-        physics = PhysicsWork(work) if detected_bodies(work)["physics"] else None
+        physics = PhysicsWork(work) if read_detection(work)["physics"] else None
         garment = self.garment_nodes(physics, inputs, settings) if physics else None
         rigid = self.rigid_weights(work, inputs, garment, settings)
         final = self.physics_weights(work, physics, inputs, rigid, settings)
@@ -2012,7 +1980,7 @@ class WeightsStage(BuildStage):
         )
         evaluation = self.evaluate_poses(work, inputs, rigid, final, garment, settings)
         measurements = self.build_measurements(inputs, rigid, final, evaluation, physics, garment)
-        (work / "validation" / "measurements.json").write_text(json.dumps(measurements, indent=2))
+        write_json(work / "validation" / "measurements.json", measurements, indent=2)
         print(
             f"STAGE weights nodes={inputs['count']} influences={settings.section('weights').maxInfluences} "
             f"poses={measurements['poses']} limbs={rigid['ownership']} edges>3x={measurements['edges']['over3']} "
@@ -2055,7 +2023,7 @@ class WeightsStage(BuildStage):
             "protect": np.bincount(welded, weights=raw["protect"], minlength=count)
             / np.bincount(welded, minlength=count),
             "limb_node": np.bincount(welded, weights=(raw["limb_of"] > 0).astype(float), minlength=count) > 0,
-            "edges": WeightsStage.unique_edges(welded[split["faces"]]),
+            "edges": unique_edges(face_edges(welded[split["faces"]])),
         }
 
     def rigid_weights(self, work, inputs, garment, settings):
@@ -2112,9 +2080,9 @@ class WeightsStage(BuildStage):
 
     def evaluate_poses(self, work, inputs, rigid, final, garment, settings):
         regions = self.stretch_regions(inputs, rigid, settings)
-        groups = self.rigid_groups(inputs["raw"], detected_bodies(work)["props"], inputs["first"], settings)
-        poses = list(ClipPoses(inputs["skeleton"], inputs["rig"]["rest_translations"]).all())
-        accumulator = PoseAccumulator(inputs, settings, regions, groups, garment, len(poses))
+        groups = self.rigid_groups(inputs["raw"], read_detection(work)["props"], inputs["first"], settings)
+        poses = list(ClipSampler(inputs["skeleton"], inputs["rig"]["rest_translations"]).sample_all())
+        accumulator = PoseDeformationStats(inputs, settings, regions, groups, garment, len(poses))
         bind_inverse = np.linalg.inv(inputs["rig"]["bind_world"])
         for _, world in poses:
             pose_skin = world @ bind_inverse
@@ -2202,12 +2170,6 @@ class WeightsStage(BuildStage):
             "bandStretch": round(max(evaluation.band_lattice), 2),
             "bandStretchRigid": round(max(evaluation.band_rigid), 2),
         }
-
-    @staticmethod
-    def unique_edges(faces):
-        edges = np.sort(face_edges(faces), axis=1)
-        edges = np.unique(edges, axis=0)
-        return edges[edges[:, 0] != edges[:, 1]]
 
     @staticmethod
     def smooth_weights(start, edges, movable, count, iterations):
@@ -2390,22 +2352,21 @@ class WeightsStage(BuildStage):
         lattice_bones = np.array([bones.index(name) for name in physics.definition["latticeBones"]])
         labels = weights["labels"][first]
         seeded = [
-            index for index, body in enumerate(detected_bodies(work)["physics"], start=1) if body.get("clothSeed")
+            index for index, body in enumerate(read_detection(work)["physics"], start=1) if body.get("clothSeed")
         ]
         cloth = labels > 0
         seam_cloth = np.isin(labels, seeded)
         body = ~cloth & (np.load(work / "props.npy")[first] == 0)
-        cloth_keys = {tuple(key) for key in np.round(node_positions[seam_cloth], WELD_DECIMALS)}
-        seam = np.flatnonzero(body)[[tuple(key) in cloth_keys for key in np.round(node_positions[body], WELD_DECIMALS)]]
+        seam = np.flatnonzero(body)[coincident(node_positions[body], node_positions[seam_cloth])]
         seam_source = np.full(len(labels), -1)
         seam_twin = np.zeros(len(labels), bool)
         seam_fade = np.ones(len(labels))
         if len(seam):
             distance, nearest = cKDTree(node_positions[seam]).query(node_positions[seam_cloth])
             seam_twin[seam_cloth] = distance < 10.0**-WELD_DECIMALS
-            fade = np.clip(distance / settings.length(settings.section("physics").seamFadeDistance), 0.0, 1.0)
-            seam_fade[seam_cloth] = smooth_unit(fade)
-            seam_source[seam_cloth] = np.where(fade < 1.0, seam[nearest], -1)
+            reach = settings.length(settings.section("physics").seamFadeDistance)
+            seam_fade[seam_cloth] = smoothstep(0.0, reach, distance)
+            seam_source[seam_cloth] = np.where(distance < reach, seam[nearest], -1)
         print(
             f"CHECK physics seam nodes={len(seam)} cloth nodes blended toward the body={int((seam_source >= 0).sum())}"
         )
@@ -2458,9 +2419,7 @@ class ExportStage(BuildStage):
         colour = brightest - (brightest - colour) * grade["saturationScale"]
         pixels[:, :3] = np.clip(colour, 0.0, 1.0) ** grade["valueExponent"]
         image.pixels.foreach_set(pixels.ravel())
-        image.filepath_raw = str(target_path)
-        image.file_format = "PNG"
-        image.save()
+        save_png(image, target_path)
         bpy.data.images.remove(image)
 
     def run(self, config, work):
@@ -2471,7 +2430,7 @@ class ExportStage(BuildStage):
         arrays = work / "arrays"
         meta = self.write_arrays(arrays, skeleton, final, rig, split)
         self.write_graded_albedo(config["albedoGrade"], work / "albedo.png", work / "baseColor.png")
-        if detected_bodies(work)["physics"]:
+        if read_detection(work)["physics"]:
             self.write_physics(work, arrays, skeleton, rig)
         print(
             f"STAGE export vertices={meta['vertices']} triangles={meta['triangles']} joints={len(skeleton.skin)} "
@@ -2518,13 +2477,13 @@ class ExportStage(BuildStage):
         rest = {
             name: [float(value) for value in rig["rest_translations"][skeleton.index[name]]] for name in skeleton.skin
         }
-        (arrays / "rest.json").write_text(json.dumps(rest))
+        write_json(arrays / "rest.json", rest)
         meta = {
             "vertices": int(len(split["positions"])),
             "triangles": int(len(split["faces"])),
             "jointNames": skeleton.skin,
         }
-        (arrays / "meta.json").write_text(json.dumps(meta))
+        write_json(arrays / "meta.json", meta)
         return meta
 
     @staticmethod
@@ -2566,8 +2525,8 @@ class ExportStage(BuildStage):
                     "radius": collider["radius"],
                 }
             )
-        (arrays / "physics.json").write_text(
-            json.dumps({"version": 3, "referenceBone": skeleton.descriptor.pelvis, "bodies": bodies, "colliders": colliders})
+        write_json(
+            arrays / "physics.json", {"version": 3, "referenceBone": skeleton.descriptor.pelvis, "bodies": bodies, "colliders": colliders}
         )
 
 
@@ -2577,7 +2536,7 @@ class AnimStage(BuildStage):
     def run(self, config, work):
         settings = ModelSettings.from_config(config)
         descriptor = settings.descriptor
-        preview = SkinnedPreview(work, config)
+        preview = SkinnedPreview(work, settings)
         studio = Studio()
         seam_gap = 0.0
         standard_shots = descriptor.preview_clips("standard")
@@ -2586,7 +2545,7 @@ class AnimStage(BuildStage):
 
         preview.apply(preview.rest, preview.rest_normals)
         shots = overview_shots(settings, ("front", "back", "side"), 2.0)
-        shoot_sheet(studio, shots, 3, 1, 480, work, "rest")
+        shoot_sheet(studio, shots, 3, 480, work, "rest")
 
         grid = ContactSheet(len(standard_shots), len(regions))
         for column, (clip, fraction) in enumerate(standard_shots):
@@ -2607,9 +2566,9 @@ class AnimStage(BuildStage):
         extremes.save(work / "validation" / "extremes.png")
 
         measurements_path = work / "validation" / "measurements.json"
-        measurements = json.loads(measurements_path.read_text())
+        measurements = read_json(measurements_path)
         measurements["seamGapMm"] = round(seam_gap * 1000, 4)
-        measurements_path.write_text(json.dumps(measurements, indent=2))
+        write_json(measurements_path, measurements, indent=2)
         print(
             f"STAGE anim validation/rest.png validation/anim.png validation/extremes.png "
             f"seamGap={seam_gap * 1000:.4f}mm"
@@ -2640,4 +2599,4 @@ def run_stage(kind, stage_name, recipe_file, work_root):
     stages = {stage.name: stage for stage in STAGES_BY_KIND[kind]}
     if stage_name not in stages:
         raise ValueError(f"no {kind} stage {stage_name} (stages: {', '.join(stages)})")
-    stages[stage_name].run(json.loads(Path(recipe_file).read_text()), Path(work_root))
+    stages[stage_name].run(read_json(recipe_file), Path(work_root))

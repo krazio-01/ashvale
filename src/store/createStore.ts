@@ -1,4 +1,10 @@
-import type { IStoreApi, SetState, StateCreator, StoreListener } from "@/types/store";
+import type {
+    IPersistOptions,
+    IStoreApi,
+    SetState,
+    StateCreator,
+    StoreListener,
+} from "@/types/store";
 
 export function createStore<State extends object>(
     initializer: StateCreator<State>
@@ -30,4 +36,38 @@ export function createStore<State extends object>(
             };
         },
     };
+}
+
+export function persistInStorage<State extends object, Saved extends object>(
+    storeApi: IStoreApi<State>,
+    { storageKey, defaults, isAllowed, select, restore }: IPersistOptions<State, Saved>
+): void {
+    if (typeof window === "undefined") return;
+
+    const loadSaved = (): Saved => {
+        const restored = { ...defaults };
+        try {
+            const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? "null");
+            if (!saved || typeof saved !== "object") return restored;
+
+            for (const key of Object.keys(defaults) as (keyof Saved)[]) {
+                const candidate = saved[key];
+                if (typeof candidate !== typeof defaults[key] || !isAllowed(key, candidate))
+                    continue;
+                restored[key] = candidate;
+            }
+        } catch {}
+        return restored;
+    };
+
+    const save = (state: State, previousState: State): void => {
+        const saved = select(state);
+        if (saved === select(previousState)) return;
+        try {
+            window.localStorage.setItem(storageKey, JSON.stringify(saved));
+        } catch {}
+    };
+
+    storeApi.setState((state) => restore(state, loadSaved()));
+    storeApi.subscribe(save);
 }

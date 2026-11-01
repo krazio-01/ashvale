@@ -2,22 +2,6 @@ import type { CharacterRole } from "./AssetManifest";
 
 export const REFERENCE_HEIGHT_METRES = 1.78;
 
-export type DeepPartial<T> = {
-    [Key in keyof T]?: T[Key] extends readonly unknown[]
-        ? T[Key]
-        : T[Key] extends object
-          ? DeepPartial<T[Key]>
-          : T[Key];
-};
-
-type Widened<T> = T extends number
-    ? number
-    : T extends readonly unknown[]
-      ? { readonly [Key in keyof T]: Widened<T[Key]> }
-      : { [Key in keyof T]: Widened<T[Key]> };
-
-export type IPipelineTuning = Widened<typeof BASE_TUNING>;
-
 const BASE_TUNING = {
     prepare: {
         torsoBand: [0.95, 1.25],
@@ -42,7 +26,6 @@ const BASE_TUNING = {
         clothSeedReach: 0.03,
     },
     unwrap: { padding: 6, iterations: 2 },
-    weapons: { triangles: 15000 },
     material: { roughness: 0.85, normalScale: 0.3 },
     bake: {
         samples: 8,
@@ -159,7 +142,6 @@ const BASE_TUNING = {
         garmentLiftReach: 0.02,
         liftSupportExclusion: 0.005,
         minLiftSamples: 10,
-        latticeStretchRatio: 1.1,
         drivenBlend: 0.001,
     },
     preview: { boneTubeRadius: 0.007 },
@@ -178,7 +160,7 @@ const ROLE_TUNING: Record<CharacterRole, DeepPartial<IPipelineTuning>> = {
     boss: {},
 };
 
-const SHARE_PATHS = [
+const UNIT_RANGE_TUNING_PATHS = [
     "prepare.propGrowShare",
     "prepare.propPieceMajority",
     "prepare.garmentPieceMajority",
@@ -203,55 +185,11 @@ const SHARE_PATHS = [
     "physics.colliderShrink",
 ] as const;
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null && !Array.isArray(value);
-
-const mergeDeep = <T>(base: T, overrides: DeepPartial<T> | undefined): T => {
-    if (!overrides) return base;
-    const merged: Record<string, unknown> = { ...(base as Record<string, unknown>) };
-    for (const [key, value] of Object.entries(overrides)) {
-        const current = merged[key];
-        merged[key] =
-            isPlainObject(value) && isPlainObject(current)
-                ? mergeDeep(current, value as never)
-                : value;
-    }
-    return merged as T;
-};
-
-const numbersIn = (value: unknown, path: string): [string, number][] => {
-    if (typeof value === "number") return [[path, value]];
-    if (Array.isArray(value))
-        return value.flatMap((item, index) => numbersIn(item, `${path}[${index}]`));
-    if (isPlainObject(value))
-        return Object.entries(value).flatMap(([key, item]) =>
-            numbersIn(item, path ? `${path}.${key}` : key)
-        );
-    return [];
-};
-
-export const resolveTuning = (
-    role: CharacterRole,
-    overrides: DeepPartial<IPipelineTuning> | undefined
-): IPipelineTuning =>
-    mergeDeep(mergeDeep<IPipelineTuning>(BASE_TUNING, ROLE_TUNING[role]), overrides);
-
 const SECTOR_PERCENTILE_PATHS = Object.keys(BASE_TUNING.physics.colliderSectorPercentile).map(
     (group) => `physics.colliderSectorPercentile.${group}`
 );
 
-interface ITuningRule {
-    paths: readonly string[];
-    isValid: (value: number) => boolean;
-    requirement: (value: number) => string;
-}
-
 const TUNING_RULES: readonly ITuningRule[] = [
-    {
-        paths: ["weapons.triangles"],
-        isValid: (value) => Number.isInteger(value) && value > 0,
-        requirement: () => "must be a whole number above 0",
-    },
     {
         paths: [
             "prepare.debrisTinyFaces",
@@ -292,7 +230,6 @@ const TUNING_RULES: readonly ITuningRule[] = [
             "physics.minWrapFacing",
             "physics.uncoveredBlend",
             ...SECTOR_PERCENTILE_PATHS,
-            "weights.latticeStretchRatio",
             "weights.drivenBlend",
         ],
         isValid: (value) => value > 0,
@@ -309,11 +246,66 @@ const TUNING_RULES: readonly ITuningRule[] = [
         requirement: () => "must be at most 100",
     },
     {
-        paths: SHARE_PATHS,
+        paths: UNIT_RANGE_TUNING_PATHS,
         isValid: (value) => value >= 0 && value <= 1,
         requirement: (value) => `${value} must be between 0 and 1`,
     },
 ];
+
+export type DeepPartial<T> = {
+    [Key in keyof T]?: T[Key] extends readonly unknown[]
+        ? T[Key]
+        : T[Key] extends object
+          ? DeepPartial<T[Key]>
+          : T[Key];
+};
+
+type Widened<T> = T extends number
+    ? number
+    : T extends readonly unknown[]
+      ? { readonly [Key in keyof T]: Widened<T[Key]> }
+      : { [Key in keyof T]: Widened<T[Key]> };
+
+export type IPipelineTuning = Widened<typeof BASE_TUNING>;
+
+interface ITuningRule {
+    paths: readonly string[];
+    isValid: (value: number) => boolean;
+    requirement: (value: number) => string;
+}
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+
+const mergeDeep = <T>(base: T, overrides: DeepPartial<T> | undefined): T => {
+    if (!overrides) return base;
+    const merged: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+    for (const [key, value] of Object.entries(overrides)) {
+        const current = merged[key];
+        merged[key] =
+            isPlainObject(value) && isPlainObject(current)
+                ? mergeDeep(current, value as never)
+                : value;
+    }
+    return merged as T;
+};
+
+const numbersIn = (value: unknown, path: string): [string, number][] => {
+    if (typeof value === "number") return [[path, value]];
+    if (Array.isArray(value))
+        return value.flatMap((item, index) => numbersIn(item, `${path}[${index}]`));
+    if (isPlainObject(value))
+        return Object.entries(value).flatMap(([key, item]) =>
+            numbersIn(item, path ? `${path}.${key}` : key)
+        );
+    return [];
+};
+
+export const resolveTuning = (
+    role: CharacterRole,
+    overrides: DeepPartial<IPipelineTuning> | undefined
+): IPipelineTuning =>
+    mergeDeep(mergeDeep<IPipelineTuning>(BASE_TUNING, ROLE_TUNING[role]), overrides);
 
 const valueAt = (tuning: IPipelineTuning, path: string): number =>
     path

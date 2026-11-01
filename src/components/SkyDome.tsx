@@ -2,9 +2,9 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { BackSide, Color, Mesh, ShaderMaterial } from "three";
-import { sunDirectionOf } from "@/themes/ThemeManifests";
-import type { IThemeEnvironment } from "@/types/theme";
-import { ATMOSPHERE } from "@/constants/rendering";
+import { sunDirectionFromSky } from "@/themes/Themes";
+import type { IThemeEnvironment } from "@/types/world";
+import { ATMOSPHERE } from "@/constants/world";
 
 const VERTEX_SHADER = `
     varying vec3 vWorldPosition;
@@ -72,10 +72,10 @@ const SkyDome = ({ environment }: { environment: IThemeEnvironment }) => {
                 zenithColor: { value: new Color(sky.zenith) },
                 middleColor: { value: new Color(sky.middle) },
                 horizonColor: { value: new Color(sky.horizon) },
-                abyssColor: { value: new Color(sky.abyss) },
+                abyssColor: { value: new Color(sky.belowHorizonColor) },
                 glowColor: { value: new Color(sky.glow) },
                 sunColor: { value: new Color(sky.sun) },
-                sunDirection: { value: sunDirectionOf(sky) },
+                sunDirection: { value: sunDirectionFromSky(sky) },
                 middleAltitude: { value: ATMOSPHERE.middleAltitude },
                 sunSize: { value: sky.sunSize },
                 glowFalloff: { value: sky.glowFalloff },

@@ -3,10 +3,25 @@ import { AWARENESS } from "@/constants/enemies";
 import { clamp } from "@/lib/helpers";
 import type { AlertPhase, AwarenessState } from "@/types/combat";
 
+export interface IAwarenessStimulus {
+    sightStrength: number;
+    readonly sightPosition: Vector3;
+    heardLoudness: number;
+    readonly heardPosition: Vector3;
+}
+
 export class AwarenessMeter {
+    private static readonly STATE_FOR_PHASE: Record<AlertPhase, AwarenessState> = {
+        unaware: "unaware",
+        suspicious: "suspicious",
+        alert: "alert",
+        searching: "suspicious",
+        returning: "unaware",
+    };
+
     readonly lastKnownPosition = new Vector3();
     private currentPhase: AlertPhase = "unaware";
-    private currentLevel = 0;
+    private currentAwarenessLevel = 0;
     private phaseSeconds = 0;
     private quietSeconds = 0;
     private unseenSeconds = 0;
@@ -17,12 +32,12 @@ export class AwarenessMeter {
         return this.currentPhase;
     }
 
-    get level(): number {
-        return this.currentLevel;
+    get awarenessLevel(): number {
+        return this.currentAwarenessLevel;
     }
 
     get state(): AwarenessState {
-        return STATE_FOR_PHASE[this.currentPhase];
+        return AwarenessMeter.STATE_FOR_PHASE[this.currentPhase];
     }
 
     get secondsInPhase(): number {
@@ -48,8 +63,8 @@ export class AwarenessMeter {
             return;
         }
 
-        this.accumulate(deltaSeconds, stimulus, isSeen || isHeard);
-        if (this.currentLevel >= 1) {
+        this.updateAwarenessLevel(deltaSeconds, stimulus, isSeen || isHeard);
+        if (this.currentAwarenessLevel >= 1) {
             this.becomeAlert(true);
             return;
         }
@@ -60,22 +75,22 @@ export class AwarenessMeter {
             return;
         }
 
-        if (this.currentLevel >= AWARENESS.suspiciousThreshold) {
+        if (this.currentAwarenessLevel >= AWARENESS.suspiciousThreshold) {
             if (this.currentPhase !== "suspicious")
-                this.enterPhase("suspicious", this.currentLevel);
-        } else if (this.currentPhase === "suspicious" && this.currentLevel === 0) {
+                this.enterPhase("suspicious", this.currentAwarenessLevel);
+        } else if (this.currentPhase === "suspicious" && this.currentAwarenessLevel === 0) {
             this.enterPhase("returning", 0);
         }
     }
 
-    alarm(position: Vector3, spreads: boolean): void {
+    raiseAlarm(position: Vector3, shouldAlertOthers: boolean): void {
         this.lastKnownPosition.copy(position);
         if (this.currentPhase === "alert") {
             this.unseenSeconds = 0;
             return;
         }
 
-        this.becomeAlert(spreads);
+        this.becomeAlert(shouldAlertOthers);
     }
 
     consumeAlarm(): boolean {
@@ -84,25 +99,26 @@ export class AwarenessMeter {
         return pending;
     }
 
-    settle(): void {
-        if (this.currentPhase === "returning") this.enterPhase("unaware", this.currentLevel);
+    finishReturningHome(): void {
+        if (this.currentPhase === "returning")
+            this.enterPhase("unaware", this.currentAwarenessLevel);
     }
 
-    standDown(): void {
+    forceReturnHome(): void {
         if (this.currentPhase === "unaware" || this.currentPhase === "returning") return;
 
         this.alarmPending = false;
         this.enterPhase("returning", 0);
     }
 
-    private accumulate(
+    private updateAwarenessLevel(
         deltaSeconds: number,
         stimulus: IAwarenessStimulus,
         isStimulated: boolean
     ): void {
         const primedMultiplier =
-            this.currentPhase === "searching" ? AWARENESS.primedGainMultiplier : 1;
-        this.currentLevel +=
+            this.currentPhase === "searching" ? AWARENESS.searchingSightGainMultiplier : 1;
+        this.currentAwarenessLevel +=
             stimulus.sightStrength *
                 AWARENESS.sightGainPerSecond *
                 primedMultiplier *
@@ -112,9 +128,9 @@ export class AwarenessMeter {
         this.quietSeconds = isStimulated ? 0 : this.quietSeconds + deltaSeconds;
         const isForgetting =
             this.quietSeconds >= AWARENESS.forgetDelaySeconds && this.currentPhase !== "searching";
-        if (isForgetting) this.currentLevel -= AWARENESS.decayPerSecond * deltaSeconds;
+        if (isForgetting) this.currentAwarenessLevel -= AWARENESS.decayPerSecond * deltaSeconds;
 
-        this.currentLevel = clamp(this.currentLevel, 0, 1);
+        this.currentAwarenessLevel = clamp(this.currentAwarenessLevel, 0, 1);
     }
 
     private tickAlert(deltaSeconds: number, isSeen: boolean): void {
@@ -138,23 +154,8 @@ export class AwarenessMeter {
 
     private enterPhase(phase: AlertPhase, level: number): void {
         this.currentPhase = phase;
-        this.currentLevel = level;
+        this.currentAwarenessLevel = level;
         this.phaseSeconds = 0;
         this.quietSeconds = 0;
     }
 }
-
-export interface IAwarenessStimulus {
-    sightStrength: number;
-    readonly sightPosition: Vector3;
-    heardLoudness: number;
-    readonly heardPosition: Vector3;
-}
-
-const STATE_FOR_PHASE: Record<AlertPhase, AwarenessState> = {
-    unaware: "unaware",
-    suspicious: "suspicious",
-    alert: "alert",
-    searching: "suspicious",
-    returning: "unaware",
-};

@@ -1,4 +1,3 @@
-@use "../../../styles/variable" as *;
 @use "../../../styles/mixins" as *;
 
 .finisher-prompt {
@@ -8,9 +7,10 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
+    color: var(--hud-readout);
     transform: translateX(-50%);
     opacity: 0;
-    transition: opacity 160ms $ease;
+    transition: opacity 160ms var(--ease);
 
     &[data-visible="true"] {
         opacity: 1;
@@ -22,9 +22,8 @@
         width: 1.6rem;
         height: 1.6rem;
         border-radius: 4px;
-        font-family: $font-mono;
+        font-family: var(--font-numeric);
         font-size: 0.75rem;
-        color: var(--hud-readout);
         @include hud-glass-surface;
     }
 
@@ -32,6 +31,5 @@
         font-size: 0.62rem;
         letter-spacing: 0.34em;
         text-transform: uppercase;
-        color: var(--hud-readout);
     }
 }

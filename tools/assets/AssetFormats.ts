@@ -2,7 +2,7 @@ import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { NodeIO } from "@gltf-transform/core";
+import { type Accessor, NodeIO } from "@gltf-transform/core";
 import {
     EXTMeshoptCompression,
     KHRMeshQuantization,
@@ -13,57 +13,22 @@ import { readJsonFile } from "../pipeline";
 
 export const TEXTURE_ROLE = { base: "base", normal: "normal", strip: "strip" } as const;
 
-const ROLE_PRIORITY: Record<TextureRole, number> = { strip: 0, normal: 1, base: 2 };
-const BASISU_EXTENSION = "KHR_texture_basisu";
-const IMAGE_HEAD_BYTES = 65536;
-const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-const KTX2_IDENTIFIER = Buffer.from([
-    0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a,
-]);
 export const COOKED_EXTENSIONS = [KHRTextureBasisu, KHRMeshQuantization, EXTMeshoptCompression];
-const ENCODE_ATTEMPT_LIMIT = 3;
-const BLOCK_SIZE = 4;
 
-const NORMAL_ENCODE_ARGS = [
-    "--format",
-    "R8G8B8A8_UNORM",
-    "--assign-tf",
-    "linear",
-    "--encode",
-    "uastc",
-    "--uastc-quality",
-    "2",
-    "--zstd",
-    "18",
-];
+const TEXTURE_SLOTS: readonly { owner?: "pbrMetallicRoughness"; key: string; role: TextureRole }[] =
+    [
+        { owner: "pbrMetallicRoughness", key: "baseColorTexture", role: TEXTURE_ROLE.base },
+        { key: "normalTexture", role: TEXTURE_ROLE.normal },
+        { key: "emissiveTexture", role: TEXTURE_ROLE.base },
+        {
+            owner: "pbrMetallicRoughness",
+            key: "metallicRoughnessTexture",
+            role: TEXTURE_ROLE.strip,
+        },
+        { key: "occlusionTexture", role: TEXTURE_ROLE.strip },
+    ];
 
-const BASE_ENCODE_ARGS = [
-    "--format",
-    "R8G8B8A8_SRGB",
-    "--assign-tf",
-    "srgb",
-    "--encode",
-    "basis-lz",
-    "--clevel",
-    "2",
-    "--qlevel",
-    "200",
-];
-
-const execFileAsync = promisify(execFile);
-
-export const createGltfIo = async (
-    extensions: Parameters<NodeIO["registerExtensions"]>[0],
-    withEncoder = false
-): Promise<NodeIO> => {
-    await Promise.all([MeshoptDecoder.ready, withEncoder && MeshoptEncoder.ready]);
-    return new NodeIO().registerExtensions(extensions).registerDependencies({
-        "meshopt.decoder": MeshoptDecoder,
-        ...(withEncoder && { "meshopt.encoder": MeshoptEncoder }),
-    });
-};
-
-export type TextureRole = (typeof TEXTURE_ROLE)[keyof typeof TEXTURE_ROLE];
+type TextureRole = (typeof TEXTURE_ROLE)[keyof typeof TEXTURE_ROLE];
 
 interface ITextureReference {
     index: number;
@@ -86,30 +51,14 @@ interface IBasisuTexture {
     extensions: { KHR_texture_basisu: { source: number } };
 }
 
-const TEXTURE_SLOTS: readonly { owner?: "pbrMetallicRoughness"; key: string; role: TextureRole }[] =
-    [
-        { owner: "pbrMetallicRoughness", key: "baseColorTexture", role: TEXTURE_ROLE.base },
-        { key: "normalTexture", role: TEXTURE_ROLE.normal },
-        { key: "emissiveTexture", role: TEXTURE_ROLE.base },
-        {
-            owner: "pbrMetallicRoughness",
-            key: "metallicRoughnessTexture",
-            role: TEXTURE_ROLE.strip,
-        },
-        { key: "occlusionTexture", role: TEXTURE_ROLE.strip },
-    ];
-
-export const textureSlotsOf = (material: IGltfMaterial) =>
-    TEXTURE_SLOTS.map(({ owner, key, role }) => {
-        const holder = (owner ? material[owner] : material) as TextureHolder | undefined;
-        return { holder, key, role, reference: holder?.[key] };
-    });
-
-export interface IGltfJson {
-    images?: { uri?: string; mimeType?: string; extensions?: unknown }[];
-    textures?: { source?: number; sampler?: number; extensions?: unknown }[];
+interface IGltfJson {
+    images?: { uri?: string }[];
+    textures?: {
+        source?: number;
+        sampler?: number;
+        extensions?: { KHR_texture_basisu?: { source?: number } };
+    }[];
     materials?: IGltfMaterial[];
-    buffers?: { uri?: string }[];
     extensionsUsed?: string[];
     extensionsRequired?: string[];
 }
@@ -120,6 +69,12 @@ interface IImageDimensions {
 }
 
 export class TextureRoleMap {
+    private static readonly ROLE_PRIORITY: Record<TextureRole, number> = {
+        strip: 0,
+        normal: 1,
+        base: 2,
+    };
+
     private readonly rolesByFile = new Map<string, TextureRole>();
 
     static collect(documents: readonly GltfDocument[]): TextureRoleMap {
@@ -135,7 +90,10 @@ export class TextureRoleMap {
     record(file: string | undefined, role: TextureRole): void {
         if (!file) return;
         const existing = this.rolesByFile.get(file);
-        if (!existing || ROLE_PRIORITY[role] > ROLE_PRIORITY[existing])
+        if (
+            !existing ||
+            TextureRoleMap.ROLE_PRIORITY[role] > TextureRoleMap.ROLE_PRIORITY[existing]
+        )
             this.rolesByFile.set(file, role);
     }
 
@@ -149,6 +107,8 @@ export class TextureRoleMap {
 }
 
 export class GltfDocument {
+    private static readonly BASISU_EXTENSION = "KHR_texture_basisu";
+
     readonly filePath: string;
     readonly json: IGltfJson;
 
@@ -249,7 +209,7 @@ export class GltfDocument {
 
     private declareBasisuExtension(): void {
         const declare = (list: string[] | undefined): string[] => [
-            ...new Set([...(list ?? []), BASISU_EXTENSION]),
+            ...new Set([...(list ?? []), GltfDocument.BASISU_EXTENSION]),
         ];
         this.json.extensionsUsed = declare(this.json.extensionsUsed);
         this.json.extensionsRequired = declare(this.json.extensionsRequired);
@@ -257,6 +217,10 @@ export class GltfDocument {
 }
 
 class ImageFile {
+    private static readonly IMAGE_HEAD_BYTES = 65536;
+
+    private static readonly PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
     static readHead(file: string, size: number): Buffer {
         const descriptor = fs.openSync(file, "r");
         try {
@@ -270,7 +234,7 @@ class ImageFile {
 
     static readDimensions(file: string): IImageDimensions {
         const dimensions =
-            ImageFile.scanDimensions(ImageFile.readHead(file, IMAGE_HEAD_BYTES)) ??
+            ImageFile.scanDimensions(ImageFile.readHead(file, ImageFile.IMAGE_HEAD_BYTES)) ??
             ImageFile.scanDimensions(fs.readFileSync(file));
         if (!dimensions) throw new Error(`could not read image dimensions: ${file}`);
         return dimensions;
@@ -278,7 +242,7 @@ class ImageFile {
 
     private static scanDimensions(buffer: Buffer): IImageDimensions | undefined {
         try {
-            if (buffer.subarray(0, 8).equals(PNG_SIGNATURE))
+            if (buffer.subarray(0, 8).equals(ImageFile.PNG_SIGNATURE))
                 return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 
             let offset = 2;
@@ -310,13 +274,49 @@ class ImageFile {
 }
 
 export class TextureEncoder {
+    private static readonly KTX2_IDENTIFIER = Buffer.from([
+        0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+
+    private static readonly BLOCK_SIZE = 4;
+
+    private static readonly NORMAL_ENCODE_ARGS = [
+        "--format",
+        "R8G8B8A8_UNORM",
+        "--assign-tf",
+        "linear",
+        "--encode",
+        "uastc",
+        "--uastc-quality",
+        "2",
+        "--zstd",
+        "18",
+    ];
+
+    private static readonly BASE_ENCODE_ARGS = [
+        "--format",
+        "R8G8B8A8_SRGB",
+        "--assign-tf",
+        "srgb",
+        "--encode",
+        "basis-lz",
+        "--clevel",
+        "2",
+        "--qlevel",
+        "200",
+    ];
+
+    private static readonly execFileAsync = promisify(execFile);
+
     static assertInstalled(): void {
         execFileSync("ktx", ["--version"], { stdio: "ignore" });
     }
 
     static isValidKtx2(file: string): boolean {
         try {
-            return ImageFile.readHead(file, KTX2_IDENTIFIER.length).equals(KTX2_IDENTIFIER);
+            return ImageFile.readHead(file, TextureEncoder.KTX2_IDENTIFIER.length).equals(
+                TextureEncoder.KTX2_IDENTIFIER
+            );
         } catch {
             return false;
         }
@@ -345,24 +345,44 @@ export class TextureEncoder {
             String(width),
             "--height",
             String(height),
-            ...(role === TEXTURE_ROLE.normal ? NORMAL_ENCODE_ARGS : BASE_ENCODE_ARGS),
+            ...(role === TEXTURE_ROLE.normal
+                ? TextureEncoder.NORMAL_ENCODE_ARGS
+                : TextureEncoder.BASE_ENCODE_ARGS),
         ];
 
-        for (let attempt = 1; attempt <= ENCODE_ATTEMPT_LIMIT; attempt++) {
-            await execFileAsync("ktx", [...args, sourceFile, outputFile]);
-            if (TextureEncoder.isValidKtx2(outputFile)) return;
-            if (attempt === ENCODE_ATTEMPT_LIMIT)
-                throw new Error(
-                    `ktx produced an invalid file after ${ENCODE_ATTEMPT_LIMIT} attempts: ${outputFile}`
-                );
-        }
+        await TextureEncoder.execFileAsync("ktx", [...args, sourceFile, outputFile]);
+        if (!TextureEncoder.isValidKtx2(outputFile))
+            throw new Error(`ktx produced an invalid file: ${outputFile}`);
     }
 
     private static fitDimensions(file: string, maxTextureSize: number): IImageDimensions {
         const { width, height } = ImageFile.readDimensions(file);
         const scale = Math.min(1, maxTextureSize / Math.max(width, height));
         const snapToBlockMultiple = (value: number): number =>
-            Math.max(BLOCK_SIZE, Math.floor((value * scale) / BLOCK_SIZE) * BLOCK_SIZE);
+            Math.max(
+                TextureEncoder.BLOCK_SIZE,
+                Math.floor((value * scale) / TextureEncoder.BLOCK_SIZE) * TextureEncoder.BLOCK_SIZE
+            );
         return { width: snapToBlockMultiple(width), height: snapToBlockMultiple(height) };
     }
 }
+
+export const createGltfIo = async (
+    extensions: Parameters<NodeIO["registerExtensions"]>[0],
+    withEncoder = false
+): Promise<NodeIO> => {
+    await Promise.all([MeshoptDecoder.ready, withEncoder && MeshoptEncoder.ready]);
+    return new NodeIO().registerExtensions(extensions).registerDependencies({
+        "meshopt.decoder": MeshoptDecoder,
+        ...(withEncoder && { "meshopt.encoder": MeshoptEncoder }),
+    });
+};
+
+export const accessorElements = (accessor: Accessor): number[][] =>
+    Array.from({ length: accessor.getCount() }, (_, index) => accessor.getElement(index, []));
+
+export const textureSlotsOf = (material: IGltfMaterial) =>
+    TEXTURE_SLOTS.map(({ owner, key, role }) => {
+        const holder = (owner ? material[owner] : material) as TextureHolder | undefined;
+        return { holder, key, role, reference: holder?.[key] };
+    });

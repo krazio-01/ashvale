@@ -1,6 +1,5 @@
-import type { Object3D, Vector3 } from "three";
-import type { IEnemyArchetype } from "@/constants/enemies";
-import type { WeaponMount } from "@/types/weapons";
+import type { Object3D, Vector3, Vector3Tuple } from "three";
+import type { ENEMY_ARCHETYPES } from "@/constants/enemies";
 export type Team = "player" | "enemy";
 export type ImpactTier = "light" | "heavy" | "finisher";
 export type ReactionTier = "none" | "flinch" | "stagger" | "knockback" | "knockdown";
@@ -18,7 +17,8 @@ export type AwarenessState = "unaware" | "suspicious" | "alert";
 export type AlertPhase = "unaware" | "suspicious" | "alert" | "searching" | "returning";
 export type VictimRig = "humanoid" | "creature";
 export type FinisherKind = "counter" | "execution" | "backstab";
-export type EnemyArchetype = "sentinel" | "wraith" | "golem" | "gremlin";
+export type EnemyArchetype = (typeof ENEMY_ARCHETYPES)[number];
+export type ArchetypeId = EnemyArchetype | "boss";
 export type ParryTier = "parry" | "perfect";
 export type SwingDirection = "high" | "side";
 export type ParriedReactions = Readonly<
@@ -38,12 +38,6 @@ export interface IMoveWindow {
 
 export type HitShape = { kind: "weapon" } | { kind: "socket"; bone: string; radius: number };
 
-export interface IStrikeSegment {
-    start: Vector3;
-    end: Vector3;
-    radius: number;
-}
-
 export interface IHitWindow extends IMoveWindow {
     shape: HitShape;
     damageScale: number;
@@ -51,7 +45,7 @@ export interface IHitWindow extends IMoveWindow {
     impact: ImpactTier;
     knockback: number;
     parryable: boolean;
-    perilous: boolean;
+    dodgeOnly: boolean;
     swing: SwingDirection;
 }
 
@@ -63,7 +57,7 @@ interface ITrackingWindow extends IMoveWindow {
     turnRate: number;
 }
 
-export interface IWarpWindow extends IMoveWindow {
+export interface IGapCloseWindow extends IMoveWindow {
     maxDistance: number;
     strikeDistance: number;
 }
@@ -80,17 +74,13 @@ export interface ISlowMotionProfile {
     rampOutSeconds: number;
 }
 
-export type TelegraphDanger = "parryable" | "perilous";
+export type AttackWarningDanger = "parryable" | "dodgeOnly";
 export type ProjectileKind = "bolt" | "blast";
 
 export interface IProjectileLaunch {
     at: number;
     kind: ProjectileKind;
     socket: string;
-}
-
-export interface IProceduralMove {
-    grip?: IMoveWindow;
 }
 
 export interface IMoveDefinition {
@@ -109,7 +99,7 @@ export interface IMoveDefinition {
     armor?: IMoveWindow;
     parrySeconds?: number;
     tracking?: ITrackingWindow;
-    warp?: IWarpWindow;
+    gapClose?: IGapCloseWindow;
     holdAt?: number;
     counterAt?: number;
     yieldsToMovement?: boolean;
@@ -125,7 +115,7 @@ export interface IMoveDefinition {
     minimumWindupSeconds?: number;
     launch?: number;
     projectile?: IProjectileLaunch;
-    procedural?: IProceduralMove;
+    procedural?: { grip?: IMoveWindow };
     mountAt?: { fraction: number; target: WeaponMount };
 }
 
@@ -165,7 +155,7 @@ export interface IHitPayload {
     impact: ImpactTier;
     knockback: number;
     parryable: boolean;
-    perilous: boolean;
+    dodgeOnly: boolean;
     ranged: boolean;
     swing: SwingDirection;
     origin: Vector3;
@@ -191,7 +181,7 @@ export interface IAttackThreat {
     moveSerial: number;
     secondsUntilHit: number;
     parryable: boolean;
-    perilous: boolean;
+    dodgeOnly: boolean;
     impact: ImpactTier;
 }
 
@@ -207,7 +197,7 @@ export interface ICombatant {
     readonly position: Vector3;
     readonly bodyRadius: number;
     readonly isDead: boolean;
-    readonly isPaired: boolean;
+    readonly isInFinisher: boolean;
     readonly isStaggered: boolean;
     readonly isReeling: boolean;
     readonly isAttacking: boolean;
@@ -215,7 +205,7 @@ export interface ICombatant {
     readonly awareness: AwarenessState;
     readonly victimRig: VictimRig;
     readonly hurtboxes: readonly ICapsule[];
-    readonly broadRadius: number;
+    readonly boundingRadius: number;
     receiveHit(payload: IHitPayload): IHitOutcome;
 }
 
@@ -223,7 +213,7 @@ export interface IFinisherDefinition {
     id: string;
     kind: FinisherKind;
     attackerClip: string;
-    pairedVictimClip: string | null;
+    finisherVictimClip: string | null;
     distance: number;
     bearing: number;
     relativeYaw: number;
@@ -236,4 +226,124 @@ export interface IFinisherDefinition {
 export interface IBoss {
     readonly id: string;
     readonly archetype: IEnemyArchetype;
+}
+
+export type Handedness = "right" | "left";
+
+export interface IHandRig {
+    hand: Object3D;
+    indexBase: Object3D;
+    middleBase: Object3D;
+    ringBase: Object3D;
+    pinkyBase: Object3D | null;
+    thumbBase: Object3D;
+}
+
+export type WeaponMount = "hand" | "carry";
+
+export interface IWeaponCarry {
+    bone: string;
+    position: Vector3Tuple;
+    rotationDegrees: Vector3Tuple;
+}
+
+export interface ICarryRig {
+    bone: Object3D;
+}
+
+export interface IWeaponSpec {
+    id: string;
+    modelPath: string;
+    gripHand: Handedness;
+    handleCentreFraction: number;
+    gripRoll: number;
+    worldLength: number;
+    guardFraction: number;
+    damage: number;
+    carry?: IWeaponCarry;
+}
+
+export interface IMeleeWeaponSpec extends IWeaponSpec {
+    kind: "melee";
+    bladeRadius: number;
+    trailColor: string;
+}
+
+export type WeaponDefinition = IMeleeWeaponSpec;
+
+export interface IEnemyArchetype {
+    label: string;
+    modelPath: string;
+    height: number;
+    radius: number;
+    victimRig: VictimRig;
+    vitals: IVitalsSpec;
+    attackPower: number;
+    tactics: ICombatTactics;
+    attacks: readonly IEnemyAttack[];
+    weapon: WeaponDefinition | null;
+    moveSet: IMoveSet;
+    counterAttackMove: string;
+    patrolSpeed: number;
+    combatSpeed: number;
+    wanderRadius: number;
+    counterKillable: boolean;
+    alwaysAware: boolean;
+}
+
+export interface IClipMarks {
+    marks: Readonly<Record<string, number>>;
+    grip: IMoveWindow | null;
+}
+
+export interface IProjectileSpec extends Pick<
+    IHitWindow,
+    "damageScale" | "poiseDamage" | "impact" | "knockback" | "parryable" | "dodgeOnly"
+> {
+    speed: number;
+    radius: number;
+    color: string;
+}
+
+export interface IVitalsSpec {
+    maxHealth: number;
+    maxPoise: number;
+    maxStamina: number;
+    maxFocus: number;
+    poiseRegenDelay: number;
+    poiseRegenRate: number;
+    staminaRegenDelay: number;
+    staminaRegenRate: number;
+    staggerSeconds: number;
+}
+
+export interface IEnemyAttack {
+    id: string;
+    openingMove: string;
+    range: readonly [number, number];
+    weight: number;
+    cooldownSeconds: number;
+    tokenCost: number;
+    chain: readonly string[];
+    continueChance: number;
+}
+
+export interface IDefenseTactics {
+    reactionSeconds: number;
+    parryChance: number;
+    evadeChance: number;
+}
+
+export interface IWanderTuning {
+    arriveDistance: number;
+    pauseSeconds: readonly [number, number];
+    maxWalkSeconds: number;
+    distanceFraction: readonly [number, number];
+}
+
+interface ICombatTactics extends IDefenseTactics {
+    preferredRange: number;
+    retreatRange: number;
+    frenzyBelowHealth: number;
+    frenzyCooldownScale: number;
 }

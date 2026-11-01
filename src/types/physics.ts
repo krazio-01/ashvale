@@ -14,22 +14,22 @@ export interface IVector3 {
     z: number;
 }
 
-export interface IClothFeel {
+export interface IClothTuning {
     damping: number;
-    stretchCompliance: number;
-    bendCompliance: number;
+    stretchSoftness: number;
+    bendSoftness: number;
     gravityScale: number;
     windExposure: number;
-    tetherScale: number;
-    leashMax: number;
-    leashCurve: number;
-    backstopRadius: number;
-    backstopOffset: number;
+    pinSlack: number;
+    maxDriftAtHem: number;
+    driftCurve: number;
+    bodyGuardRadius: number;
+    bodyGuardDepth: number;
     collisionThickness: number;
-    deflectionMargin: number;
-    deflectionSoftness: number;
+    targetClearance: number;
+    targetClearanceBlend: number;
     friction: number;
-    impulseScale: number;
+    hitImpulseScale: number;
 }
 
 export interface IPhysicsBodyDefinition {
@@ -46,10 +46,10 @@ export interface IPhysicsBodyDefinition {
     geodesicDistance: number[];
     skinBones: string[];
     skinWeights: number[];
-    feel?: Partial<IClothFeel>;
+    feel?: Partial<IClothTuning>;
 }
 
-export interface IPhysicsCollider {
+interface IPhysicsCollider {
     bone: string;
     start: [number, number, number];
     end: [number, number, number];
@@ -64,7 +64,7 @@ export interface IPhysicsDefinition {
 }
 
 export interface IPhysicsBinding {
-    prepareFrame(): void;
+    prepareFrame(includeHomes?: boolean, isPoseCurrent?: boolean): void;
     unitScale(bodyIndex: number): number;
     referenceWorld(outPosition: Vector3, outRotation: Quaternion): void;
     homeWorld(bodyIndex: number, nodeIndex: number, outPosition: Vector3, outNormal: Vector3): void;
@@ -77,4 +77,28 @@ export interface IPhysicsBinding {
         across: Vector3
     ): void;
     writeAnimatedNode(bodyIndex: number, nodeIndex: number): void;
+}
+
+export interface IMotorSpec {
+    height: number;
+    radius: number;
+    colliderOffset: number;
+    maxSlopeClimbAngle: number;
+    minSlopeSlideAngle: number;
+    autostepMaxHeight: number;
+    autostepMinWidth: number;
+    snapToGroundDistance: number;
+    terminalVelocity: number;
+    groundAcceleration: number;
+    airAcceleration: number;
+    pushesDynamicBodies: boolean;
+}
+
+export type MotorTuning = Omit<IMotorSpec, "height" | "radius" | "pushesDynamicBodies">;
+
+export interface IQuaternion {
+    x: number;
+    y: number;
+    z: number;
+    w: number;
 }

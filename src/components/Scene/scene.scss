@@ -1,4 +1,4 @@
-@use "../../styles/variable" as *;
+@use "../../styles/mixins" as *;
 
 .scene-canvas-container {
     position: relative;
@@ -19,7 +19,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 4px;
     color: rgba(255, 255, 255, 0.55);
-    font-family: $font-mono;
+    font-family: var(--font-numeric);
     font-size: 0.72rem;
     letter-spacing: 0.04em;
     pointer-events: none;
@@ -30,25 +30,18 @@
         background: rgba(255, 255, 255, 0.1);
         border: 1px solid rgba(255, 255, 255, 0.18);
         border-radius: 3px;
-        font-family: $font-mono;
+        font-family: var(--font-numeric);
         font-size: 0.68rem;
-        color: $ink-text;
+        color: var(--ink-text);
     }
 }
 
 .scene-status {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
     height: 100vh;
-    gap: 1rem;
+    @include status-screen;
 
     p {
-        max-width: min(90%, 800px);
-        color: $ink-text;
         font-size: 1.5rem;
-        text-align: center;
     }
 
     &--overlay {

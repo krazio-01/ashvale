@@ -1,24 +1,62 @@
-import { DEFAULT_FAMILY, type IThemeProp } from "@/types/theme";
-import type { IPropFieldInput, IRegionSite, ISpeciesByLayer } from "@/world/props/PropField";
+import { type IThemeProp } from "@/types/world";
+import type { IRegionFloor, ISpeciesByLayer, IPropFieldInput } from "@/types/world";
 import {
     collidesWithPlayer,
-    pickSpecies,
     placeProp,
     PlacementOutcome,
-    type IFieldContext,
+    type IPropScatterContext,
     type IPlacementRules,
+    rollPropScale,
+    scatterSpecies,
+    placeUnlessBlocked,
 } from "@/world/props/PropPlacement";
 import { WATER_CHANNEL } from "@/constants/world";
-import { PROP_FIELD } from "@/constants/placement";
+import { PROP_SCATTER, DEFAULT_FAMILY } from "@/constants/placement";
 import { FractalNoise } from "@/lib/noise";
-import { clamp, lerp, pickRandomSubset, scaleBetween, smoothstep, FULL_TURN } from "@/lib/helpers";
+import {
+    clamp,
+    lerp,
+    pickRandomSubset,
+    smoothstep,
+    FULL_TURN,
+    pointAtAngle,
+    segmentFrame,
+    randomPointInDisc,
+    pickRandomOrNull,
+    firstFit,
+    pickRandom,
+} from "@/lib/helpers";
+import type { RandomSource } from "@/lib/helpers";
+
+interface IPropClump {
+    centerX: number;
+    centerZ: number;
+    radius: number;
+    richness: number;
+    standing: IThemeProp[];
+    standingRules: IPlacementRules;
+    understory: IThemeProp[];
+    groundcover: IThemeProp[];
+}
+
+interface IPlacedHost {
+    localX: number;
+    localZ: number;
+    maxFootprintRadius: number;
+    pack: string;
+}
+
+interface IGroundSpot {
+    localX: number;
+    localZ: number;
+}
 
 export function seedClumps(
     input: IPropFieldInput,
     speciesByLayer: ISpeciesByLayer,
     nextRandom: () => number
 ): IPropClump[] {
-    const settings = PROP_FIELD.clump;
+    const settings = PROP_SCATTER.clump;
     const mask = new FractalNoise(input.seed + 11);
     const biomeNoise = new FractalNoise(input.seed + 59);
     const canopyByFamily = groupByFamily(speciesByLayer.canopy);
@@ -26,16 +64,11 @@ export function seedClumps(
     const clumps: IPropClump[] = [];
 
     const [minimumRadius, maximumRadius] = settings.radiusRange;
-    const spacing = settings.candidateSpacing;
-    const cellsFromCentre = Math.ceil(input.fieldRadius / spacing);
-
-    for (let row = -cellsFromCentre; row <= cellsFromCentre; row += 1) {
-        for (let column = -cellsFromCentre; column <= cellsFromCentre; column += 1) {
-            const centerX = (column + nextRandom() - 0.5) * spacing;
-            const centerZ = (row + nextRandom() - 0.5) * spacing;
-
-            if (Math.hypot(centerX, centerZ) > input.fieldRadius) continue;
-
+    forEachJitteredCandidate(
+        input.fieldRadius,
+        settings.candidateSpacing,
+        nextRandom,
+        (centerX, centerZ) => {
             const forestStrength = mask.sample(
                 centerX / settings.maskWavelength,
                 centerZ / settings.maskWavelength,
@@ -43,7 +76,7 @@ export function seedClumps(
                 settings.maskGain
             );
 
-            if (forestStrength < settings.forestThreshold) continue;
+            if (forestStrength < settings.forestThreshold) return;
 
             const groveStrength =
                 (forestStrength - settings.forestThreshold) / (1 - settings.forestThreshold);
@@ -70,7 +103,7 @@ export function seedClumps(
                           settings.canopySpeciesPerClump,
                           nextRandom
                       ),
-                standingRules: isOutcrop ? PROP_FIELD.rock : PROP_FIELD.canopy,
+                standingRules: isOutcrop ? PROP_SCATTER.rock : PROP_SCATTER.canopy,
                 understory: pickRandomSubset(
                     speciesByLayer.understory,
                     settings.understorySpeciesPerClump,
@@ -83,7 +116,7 @@ export function seedClumps(
                 ),
             });
         }
-    }
+    );
 
     return clumps;
 }
@@ -109,7 +142,7 @@ function dominantFamilyAt(
 ): string {
     if (families.length <= 1) return families[0] ?? DEFAULT_FAMILY;
 
-    const settings = PROP_FIELD.biomeRegion;
+    const settings = PROP_SCATTER.biomeRegion;
     const rawValue = noise.sample(
         localX / settings.wavelength,
         localZ / settings.wavelength,
@@ -134,7 +167,7 @@ function dominantFamilyAt(
     const neighbourWeight = 0.5 * (1 - smoothstep(0, settings.transitionWidth / 2, edgeDistance));
     const chosenIndex = nextRandom() < neighbourWeight ? neighbourIndex : bandIndex;
 
-    return families[chosenIndex] ?? DEFAULT_FAMILY;
+    return families[chosenIndex];
 }
 
 function pickFamilyCoherentSpecies(
@@ -151,15 +184,15 @@ function pickFamilyCoherentSpecies(
     return pickRandomSubset(speciesByFamily.get(family) ?? [], count, nextRandom);
 }
 
-function richnessAt(localX: number, localZ: number, sites: IRegionSite[]): number {
-    const [minimumRichness, maximumRichness] = PROP_FIELD.richnessRange;
+function richnessAt(localX: number, localZ: number, sites: IRegionFloor[]): number {
+    const [minimumRichness, maximumRichness] = PROP_SCATTER.densityScaleRange;
 
     for (const site of sites) {
         if (Math.abs(localX - site.centerX) > site.halfWidth) continue;
         if (Math.abs(localZ - site.centerZ) > site.halfDepth) continue;
 
         return clamp(
-            site.fileCount / PROP_FIELD.typicalFileCount,
+            site.fileCount / PROP_SCATTER.typicalFileCount,
             minimumRichness,
             maximumRichness
         );
@@ -168,7 +201,7 @@ function richnessAt(localX: number, localZ: number, sites: IRegionSite[]): numbe
     return 1;
 }
 
-export function fillClump(clump: IPropClump, field: IFieldContext): void {
+export function fillClump(clump: IPropClump, scatter: IPropScatterContext): void {
     const clumpArea = Math.PI * clump.radius * clump.radius;
     const standingRules = clump.standingRules;
 
@@ -179,25 +212,25 @@ export function fillClump(clump: IPropClump, field: IFieldContext): void {
         Math.round(clumpArea * standingRules.density * clump.richness),
         standingRules,
         clump.radius,
-        field
+        scatter
     );
 
     scatterAgainstNeighbours(
         clump,
         clump.understory,
-        Math.round(clumpArea * PROP_FIELD.understory.density * clump.richness),
+        Math.round(clumpArea * PROP_SCATTER.understory.density * clump.richness),
         standingPlaced,
-        field
+        scatter
     );
 
     scatterAroundCentre(
         clump.centerX,
         clump.centerZ,
         clump.groundcover,
-        Math.round(clumpArea * PROP_FIELD.groundcover.density * clump.richness),
-        PROP_FIELD.groundcover,
+        Math.round(clumpArea * PROP_SCATTER.groundcover.density * clump.richness),
+        PROP_SCATTER.groundcover,
         clump.radius,
-        field
+        scatter
     );
 }
 
@@ -208,23 +241,19 @@ function scatterAroundCentre(
     count: number,
     rules: IPlacementRules,
     spreadRadius: number,
-    field: IFieldContext
-): IPlacedStanding[] {
-    const placed: IPlacedStanding[] = [];
+    scatter: IPropScatterContext
+): IPlacedHost[] {
+    const placed: IPlacedHost[] = [];
     if (species.length === 0) return placed;
 
-    for (let index = 0; index < count; index += 1) {
-        const prop = pickSpecies(species, field.nextRandom);
-        if (!prop) continue;
+    scatterSpecies(species, count, scatter.nextRandom, (prop) =>
+        firstFit(PROP_SCATTER.placementAttempts, () => {
+            const angle = scatter.nextRandom() * FULL_TURN;
+            const distance = Math.pow(scatter.nextRandom(), rules.centreBias) * spreadRadius;
+            const [localX, localZ] = pointAtAngle(centerX, centerZ, angle, distance);
 
-        for (let attempt = 0; attempt < PROP_FIELD.placementAttempts; attempt += 1) {
-            const angle = field.nextRandom() * FULL_TURN;
-            const distance = Math.pow(field.nextRandom(), rules.centreBias) * spreadRadius;
-            const localX = centerX + Math.cos(angle) * distance;
-            const localZ = centerZ + Math.sin(angle) * distance;
-
-            const outcome = placeProp(prop, localX, localZ, rules, field);
-            if (outcome === PlacementOutcome.Blocked) continue;
+            const outcome = placeProp(prop, localX, localZ, rules, scatter);
+            if (outcome === PlacementOutcome.Blocked) return null;
 
             if (outcome === PlacementOutcome.Placed && collidesWithPlayer(prop))
                 placed.push({
@@ -234,10 +263,9 @@ function scatterAroundCentre(
                         prop.footprintRadius * prop.scaleRange[1] * rules.scaleBoost[1],
                     pack: prop.pack,
                 });
-
-            break;
-        }
-    }
+            return outcome;
+        })
+    );
 
     return placed;
 }
@@ -246,86 +274,77 @@ function scatterAgainstNeighbours(
     clump: IPropClump,
     species: IThemeProp[],
     count: number,
-    neighbours: IPlacedStanding[],
-    field: IFieldContext
+    neighbours: IPlacedHost[],
+    scatter: IPropScatterContext
 ): void {
     if (species.length === 0) return;
 
     const naturalHosts = neighbours.filter((neighbour) => neighbour.pack !== "architecture");
-    const { huddleRatio, huddleRadius, huddleCentreBias } = PROP_FIELD.understory;
+    const { clusterChance, clusterRadius, clusterCentreBias } = PROP_SCATTER.understory;
 
-    for (let index = 0; index < count; index += 1) {
-        const prop = pickSpecies(species, field.nextRandom);
-        if (!prop) continue;
-
-        const huddles = naturalHosts.length > 0 && field.nextRandom() < huddleRatio;
-        const host = huddles
-            ? naturalHosts[Math.floor(field.nextRandom() * naturalHosts.length)]
-            : undefined;
+    scatterSpecies(species, count, scatter.nextRandom, (prop) => {
+        const joinsCluster = naturalHosts.length > 0 && scatter.nextRandom() < clusterChance;
+        const host = joinsCluster ? pickRandom(naturalHosts, scatter.nextRandom) : undefined;
 
         const understoryFootprint =
-            prop.footprintRadius * prop.scaleRange[1] * PROP_FIELD.understory.scaleBoost[1];
+            prop.footprintRadius * prop.scaleRange[1] * PROP_SCATTER.understory.scaleBoost[1];
         const minDistance = host
-            ? host.maxFootprintRadius + understoryFootprint + PROP_FIELD.understory.spacingGap
+            ? host.maxFootprintRadius + understoryFootprint + PROP_SCATTER.understory.spacingGap
             : 0;
-        const maxDistance = host ? Math.max(huddleRadius, minDistance) : clump.radius;
+        const maxDistance = host ? Math.max(clusterRadius, minDistance) : clump.radius;
 
-        for (let attempt = 0; attempt < PROP_FIELD.placementAttempts; attempt += 1) {
-            const angle = field.nextRandom() * FULL_TURN;
+        firstFit(PROP_SCATTER.placementAttempts, () => {
+            const angle = scatter.nextRandom() * FULL_TURN;
             const distance = host
-                ? lerp(minDistance, maxDistance, Math.pow(field.nextRandom(), huddleCentreBias))
-                : Math.sqrt(field.nextRandom()) * clump.radius;
+                ? lerp(minDistance, maxDistance, Math.pow(scatter.nextRandom(), clusterCentreBias))
+                : Math.sqrt(scatter.nextRandom()) * clump.radius;
 
-            const localX = (host ? host.localX : clump.centerX) + Math.cos(angle) * distance;
-            const localZ = (host ? host.localZ : clump.centerZ) + Math.sin(angle) * distance;
+            const [localX, localZ] = pointAtAngle(
+                host ? host.localX : clump.centerX,
+                host ? host.localZ : clump.centerZ,
+                angle,
+                distance
+            );
 
-            if (
-                placeProp(prop, localX, localZ, PROP_FIELD.understory, field) !==
-                PlacementOutcome.Blocked
-            )
-                break;
-        }
-    }
+            return placeUnlessBlocked(prop, localX, localZ, PROP_SCATTER.understory, scatter);
+        });
+    });
 }
 
 export function scatterGroundcoverPatches(
     input: IPropFieldInput,
     species: IThemeProp[],
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): void {
     if (species.length === 0) return;
 
-    const settings = PROP_FIELD.groundcoverPatch;
+    const settings = PROP_SCATTER.groundcoverPatch;
     const mask = new FractalNoise(input.seed + 23);
     const rim = new FractalNoise(input.seed + 41);
 
-    const spacing = settings.spacing;
-    const cellsFromCentre = Math.ceil(input.fieldRadius / spacing);
     const [minimumRadius, maximumRadius] = settings.radiusRange;
     const [minimumCount, maximumCount] = settings.countRange;
 
-    for (let row = -cellsFromCentre; row <= cellsFromCentre; row += 1) {
-        for (let column = -cellsFromCentre; column <= cellsFromCentre; column += 1) {
-            const centerX = (column + field.nextRandom() - 0.5) * spacing;
-            const centerZ = (row + field.nextRandom() - 0.5) * spacing;
-
-            if (Math.hypot(centerX, centerZ) > input.fieldRadius) continue;
-
+    forEachJitteredCandidate(
+        input.fieldRadius,
+        settings.spacing,
+        scatter.nextRandom,
+        (centerX, centerZ) => {
             const meadowStrength = mask.sample(
                 centerX / settings.maskWavelength,
                 centerZ / settings.maskWavelength,
-                PROP_FIELD.clump.maskOctaves,
-                PROP_FIELD.clump.maskGain
+                PROP_SCATTER.clump.maskOctaves,
+                PROP_SCATTER.clump.maskGain
             );
 
-            if (meadowStrength < settings.maskThreshold) continue;
+            if (meadowStrength < settings.maskThreshold) return;
 
             const patchSpecies = pickRandomSubset(
                 species,
                 settings.speciesPerPatch,
-                field.nextRandom
+                scatter.nextRandom
             );
-            if (patchSpecies.length === 0) continue;
+            if (patchSpecies.length === 0) return;
 
             const strength =
                 (meadowStrength - settings.maskThreshold) / (1 - settings.maskThreshold);
@@ -337,10 +356,10 @@ export function scatterGroundcoverPatches(
                 Math.round(lerp(minimumCount, maximumCount, strength)),
                 patchSpecies,
                 rim,
-                field
+                scatter
             );
         }
-    }
+    );
 }
 
 function fillPatch(
@@ -350,16 +369,13 @@ function fillPatch(
     count: number,
     species: IThemeProp[],
     rim: FractalNoise,
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): void {
-    const settings = PROP_FIELD.groundcoverPatch;
+    const settings = PROP_SCATTER.groundcoverPatch;
 
-    for (let index = 0; index < count; index += 1) {
-        const prop = pickSpecies(species, field.nextRandom);
-        if (!prop) continue;
-
-        for (let attempt = 0; attempt < PROP_FIELD.placementAttempts; attempt += 1) {
-            const angle = field.nextRandom() * FULL_TURN;
+    scatterSpecies(species, count, scatter.nextRandom, (prop) =>
+        firstFit(PROP_SCATTER.placementAttempts, () => {
+            const angle = scatter.nextRandom() * FULL_TURN;
             const towardsX = Math.cos(angle);
             const towardsZ = Math.sin(angle);
             const rimStrength = rim.sample(
@@ -370,134 +386,93 @@ function fillPatch(
             );
             const reach =
                 radius * lerp(1 - settings.rimStrength, 1 + settings.rimStrength, rimStrength);
-            const distance = Math.pow(field.nextRandom(), settings.coreBias) * reach;
+            const distance = Math.pow(scatter.nextRandom(), settings.coreBias) * reach;
 
-            const outcome = placeProp(
+            return placeUnlessBlocked(
                 prop,
                 centerX + towardsX * distance,
                 centerZ + towardsZ * distance,
-                PROP_FIELD.groundcover,
-                field
+                PROP_SCATTER.groundcover,
+                scatter
             );
-
-            if (outcome !== PlacementOutcome.Blocked) break;
-        }
-    }
-}
-
-interface IPropClump {
-    centerX: number;
-    centerZ: number;
-    radius: number;
-    richness: number;
-    standing: IThemeProp[];
-    standingRules: IPlacementRules;
-    understory: IThemeProp[];
-    groundcover: IThemeProp[];
-}
-
-interface IPlacedStanding {
-    localX: number;
-    localZ: number;
-    maxFootprintRadius: number;
-    pack: string;
+        })
+    );
 }
 
 export function scatterDebris(
     input: IPropFieldInput,
     species: IThemeProp[],
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): void {
     if (species.length === 0 || input.lanes.length === 0) return;
 
-    const settings = PROP_FIELD.debris;
+    const settings = PROP_SCATTER.debris;
     const fieldArea = Math.PI * input.fieldRadius * input.fieldRadius;
     const count = Math.round(fieldArea * settings.density);
 
-    for (let index = 0; index < count; index += 1) {
-        const prop = pickSpecies(species, field.nextRandom);
-        if (!prop) continue;
-
-        for (let attempt = 0; attempt < PROP_FIELD.placementAttempts; attempt += 1) {
+    scatterSpecies(species, count, scatter.nextRandom, (prop) =>
+        firstFit(PROP_SCATTER.placementAttempts, () => {
             const spot =
-                field.nextRandom() < settings.trailShoulderRatio
-                    ? proposeTrailShoulder(input, field)
-                    : proposeOpenGround(input.fieldRadius, field);
+                scatter.nextRandom() < settings.trailShoulderRatio
+                    ? proposeTrailShoulder(input, scatter)
+                    : proposeOpenGround(input.fieldRadius, scatter);
 
-            if (
-                placeProp(prop, spot.localX, spot.localZ, settings, field) !==
-                PlacementOutcome.Blocked
-            )
-                break;
-        }
-    }
+            return placeUnlessBlocked(prop, spot.localX, spot.localZ, settings, scatter);
+        })
+    );
 }
 
-function proposeTrailShoulder(input: IPropFieldInput, field: IFieldContext): IGroundSpot {
-    const lane = input.lanes[Math.floor(field.nextRandom() * input.lanes.length)];
-    if (!lane) return proposeOpenGround(input.fieldRadius, field);
+function proposeTrailShoulder(input: IPropFieldInput, scatter: IPropScatterContext): IGroundSpot {
+    const lane = pickRandom(input.lanes, scatter.nextRandom);
 
-    const spanX = lane.toX - lane.fromX;
-    const spanZ = lane.toZ - lane.fromZ;
-    const spanLength = Math.hypot(spanX, spanZ);
-    if (spanLength === 0) return proposeOpenGround(input.fieldRadius, field);
+    const { acrossX, acrossZ, length } = segmentFrame(lane.fromX, lane.fromZ, lane.toX, lane.toZ);
+    if (length === 0) return proposeOpenGround(input.fieldRadius, scatter);
 
-    const alongRatio = field.nextRandom();
-    const side = field.nextRandom() < 0.5 ? -1 : 1;
-    const [nearShoulder] = PROP_FIELD.debris.shoulderOffsetRatio;
+    const alongRatio = scatter.nextRandom();
+    const side = scatter.nextRandom() < 0.5 ? -1 : 1;
     const baseDistance = Math.max(
-        lane.halfWidth * (1 + nearShoulder),
-        PROP_FIELD.softEdges.trailClearance + 0.8
+        lane.halfWidth * (1 + PROP_SCATTER.debris.shoulderOffsetRatio),
+        PROP_SCATTER.softEdges.trailClearance + 0.8
     );
-    const lateralDistance = baseDistance + lerp(0, 2.5, field.nextRandom());
+    const lateralDistance = baseDistance + lerp(0, 2.5, scatter.nextRandom());
 
     return {
-        localX: lane.fromX + spanX * alongRatio + (-spanZ / spanLength) * side * lateralDistance,
-        localZ: lane.fromZ + spanZ * alongRatio + (spanX / spanLength) * side * lateralDistance,
+        localX: lerp(lane.fromX, lane.toX, alongRatio) + acrossX * side * lateralDistance,
+        localZ: lerp(lane.fromZ, lane.toZ, alongRatio) + acrossZ * side * lateralDistance,
     };
 }
 
-function proposeOpenGround(fieldRadius: number, field: IFieldContext): IGroundSpot {
-    const angle = field.nextRandom() * FULL_TURN;
-    const distance = Math.sqrt(field.nextRandom()) * fieldRadius;
+function proposeOpenGround(fieldRadius: number, scatter: IPropScatterContext): IGroundSpot {
+    const [localX, localZ] = randomPointInDisc(scatter.nextRandom, fieldRadius);
 
-    return { localX: Math.cos(angle) * distance, localZ: Math.sin(angle) * distance };
-}
-
-interface IGroundSpot {
-    localX: number;
-    localZ: number;
+    return { localX, localZ };
 }
 
 export function scatterDistantTreeline(
     input: IPropFieldInput,
     canopySpecies: IThemeProp[],
-    field: IFieldContext
+    scatter: IPropScatterContext
 ): void {
     if (canopySpecies.length === 0) return;
 
-    const settings = PROP_FIELD.distantTreeline;
+    const settings = PROP_SCATTER.distantTreeline;
     const noise = new FractalNoise(input.seed + 71);
-    const spacing = settings.candidateSpacing;
-    const cellsFromCentre = Math.ceil(input.fieldRadius / spacing);
     const outerReach = settings.innerReach + settings.extraReach;
     const biomeNoise = new FractalNoise(input.seed + 59);
     const canopyByFamily = groupByFamily(canopySpecies);
     const canopyFamilies = Array.from(canopyByFamily.keys());
 
-    for (let row = -cellsFromCentre; row <= cellsFromCentre; row += 1) {
-        for (let column = -cellsFromCentre; column <= cellsFromCentre; column += 1) {
-            const localX = (column + field.nextRandom() - 0.5) * spacing;
-            const localZ = (row + field.nextRandom() - 0.5) * spacing;
+    forEachJitteredCandidate(
+        input.fieldRadius,
+        settings.candidateSpacing,
+        scatter.nextRandom,
+        (localX, localZ) => {
+            const sample = scatter.sampleGrid.sampleAt(localX, localZ, scatter.scratchSample);
 
-            if (Math.hypot(localX, localZ) > input.fieldRadius) continue;
-
-            const sample = field.heightMap.sampleAt(localX, localZ, field.heightSample);
-
-            if (sample.footprintDistance <= settings.innerReach) continue;
-            if (sample.footprintDistance > outerReach) continue;
-            if (sample.waterDepth > -WATER_CHANNEL.propBankMargin) continue;
-            if (sample.steepness > settings.slopeLimit) continue;
+            if (sample.footprintDistance <= settings.innerReach) return;
+            if (sample.footprintDistance > outerReach) return;
+            if (sample.waterDepth > -WATER_CHANNEL.propBankMargin) return;
+            if (sample.steepness > settings.slopeLimit) return;
 
             const bandRatio = clamp(
                 (sample.footprintDistance - settings.innerReach) / settings.extraReach,
@@ -514,31 +489,51 @@ export function scatterDistantTreeline(
                 2,
                 0.5
             );
-            if (roll > density) continue;
+            if (roll > density) return;
 
             const family = dominantFamilyAt(
                 localX,
                 localZ,
                 canopyFamilies,
                 biomeNoise,
-                field.nextRandom
+                scatter.nextRandom
             );
-            const prop = pickSpecies(canopyByFamily.get(family) ?? canopySpecies, field.nextRandom);
-            if (!prop) continue;
+            const prop = pickRandomOrNull(
+                canopyByFamily.get(family) ?? canopySpecies,
+                scatter.nextRandom
+            );
+            if (!prop) return;
 
-            const scale =
-                scaleBetween(prop.scaleRange, field.nextRandom()) *
-                lerp(settings.scaleBoost[0], settings.scaleBoost[1], field.nextRandom());
+            const scale = rollPropScale(prop, settings.scaleBoost, scatter.nextRandom);
 
-            field.collector.add(
+            scatter.collector.add(
                 prop,
                 false,
-                field.center[0] + localX,
-                sample.elevation - PROP_FIELD.groundBite,
-                field.center[2] + localZ,
-                field.nextRandom() * FULL_TURN,
+                scatter.center[0] + localX,
+                sample.elevation - PROP_SCATTER.sinkIntoGround,
+                scatter.center[2] + localZ,
+                scatter.nextRandom() * FULL_TURN,
                 scale
             );
+        }
+    );
+}
+
+function forEachJitteredCandidate(
+    fieldRadius: number,
+    spacing: number,
+    nextRandom: RandomSource,
+    visit: (localX: number, localZ: number) => void
+): void {
+    const cellsFromCentre = Math.ceil(fieldRadius / spacing);
+
+    for (let row = -cellsFromCentre; row <= cellsFromCentre; row += 1) {
+        for (let column = -cellsFromCentre; column <= cellsFromCentre; column += 1) {
+            const localX = (column + nextRandom() - 0.5) * spacing;
+            const localZ = (row + nextRandom() - 0.5) * spacing;
+
+            if (Math.hypot(localX, localZ) > fieldRadius) continue;
+            visit(localX, localZ);
         }
     }
 }

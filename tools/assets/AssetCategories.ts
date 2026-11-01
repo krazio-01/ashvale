@@ -3,27 +3,20 @@ import path from "node:path";
 import type { Document, NodeIO } from "@gltf-transform/core";
 import { KHRMaterialsEmissiveStrength } from "@gltf-transform/extensions";
 import { prune } from "@gltf-transform/functions";
-import {
-    Blender,
-    PIPELINE_CONFIG,
-    PipelineCommand,
-    assertExists,
-    formatMegabytes,
-    isWithin,
-} from "../pipeline";
+import { Blender, PIPELINE_CONFIG, assertExists, formatMegabytes, isWithin } from "../pipeline";
+import { CLIP_BAKE_FILES } from "../clips/combatClipManifest";
 import { ASSET_PIPELINES } from "./AssetBuilds";
 import { createGltfIo } from "./AssetFormats";
 import { AssetManifest } from "./AssetManifest";
-import { resolveTuning } from "./PipelineTuning";
 
-export interface IAssetCategoryOptions {
+interface IAssetCategoryOptions {
     name: string;
     budgetMegabytes: number;
     compressesGeometry?: boolean;
     fileBudgetsMegabytes?: Readonly<Record<string, number>>;
 }
 
-export abstract class AssetCategory {
+class AssetCategory {
     readonly name: string;
     readonly budgetMegabytes: number;
     readonly compressesGeometry: boolean;
@@ -67,9 +60,7 @@ export abstract class AssetCategory {
     }
 }
 
-export class EnvironmentCategory extends AssetCategory {}
-
-export class CharacterCategory extends AssetCategory {
+class CharacterCategory extends AssetCategory {
     override maxTextureSizeFor(relativePath: string): number {
         return (
             AssetManifest.findCharacterOwningFile(path.basename(relativePath))?.textureSize ??
@@ -128,7 +119,7 @@ export class CharacterCategory extends AssetCategory {
     private async importCreature(io: NodeIO, sourceFile: string): Promise<void> {
         const name = path.basename(sourceFile, ".glb");
         const document = await io.read(sourceFile);
-        this.stripUnshadedTextures(document);
+        this.stripNonColourTextures(document);
         await document.transform(prune());
         this.assignTextureUris(document, name);
 
@@ -143,7 +134,7 @@ export class CharacterCategory extends AssetCategory {
         );
     }
 
-    private stripUnshadedTextures(document: Document): void {
+    private stripNonColourTextures(document: Document): void {
         for (const material of document.getRoot().listMaterials()) {
             material.setMetallicRoughnessTexture(null);
             material.setOcclusionTexture(null);
@@ -171,8 +162,9 @@ export class CharacterCategory extends AssetCategory {
     }
 }
 
-export class WeaponCategory extends AssetCategory {
+class WeaponCategory extends AssetCategory {
     private static readonly TRIANGLES_FLAG = "--triangles";
+    private static readonly DEFAULT_TRIANGLES = 15000;
 
     override get importUsage(): string {
         return (
@@ -196,19 +188,23 @@ export class WeaponCategory extends AssetCategory {
             flagIndex >= 0
                 ? Number(args[flagIndex + 1])
                 : isSingleModel
-                  ? resolveTuning("player", undefined).weapons.triangles
+                  ? WeaponCategory.DEFAULT_TRIANGLES
                   : undefined;
-        if (triangleBudget !== undefined && !(Number.isInteger(triangleBudget) && triangleBudget > 0))
+        if (
+            triangleBudget !== undefined &&
+            !(Number.isInteger(triangleBudget) && triangleBudget > 0)
+        )
             throw new Error(`${WeaponCategory.TRIANGLES_FLAG} needs a whole number above 0`);
 
         fs.mkdirSync(this.sourceDirectory, { recursive: true });
         new Blender().runScript(
-            PIPELINE_CONFIG.blender.script,
             [
                 "split-weapons",
                 path.resolve(packFile),
                 path.resolve(this.sourceDirectory),
-                ...(triangleBudget === undefined ? [] : [WeaponCategory.TRIANGLES_FLAG, String(triangleBudget)]),
+                ...(triangleBudget === undefined
+                    ? []
+                    : [WeaponCategory.TRIANGLES_FLAG, String(triangleBudget)]),
                 ...renames,
             ],
             ["MESH", "EXPORTED"]
@@ -216,71 +212,28 @@ export class WeaponCategory extends AssetCategory {
     }
 }
 
-export class AssetCatalogue {
-    private readonly categoriesByName: ReadonlyMap<string, AssetCategory>;
+export const assetCategory = (name: string): AssetCategory => {
+    const category = CATEGORIES_BY_NAME.get(name);
+    if (!category)
+        throw new Error(
+            `no asset category "${name}"; register it in tools/assets/AssetCategories.ts ` +
+                `(known: ${[...CATEGORIES_BY_NAME.keys()].join(", ")})`
+        );
+    return category;
+};
 
-    constructor(categories: readonly AssetCategory[]) {
-        const categoriesByName = new Map<string, AssetCategory>();
-        for (const category of categories) {
-            if (categoriesByName.has(category.name))
-                throw new Error(`asset category ${category.name} is registered twice`);
-            categoriesByName.set(category.name, category);
-        }
-        this.categoriesByName = categoriesByName;
-    }
-
-    get categories(): AssetCategory[] {
-        return [...this.categoriesByName.values()];
-    }
-
-    find(name: string): AssetCategory | undefined {
-        return this.categoriesByName.get(name);
-    }
-
-    get(name: string): AssetCategory {
-        const category = this.find(name);
-        if (!category)
-            throw new Error(
-                `no asset category "${name}"; register it in tools/assets/AssetCategories.ts ` +
-                    `(known: ${[...this.categoriesByName.keys()].join(", ")})`
-            );
-        return category;
-    }
-
-    ownerOfSourceFile(sourceFile: string): AssetCategory {
-        return this.get(path.relative(PIPELINE_CONFIG.sourceRoot, sourceFile).split(path.sep)[0]);
-    }
-}
-
-export const ASSET_CATALOGUE = new AssetCatalogue([
+export const ASSET_CATEGORIES: readonly AssetCategory[] = [
     new CharacterCategory({
         name: "characters",
-        budgetMegabytes: 24,
+        budgetMegabytes: 32,
         compressesGeometry: false,
-        fileBudgetsMegabytes: { "CombatClips.glb": 6 },
+        fileBudgetsMegabytes: { [path.basename(CLIP_BAKE_FILES.output)]: 6 },
     }),
     new WeaponCategory({ name: "weapons", budgetMegabytes: 6 }),
-    new EnvironmentCategory({ name: "woodland", budgetMegabytes: 10 }),
-    new EnvironmentCategory({ name: "medieval-village", budgetMegabytes: 8 }),
-    new EnvironmentCategory({ name: "highlands", budgetMegabytes: 6 }),
-    new EnvironmentCategory({ name: "architecture", budgetMegabytes: 4 }),
-]);
+    new AssetCategory({ name: "woodland", budgetMegabytes: 10 }),
+    new AssetCategory({ name: "medieval-village", budgetMegabytes: 8 }),
+    new AssetCategory({ name: "highlands", budgetMegabytes: 6 }),
+    new AssetCategory({ name: "architecture", budgetMegabytes: 4 }),
+];
 
-export class SourceImporter extends PipelineCommand {
-    readonly name = "import";
-    readonly usage = "<category> [category arguments]";
-    readonly summary = "Convert a raw download into glTF-ready source under assets-src/models";
-
-    async run(args: readonly string[]): Promise<void> {
-        const [categoryName, ...categoryArgs] = args;
-        if (!categoryName) {
-            console.log("importable categories:");
-            for (const category of ASSET_CATALOGUE.categories)
-                if (category.importUsage) console.log(`  ${category.name} ${category.importUsage}`);
-            throw new Error("import needs a category");
-        }
-
-        await ASSET_CATALOGUE.get(categoryName).importSource(categoryArgs);
-        console.log("\nnext: npm run cook && npm run verify:assets");
-    }
-}
+const CATEGORIES_BY_NAME = new Map(ASSET_CATEGORIES.map((category) => [category.name, category]));

@@ -1,11 +1,10 @@
-from abc import ABC, abstractmethod
 import hashlib
 import json
 
 import numpy as np
 
-from Geometry import rounded, segment_distance
-from ModelConfig import detected_bodies
+from Geometry import principal_axes, rounded, segment_distance
+from ModelConfig import read_detection
 
 BODY_FIELDS = ("attachBone", "columns", "rows", "feel", "segmentedParts", "clothSeed")
 
@@ -34,7 +33,7 @@ class BodyNamer:
         return name
 
 
-class AnchorResolver:
+class NearestBoneFinder:
     def __init__(self, descriptor, joints):
         chains, tails = descriptor.chains, descriptor.segment_tails
         self.anchors = [
@@ -52,7 +51,7 @@ class AnchorResolver:
             for bone in self.anchors
         }
 
-    def nearest_to_cloud(self, points):
+    def nearest_bone_to_points(self, points):
         distances = [float(segment_distance(points, *self.segments[bone]).mean()) for bone in self.anchors]
         return self.anchors[int(np.argmin(distances))]
 
@@ -61,104 +60,92 @@ class AnchorResolver:
         return self.anchors[int(np.argmin(distances))]
 
 
-class PartDetector(ABC):
-    def __init__(self, settings, namer):
-        self.settings = settings
-        self.namer = namer
+def detect_props(prop_configs, part_points, part_ids, namer):
+    named = [prop["name"] for prop in prop_configs if prop.get("name")]
+    if len(set(named)) != len(named):
+        raise ValueError(f"recipe props repeat a name: {named}")
+    namer.taken.update(named)
+    found = []
+    for prop in prop_configs:
+        parts = sorted(prop["segmentedParts"])
+        points = part_points[np.isin(part_ids, parts)]
+        if len(points) == 0:
+            raise ValueError(f"prop with segmentedParts {parts}: the segmented reference model has no such part")
+        found.append((points.mean(axis=0), parts, prop.get("name"), prop.get("bone")))
+    found.sort(key=lambda entry: -float(entry[0][2]))
+    return [
+        {
+            "name": name or namer.name("prop", centroid),
+            "bone": bone,
+            "anchored": "recipe" if bone else None,
+            "segmentedParts": parts,
+        }
+        for centroid, parts, name, bone in found
+    ]
 
-    @abstractmethod
-    def detect(self, *arguments): ...
 
-
-class PropDetector(PartDetector):
-    def detect(self, prop_configs, part_points, part_ids):
-        named = [prop["name"] for prop in prop_configs if prop.get("name")]
-        if len(set(named)) != len(named):
-            raise ValueError(f"recipe props repeat a name: {named}")
-        self.namer.taken.update(named)
-        found = []
-        for prop in prop_configs:
-            parts = sorted(prop["segmentedParts"])
-            points = part_points[np.isin(part_ids, parts)]
-            if len(points) == 0:
-                raise ValueError(f"prop with segmentedParts {parts}: the segmented reference model has no such part")
-            found.append((points.mean(axis=0), parts, prop.get("name"), prop.get("bone")))
-        found.sort(key=lambda entry: -float(entry[0][2]))
-        return [
+def detect_cloth(settings, namer, centres, areas, thin_face, piece, claimed):
+    tuning = settings.section("detection")
+    minimum_area = tuning.minClothArea * settings.height_scale.scale**2
+    cell = settings.length(tuning.clothCellSize)
+    candidates, accepted = [], []
+    for label in np.unique(piece[thin_face & ~claimed]):
+        members = np.flatnonzero(thin_face & ~claimed & (piece == label))
+        if len(members) < tuning.minClothFaces:
+            continue
+        points = centres[members]
+        area = float(areas[members].sum())
+        entry = {
+            "faces": int(len(members)),
+            "area": round(area, 4),
+            "centroid": rounded(points.mean(axis=0), 3),
+        }
+        if area < minimum_area:
+            entry["decision"] = "rigid: below minClothArea"
+        else:
+            accepted.append((area, points, entry))
+        candidates.append(entry)
+    accepted.sort(key=lambda item: -item[0])
+    for _, _, entry in accepted[tuning.maxPhysicsBodies :]:
+        entry["decision"] = "rigid: over maxPhysicsBodies"
+    kept = sorted(accepted[: tuning.maxPhysicsBodies], key=lambda item: -float(item[1].mean(axis=0)[2]))
+    bodies = []
+    for _, points, entry in kept:
+        centroid = points.mean(axis=0)
+        across = np.array([*principal_axes(points[:, :2])[0], 0.0])
+        width = float(np.ptp((points - centroid) @ across))
+        height = float(np.ptp(points[:, 2]))
+        top = points[points[:, 2] >= np.percentile(points[:, 2], 95)].mean(axis=0)
+        entry["decision"] = "cloth body"
+        bodies.append(
             {
-                "name": name or self.namer.name("prop", centroid),
-                "bone": bone,
-                "anchored": "recipe" if bone else None,
-                "segmentedParts": parts,
+                "name": namer.name("cloth", centroid),
+                "kind": "sheet",
+                "attachBone": None,
+                "anchored": None,
+                "anchorPoint": rounded(top, 4),
+                "clothSeed": rounded(points[int(np.argmin(np.linalg.norm(points - centroid, axis=1)))], 4),
+                "columns": max(2, int(round(width / cell))),
+                "rows": max(2, int(round(height / cell)) + 1),
             }
-            for centroid, parts, name, bone in found
-        ]
-
-
-class ClothDetector(PartDetector):
-    def detect(self, centres, areas, thin_face, piece, claimed):
-        settings, tuning = self.settings, self.settings.section("detection")
-        minimum_area = tuning.minClothArea * settings.proportions.factor**2
-        cell = settings.length(tuning.clothCellSize)
-        candidates, accepted = [], []
-        for label in np.unique(piece[thin_face & ~claimed]):
-            members = np.flatnonzero(thin_face & ~claimed & (piece == label))
-            if len(members) < tuning.minClothFaces:
-                continue
-            points = centres[members]
-            area = float(areas[members].sum())
-            entry = {
-                "faces": int(len(members)),
-                "area": round(area, 4),
-                "centroid": rounded(points.mean(axis=0), 3),
-            }
-            if area < minimum_area:
-                entry["decision"] = "rigid: below minClothArea"
-            else:
-                accepted.append((area, points, entry))
-            candidates.append(entry)
-        accepted.sort(key=lambda item: -item[0])
-        for _, _, entry in accepted[tuning.maxPhysicsBodies :]:
-            entry["decision"] = "rigid: over maxPhysicsBodies"
-        kept = sorted(accepted[: tuning.maxPhysicsBodies], key=lambda item: -float(item[1].mean(axis=0)[2]))
-        bodies = []
-        for _, points, entry in kept:
-            centroid = points.mean(axis=0)
-            flat = points[:, :2] - centroid[:2]
-            across = np.array([*np.linalg.eigh(np.cov(flat.T))[1][:, -1], 0.0])
-            width = float(np.ptp((points - centroid) @ across))
-            height = float(np.ptp(points[:, 2]))
-            top = points[points[:, 2] >= np.percentile(points[:, 2], 95)].mean(axis=0)
-            entry["decision"] = "cloth body"
-            bodies.append(
-                {
-                    "name": self.namer.name("cloth", centroid),
-                    "kind": "sheet",
-                    "attachBone": None,
-                    "anchored": None,
-                    "anchorPoint": rounded(top, 4),
-                    "clothSeed": rounded(points[int(np.argmin(np.linalg.norm(points - centroid, axis=1)))], 4),
-                    "columns": max(2, int(round(width / cell))),
-                    "rows": max(2, int(round(height / cell)) + 1),
-                }
-            )
-        return bodies, candidates
+        )
+    return bodies, candidates
 
 
 def resolve_anchors(descriptor, joints, detection, part_points, part_ids):
     if not detection["props"] and not detection["physics"]:
         return detection
-    resolver = AnchorResolver(descriptor, joints)
+    resolver = NearestBoneFinder(descriptor, joints)
     for prop in detection["props"]:
         if prop.get("anchored") is None:
-            prop["bone"] = resolver.nearest_to_cloud(part_points[np.isin(part_ids, prop["segmentedParts"])])
+            prop["bone"] = resolver.nearest_bone_to_points(part_points[np.isin(part_ids, prop["segmentedParts"])])
     for body in detection["physics"]:
         if body.get("anchored") is None:
             body["attachBone"] = resolver.nearest_to_point(np.array(body["anchorPoint"]))
     return detection
 
 
-def detection_stamp(config):
+def detection_inputs_hash(config):
     payload = {
         "props": config["props"],
         "overrides": config["overrides"],
@@ -169,8 +156,8 @@ def detection_stamp(config):
 
 
 def assert_detection_current(config, work):
-    detection = detected_bodies(work)
-    if detection["stamp"] != detection_stamp(config):
+    detection = read_detection(work)
+    if detection["stamp"] != detection_inputs_hash(config):
         raise ValueError(
             "props, overrides or the detection and prepare tuning changed since the prepare stage: rerun from prepare"
         )

@@ -1,22 +1,14 @@
 import "server-only";
 import { Model, Schema, model, models } from "mongoose";
-import { IRealmChapter } from "@/types/realm";
+import type { IFeaturedRealm, IResolvedRealm } from "@/types/realm";
 
 export const CACHE_BUST_COUNTER = 1;
 
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 
-interface IRealm {
-    repositoryOwner: string;
-    repositoryName: string;
-    repositoryFullName: string;
+interface IRealm extends IResolvedRealm, IFeaturedRealm {
     headCommitSha: string;
     cacheBustCounter: number;
-    generationSeed: number;
-    starCount: number;
-    primaryLanguage: string | null;
-    totalCommitCount: number;
-    chapters: IRealmChapter[];
     isFeatured: boolean;
     createdAt: Date;
     updatedAt: Date;

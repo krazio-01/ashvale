@@ -1,8 +1,49 @@
+import type { IModelPack } from "@/types/world";
+import { range } from "@/lib/helpers";
 export const VIEW_DISTANCE = 700;
+
+export const CHAPTER_SEED_OFFSETS = {
+    corridors: 17,
+    waterCourses: 29,
+    settlement: 4,
+    props: 3,
+    perSettledRegion: 101,
+};
+
+export const FOLIAGE_LAYER = 1;
+
+export const WIND = {
+    heading: 0.95,
+    bendSpread: 1.1,
+    waveLength: 14,
+    waveSpeed: 1.1,
+    sway: 0.45,
+    flutter: 0.15,
+    flutterSpeed: 5.5,
+};
 
 export const SCALE = {
     unitsPerMetre: 2,
 };
+
+export const MODEL_PACKS = {
+    woodland: { pack: "woodland", directory: "/models/woodland", unitScale: 1 },
+    highlands: {
+        pack: "quaternius-stylized-nature",
+        directory: "/models/highlands",
+        unitScale: 1,
+    },
+    medievalVillage: {
+        pack: "medieval-village",
+        directory: "/models/medieval-village",
+        unitScale: SCALE.unitsPerMetre,
+    },
+    architecture: {
+        pack: "architecture",
+        directory: "/models/architecture",
+        unitScale: SCALE.unitsPerMetre,
+    },
+} as const satisfies Record<string, IModelPack>;
 
 const TRAIL_HALF_WIDTH = 1.6;
 const TRAIL_WEAR_FALLOFF_WIDTH = 5.5;
@@ -19,12 +60,13 @@ const CHARACTER_LAYER = 0x0002;
 
 export const COLLISION_GROUPS = {
     character: (CHARACTER_LAYER << 16) | WORLD_LAYER,
-    // Query-only mask (never assigned to a collider): must see every layer, unlike `character`, so obstacle rays also detect other characters.
     obstacleProbe: (0xffff << 16) | 0xffff,
     sightLine: (0xffff << 16) | WORLD_LAYER,
 };
 
 export const TERRAIN = {
+    cliffCorridorRise: 1.5,
+    waterCliffClearance: 5,
     targetCellSize: 4,
     minimumResolution: 64,
     maximumResolution: 256,
@@ -34,12 +76,9 @@ export const TERRAIN = {
     corridorStepRatio: 0.5,
     corridorStepFaceWidth: 2,
     climbStyleWeights: [0.6, 0.17, 0.13, 0.1],
-    cliffHoldDistance: 26,
-    cliffReleaseDistance: 70,
     macroSlopeGrainWavelengths: 4,
-    carveColorSharpness: 0.75,
     peakColorSharpness: 0.7,
-    bucketSize: 220,
+    propGroupCellSize: 220,
 };
 
 export const LANDFORM = {
@@ -60,7 +99,7 @@ export const TRAIL = {
     distanceLimit: (TRAIL_HALF_WIDTH + TRAIL_WEAR_FALLOFF_WIDTH) * 2,
 };
 
-export const SOIL_RAMP = {
+export const SOIL_COLOUR_SHIFTS = {
     loam: { hueShift: 0.01, saturationScale: 1, lightnessShift: 0 },
     driedEarth: { hueShift: -0.01, saturationScale: 0.9, lightnessShift: 0.12 },
     dust: { hueShift: -0.015, saturationScale: 0.62, lightnessShift: 0.3 },
@@ -85,7 +124,7 @@ export const GROUND_MATERIAL = {
 };
 
 export const WORLD_EDGE = {
-    groundApron: 24,
+    flatBorderWidth: 24,
     lipWidth: 20,
     dropDepth: 70,
     dropCurve: 2.6,
@@ -95,6 +134,8 @@ export const WORLD_EDGE = {
 };
 
 export const WATER_COURSE = {
+    cliffClearance: 8,
+    cliffBankGap: 3,
     minimumRegionsInCourse: 1,
     minimumPointCount: 6,
     rimOffsetRatio: 0.88,
@@ -108,8 +149,8 @@ export const WATER_COURSE = {
     widthWavelength: 190,
     halfWidthNarrow: 5,
     halfWidthWide: 12,
-    fordHalfWidthRatio: 0.55,
-    fordBedRatio: 0.45,
+    crossingHalfWidthRatio: 0.55,
+    crossingDepthRatio: 0.45,
     waterlineDropBelowGround: 2.6,
     endTaperLength: 26,
     rimSafetyMargin: 4,
@@ -149,10 +190,9 @@ export const WATER_SURFACE = {
     sunSpecularShininess: 140.0,
     sunSpecularIntensity: 0.55,
     skyReflectionStrength: 0.18,
-    seasonTintStrength: 0.35,
 };
 
-export const WATER_WADER = {
+export const WADING_RIPPLES = {
     immersionDepth: 0.35,
     channelGrace: 2,
     ringWavelength: 1.1,
@@ -163,20 +203,66 @@ export const WATER_WADER = {
 };
 
 export const TERRAIN_DETAIL = {
-    textureSize: 384,
-    worldRepeat: 7,
-    grainTileCount: 10,
-    grainStrength: 0.15,
-    blotchTileCount: 3,
-    mudMultiplier: [0.55, 0.48, 0.4],
-    dustMultiplier: [1, 0.94, 0.78],
     grainNoiseHeight: 0.55,
     grainNoiseScale: 0.42,
     rockSlopeStart: 0.32,
     rockSlopeEnd: 0.85,
 };
 
-export const GROUND = {
+export const GROUND_DEPTH_SHADE = {
     depthShadeStep: 0.05,
     minimumDepthShade: 0.72,
+};
+
+export const RENDER = {
+    pixelRatioRange: range(1, 1.5),
+    multisampling: 0,
+    maximumFrameDeltaSeconds: 0.1,
+};
+
+export const SHADING = {
+    toonShadingSteps: 6,
+};
+
+export const LIGHT = {
+    sunLightDistance: 60,
+    backLightDistance: 40,
+    rimElevation: 0.45,
+    shadowMapSize: 2048,
+    shadowBias: -0.0006,
+    shadowExtent: 60,
+    shadowFar: 200,
+};
+
+export const ATMOSPHERE = {
+    skyRadius: 650,
+    middleAltitude: 0.32,
+    skyDitherStrength: 0.6,
+    hazeBaseHeight: 0,
+    hazeHeightFadeRate: 0.022,
+    hazeHeightInfluence: 0.75,
+    sunGlowStrength: 0.5,
+    sunGlowFalloff: 4,
+    seasonalSunElevationRange: range(0.15, 1.3),
+};
+
+export const POST_PROCESSING = {
+    exposure: 1.15,
+    bloomIntensity: 0.55,
+    bloomThreshold: 0.68,
+    bloomSmoothing: 0.35,
+    bloomRadius: 0.72,
+    saturationBoost: 0.24,
+    brightnessLift: 0.02,
+    contrastBoost: 0.16,
+};
+
+export const OUTLINE = {
+    thickness: 1,
+    edgeThreshold: 0.012,
+    fadeStartDistance: 26,
+    fadeEndDistance: 70,
+    foliageFadeStartDistance: 9,
+    foliageFadeEndDistance: 28,
+    opacity: 0.68,
 };

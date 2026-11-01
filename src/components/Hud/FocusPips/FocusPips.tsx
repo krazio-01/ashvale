@@ -2,22 +2,17 @@
 import { useRef } from "react";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
 import { PLAYER_VITALS } from "@/constants/player";
-import { roundForStyle } from "@/lib/hud";
+import { roundForCss, hudWriter } from "@/lib/hud";
 import "./focusPips.scss";
+import { clamp } from "@/lib/helpers";
 
 export const FocusPips = () => {
     const fillRefs = useRef<(HTMLSpanElement | null)[]>([]);
-    const applied = useRef<number[]>([]);
 
     useAnimationFrame(({ hud: { frame } }) => {
         for (let index = 0; index < PLAYER_VITALS.maxFocus; index += 1) {
-            const fill = Math.min(1, Math.max(0, frame.focus.current - index));
-            const rounded = roundForStyle(fill);
-            if (applied.current[index] === rounded) continue;
-
-            applied.current[index] = rounded;
-            const element = fillRefs.current[index];
-            if (element) element.style.transform = `scaleY(${rounded})`;
+            const fill = clamp(frame.meters.focus.current - index, 0, 1);
+            hudWriter.scale(fillRefs.current[index], "Y", roundForCss(fill));
         }
     });
 

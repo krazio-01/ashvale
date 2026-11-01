@@ -1,5 +1,6 @@
 "use client";
-import { useStore } from "@/hooks/useStore";
+import { useStoreState } from "@/hooks/useStoreState";
+import { store } from "@/store/store";
 import { VitalBar } from "@/components/Hud/VitalBar/VitalBar";
 import { AlertMarkers } from "@/components/Hud/AlertMarkers/AlertMarkers";
 import { DamageVignette } from "@/components/Hud/DamageVignette/DamageVignette";
@@ -7,11 +8,11 @@ import { DamageNumbers } from "@/components/Hud/DamageNumbers/DamageNumbers";
 import { FinisherPrompt } from "@/components/Hud/FinisherPrompt/FinisherPrompt";
 import { FocusPips } from "@/components/Hud/FocusPips/FocusPips";
 import { TargetBar } from "@/components/Hud/TargetBar/TargetBar";
-import { HUD_VITALS } from "@/constants/presentation";
+import { HUD_VITALS } from "@/constants/ui";
 import "./hud.scss";
 
 export const Hud = () => {
-    const isPlayerAlive = useStore((state) => state.hud.isPlayerAlive);
+    const isPlayerAlive = useStoreState(store, (state) => state.hud.isPlayerAlive);
 
     return (
         <div className="hud" data-dead={!isPlayerAlive}>

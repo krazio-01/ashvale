@@ -1,4 +1,4 @@
-import { SHADING } from "@/constants/rendering";
+import { SHADING } from "@/constants/world";
 import {
     DataTexture,
     MeshStandardMaterial,
@@ -63,13 +63,13 @@ export class MaterialLibrary {
     }
 
     private buildGradientMap(): DataTexture {
-        const brightnessSteps = new Uint8Array(SHADING.gradientSteps);
+        const brightnessSteps = new Uint8Array(SHADING.toonShadingSteps);
 
-        for (let step = 0; step < SHADING.gradientSteps; step += 1) {
-            brightnessSteps[step] = ((step + 1) / SHADING.gradientSteps) * 255;
+        for (let step = 0; step < SHADING.toonShadingSteps; step += 1) {
+            brightnessSteps[step] = ((step + 1) / SHADING.toonShadingSteps) * 255;
         }
 
-        const texture = new DataTexture(brightnessSteps, SHADING.gradientSteps, 1, RedFormat);
+        const texture = new DataTexture(brightnessSteps, SHADING.toonShadingSteps, 1, RedFormat);
         texture.minFilter = NearestFilter;
         texture.magFilter = NearestFilter;
         texture.generateMipmaps = false;

@@ -1,7 +1,7 @@
-import type { Vector3Tuple } from "three";
-import { PropLayer, type IPropGroup, type IThemeManifest, type IThemeProp } from "@/types/theme";
-import { createGridSample, type TerrainSampleGrid } from "@/world/terrain/TerrainGeneration";
-import { PropOccupancy, PropCollector } from "@/world/props/PropFieldState";
+import type { ISpeciesByLayer, IPropFieldInput } from "@/types/world";
+import { type IPropGroup, type IThemeProp } from "@/types/world";
+import { createGridSample } from "@/world/terrain/TerrainGeneration";
+import { PropOccupancy, PropCollector } from "@/world/props/PropPlacement";
 import {
     fillClump,
     scatterDebris,
@@ -10,13 +10,12 @@ import {
     seedClumps,
 } from "@/world/props/PropScatter";
 import { decorateWaterCourse } from "@/world/props/WaterEdgeDecor";
-import type { IFieldContext } from "@/world/props/PropPlacement";
-import type { IWaterCourse } from "@/world/water/WaterCourse";
-import { PROP_FIELD } from "@/constants/placement";
+import type { IPropScatterContext } from "@/world/props/PropPlacement";
+import { PROP_SCATTER } from "@/constants/placement";
 import { createSeededRandom } from "@/lib/helpers";
 
 interface IPropFieldResult {
-    buckets: IPropGroup[][];
+    chunks: IPropGroup[][];
     occupancy: PropOccupancy;
 }
 
@@ -24,33 +23,33 @@ export function buildPropField(input: IPropFieldInput): IPropFieldResult {
     const nextRandom = createSeededRandom(input.seed);
     const speciesByLayer = groupSpeciesByLayer(input.manifest.props);
 
-    const field: IFieldContext = {
-        heightMap: input.heightMap,
+    const scatter: IPropScatterContext = {
+        sampleGrid: input.sampleGrid,
         center: input.center,
-        occupancy: new PropOccupancy(input.fieldRadius, PROP_FIELD.occupancyCellSize),
+        occupancy: new PropOccupancy(input.fieldRadius, PROP_SCATTER.occupancyCellSize),
         collector: new PropCollector(),
-        heightSample: createGridSample(),
-        remainingColliderBudget: PROP_FIELD.collidingPropBudget,
+        scratchSample: createGridSample(),
+        remainingColliderBudget: PROP_SCATTER.collidingPropBudget,
         nextRandom,
         clutterSpecies: speciesByLayer.groundcover,
     };
 
-    reserveGameplayZones(field, input);
-    reserveExtraZones(field, input);
+    reserveGameplayZones(scatter, input);
+    reserveSettlementZones(scatter, input);
 
     for (const course of input.waterCourses ?? [])
-        decorateWaterCourse(course, speciesByLayer, field);
+        decorateWaterCourse(course, speciesByLayer, scatter);
 
-    for (const clump of seedClumps(input, speciesByLayer, nextRandom)) fillClump(clump, field);
+    for (const clump of seedClumps(input, speciesByLayer, nextRandom)) fillClump(clump, scatter);
 
-    scatterGroundcoverPatches(input, speciesByLayer.groundcover, field);
-    scatterDebris(input, speciesByLayer.debris, field);
-    scatterDistantTreeline(input, speciesByLayer.canopy, field);
+    scatterGroundcoverPatches(input, speciesByLayer.groundcover, scatter);
+    scatterDebris(input, speciesByLayer.debris, scatter);
+    scatterDistantTreeline(input, speciesByLayer.canopy, scatter);
 
-    const [fieldCenterX, , fieldCenterZ] = field.center;
+    const [fieldCenterX, , fieldCenterZ] = scatter.center;
 
-    for (const placement of input.extraPlacements ?? [])
-        field.collector.add(
+    for (const placement of input.settlement?.placements ?? [])
+        scatter.collector.add(
             placement.prop,
             placement.hasCollider,
             fieldCenterX + placement.localX,
@@ -60,30 +59,31 @@ export function buildPropField(input: IPropFieldInput): IPropFieldResult {
             placement.scale
         );
 
-    return { buckets: field.collector.toBuckets(), occupancy: field.occupancy };
+    return { chunks: scatter.collector.toChunks(), occupancy: scatter.occupancy };
 }
 
-function reserveExtraZones(field: IFieldContext, input: IPropFieldInput): void {
-    const extra = input.extraReservations;
-    if (!extra) return;
+function reserveSettlementZones(scatter: IPropScatterContext, input: IPropFieldInput): void {
+    const settlement = input.settlement;
+    if (!settlement) return;
 
-    for (const disc of extra.discs) field.occupancy.reserve(disc.localX, disc.localZ, disc.radius);
+    for (const disc of settlement.keepOutDiscs)
+        scatter.occupancy.reserve(disc.localX, disc.localZ, disc.radius);
 
-    for (const lane of extra.lanes)
-        field.occupancy.reserveLane(lane.fromX, lane.fromZ, lane.toX, lane.toZ, lane.halfWidth);
+    for (const lane of settlement.keepOutLanes)
+        scatter.occupancy.reserveLane(lane.fromX, lane.fromZ, lane.toX, lane.toZ, lane.halfWidth);
 }
 
-function reserveGameplayZones(field: IFieldContext, input: IPropFieldInput): void {
-    const { combatArenaRatio, laneClearanceRatio, chapterSpawnClearance } = PROP_FIELD.keepOut;
+function reserveGameplayZones(scatter: IPropScatterContext, input: IPropFieldInput): void {
+    const { combatArenaRatio, laneClearanceRatio, chapterSpawnClearance } = PROP_SCATTER.keepOut;
 
     for (const site of input.sites) {
         const shortestSpan = Math.min(site.halfWidth, site.halfDepth) * 2;
 
-        field.occupancy.reserve(site.centerX, site.centerZ, shortestSpan * combatArenaRatio);
+        scatter.occupancy.reserve(site.centerX, site.centerZ, shortestSpan * combatArenaRatio);
     }
 
     for (const lane of input.lanes)
-        field.occupancy.reserveLane(
+        scatter.occupancy.reserveLane(
             lane.fromX,
             lane.fromZ,
             lane.toX,
@@ -92,7 +92,7 @@ function reserveGameplayZones(field: IFieldContext, input: IPropFieldInput): voi
         );
 
     for (const point of input.chapterSpawnPoints)
-        field.occupancy.reserve(point[0], point[1], chapterSpawnClearance);
+        scatter.occupancy.reserve(point[0], point[1], chapterSpawnClearance);
 }
 
 function groupSpeciesByLayer(props: IThemeProp[]): ISpeciesByLayer {
@@ -105,67 +105,8 @@ function groupSpeciesByLayer(props: IThemeProp[]): ISpeciesByLayer {
     };
 
     for (const prop of props) {
-        if (prop.layer === PropLayer.Canopy) speciesByLayer.canopy.push(prop);
-        else if (prop.layer === PropLayer.Rock) speciesByLayer.rock.push(prop);
-        else if (prop.layer === PropLayer.Understory) speciesByLayer.understory.push(prop);
-        else if (prop.layer === PropLayer.Groundcover) speciesByLayer.groundcover.push(prop);
-        else speciesByLayer.debris.push(prop);
+        speciesByLayer[prop.layer].push(prop);
     }
 
     return speciesByLayer;
-}
-
-export interface IPropFieldInput {
-    manifest: IThemeManifest;
-    heightMap: TerrainSampleGrid;
-    sites: IRegionSite[];
-    lanes: ICorridorLane[];
-    chapterSpawnPoints: [number, number][];
-    center: Vector3Tuple;
-    fieldRadius: number;
-    seed: number;
-    waterCourses?: IWaterCourse[] | null;
-    extraReservations?: { discs: IExtraReservationDisc[]; lanes: ICorridorLane[] };
-    extraPlacements?: IExtraPlacement[];
-}
-
-interface IExtraReservationDisc {
-    localX: number;
-    localZ: number;
-    radius: number;
-}
-
-interface IExtraPlacement {
-    prop: IThemeProp;
-    hasCollider: boolean;
-    localX: number;
-    localZ: number;
-    elevation: number;
-    rotationY: number;
-    scale: number;
-}
-
-export interface IRegionSite {
-    centerX: number;
-    centerZ: number;
-    halfWidth: number;
-    halfDepth: number;
-    fileCount: number;
-    floorElevation: number;
-}
-
-export interface ICorridorLane {
-    fromX: number;
-    fromZ: number;
-    toX: number;
-    toZ: number;
-    halfWidth: number;
-}
-
-export interface ISpeciesByLayer {
-    canopy: IThemeProp[];
-    rock: IThemeProp[];
-    understory: IThemeProp[];
-    groundcover: IThemeProp[];
-    debris: IThemeProp[];
 }

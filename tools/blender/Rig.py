@@ -58,7 +58,7 @@ KEVIN_BODY = {
 KEVIN_FINGER_NAMES = {"index": "indexFinger", "middle": "middleFinger", "ring": "ringFinger", "pinky": "pinky", "thumb": "thumb"}
 KEVIN_FINGERS = finger_map("L", "R", lambda side, finger, joint: f"B-{KEVIN_FINGER_NAMES[finger]}0{joint}.{side}")
 
-RIG_MAPS = {
+SOURCE_TO_TARGET_BONE_MAPS = {
     "ue": {**UE_BODY, **UE_FINGERS},
     "manny": {**{source: target for source, target in MANNY_BODY.items() if target}, **UE_FINGERS},
     "motus": {**HUMANIK_BODY, **HUMANIK_FINGERS},
@@ -70,7 +70,7 @@ RIG_MAPS = {
 }
 IDENTITY_RIGS = {"ual"}
 
-DIRECTION_CHILD = {
+BONE_AIM_CHILD = {
     "pelvis": "spine_01", "spine_01": "spine_02", "spine_02": "spine_03", "spine_03": "neck_01", "neck_01": "Head",
     "clavicle_l": "upperarm_l", "upperarm_l": "lowerarm_l", "lowerarm_l": "hand_l", "hand_l": "middle_01_l",
     "clavicle_r": "upperarm_r", "upperarm_r": "lowerarm_r", "lowerarm_r": "hand_r", "hand_r": "middle_01_r",
@@ -83,6 +83,10 @@ DIRECTION_CHILD = {
 TWIST_REFERENCE = {"pelvis": ("thigh_r", "thigh_l"), "spine_03": ("upperarm_r", "upperarm_l")}
 
 
+def perpendicular_to(vector, axis):
+    return vector - vector.project(axis)
+
+
 def set_scene_fps(fps):
     bpy.context.scene.render.fps = fps
     bpy.context.scene.render.fps_base = 1
@@ -90,6 +94,15 @@ def set_scene_fps(fps):
 
 def reset_scene():
     bpy.ops.wm.read_factory_settings(use_empty=True)
+
+
+def import_model(path, **fbx_options):
+    before = set(bpy.data.objects)
+    if str(path).lower().endswith((".glb", ".gltf")):
+        bpy.ops.import_scene.gltf(filepath=str(path))
+    else:
+        bpy.ops.import_scene.fbx(filepath=str(path), **fbx_options)
+    return [obj for obj in bpy.data.objects if obj not in before]
 
 
 def armature_among(objects, source_path):
@@ -100,8 +113,7 @@ def armature_among(objects, source_path):
 
 
 def import_target(path):
-    bpy.ops.import_scene.gltf(filepath=path)
-    target = armature_among(bpy.data.objects, path)
+    target = armature_among(import_model(path), path)
     target.name = TARGET_ARMATURE
     for pose_bone in target.pose.bones:
         pose_bone.rotation_mode = "QUATERNION"
@@ -111,15 +123,10 @@ def import_target(path):
 class ImportedArmature:
     def __init__(self, path):
         set_scene_fps(IMPORT_FPS)
-        objects_before = set(bpy.data.objects)
         actions_before = set(bpy.data.actions)
-        if path.lower().endswith((".glb", ".gltf")):
-            bpy.ops.import_scene.gltf(filepath=path)
-        else:
-            bpy.ops.import_scene.fbx(filepath=path, automatic_bone_orientation=False)
+        self.objects = import_model(path, automatic_bone_orientation=False)
         self.fps = bpy.context.scene.render.fps / bpy.context.scene.render.fps_base
         self.path = path
-        self.objects = [obj for obj in bpy.data.objects if obj not in objects_before]
         self.actions = [action for action in bpy.data.actions if action not in actions_before]
         self.armature = armature_among(self.objects, path)
 
@@ -201,7 +208,7 @@ MAX_GROUND_CORRECTION = 0.18
 GROUND_TOLERANCE = 0.005
 
 
-class SoleProbe:
+class FootHeightProbe:
     def __init__(self, target):
         self.meshes = []
         for obj in bpy.data.objects:
@@ -231,7 +238,7 @@ class SoleProbe:
             evaluated.to_mesh_clear()
         return lowest - self.rest_z
 
-    def ground_shift(self, frame_count):
+    def measure_ground_offset(self, frame_count):
         heights = []
         for index in range(frame_count):
             bpy.context.scene.frame_set(index + 1)
@@ -242,8 +249,17 @@ class SoleProbe:
             stance = 0.0
         return stance, [height - stance for height in heights]
 
-    @staticmethod
-    def report(output, stance, grounded):
+    def ground(self, job, lowest_hip_z, rest_hip_z, frame_count, rewrite):
+        output = job["output"]
+        if job.get("grounding") == "none":
+            print(f"GROUND {output} left as authored")
+            return
+        if lowest_hip_z < UPRIGHT_HIP_FRACTION * rest_hip_z:
+            print(f"GROUND {output} skipped, hips drop below {UPRIGHT_HIP_FRACTION:.0%} of standing height")
+            return
+        stance, grounded = self.measure_ground_offset(frame_count)
+        if stance:
+            rewrite(stance)
         print(
             f"GROUND {output} shift={stance * 100:.1f}cm sole mean={sum(grounded) / len(grounded) * 100:.1f}"
             f" lowest={min(grounded) * 100:.1f} highest={max(grounded) * 100:.1f}cm"
@@ -253,21 +269,21 @@ class SoleProbe:
 IK_REACH_LIMIT = 0.9999
 
 
-def rotation_log(rotation):
+def quaternion_to_rotation_vector(rotation):
     return (-rotation if rotation.w < 0.0 else rotation).to_exponential_map()
 
 
-def rotation_exp(vector):
+def rotation_vector_to_quaternion(vector):
     angle = vector.length
     return Quaternion() if angle < 1e-9 else Quaternion(vector / angle, angle)
 
 
-def character_rotation(degrees):
+def character_to_armature_rotation(degrees):
     local = Euler([math.radians(angle) for angle in degrees], "XYZ").to_matrix()
     return (CHARACTER_TO_ARMATURE @ local @ CHARACTER_TO_ARMATURE.inverted()).to_quaternion()
 
 
-def character_vector(values):
+def character_to_armature_vector(values):
     return CHARACTER_TO_ARMATURE @ Vector(values)
 
 
@@ -291,22 +307,15 @@ class Pose:
         )
 
 
-class Skeleton:
+class ArmaturePoseSolver:
     def __init__(self, armature):
         bones = armature.data.bones
         self.order = [bone.name for bone in sorted(bones, key=lambda bone: len(bone.parent_recursive))]
-        self.depth = {name: index for index, name in enumerate(self.order)}
         self.parent = {bone.name: bone.parent.name if bone.parent else None for bone in bones}
         self.rest_relative = {
             bone.name: bone.parent.matrix_local.inverted() @ bone.matrix_local if bone.parent else bone.matrix_local.copy()
             for bone in bones
         }
-
-    def parent_first(self, names):
-        unknown = sorted(set(names) - set(self.depth))
-        if unknown:
-            raise ValueError(f"unknown bones {unknown}")
-        return sorted(names, key=lambda name: self.depth[name])
 
     def matrices(self, pose):
         result = {}
@@ -327,17 +336,16 @@ class Skeleton:
     def local_location(self, name, armature_position, matrices):
         return self.parent_frame(name, matrices).inverted() @ armature_position
 
-    def solve_two_bone(self, pose, chain, target_position, target_rotation):
+    def solve_two_bone(self, pose, chain, target_position, target_rotation, pole=None, reach_limit=IK_REACH_LIMIT):
         upper, lower, end = chain
         matrices = self.matrices(pose)
         root, joint, tip = (matrices[name].translation.copy() for name in chain)
         upper_length = (joint - root).length
         lower_length = (tip - joint).length
         reach = target_position - root
-        distance = max(1e-6, min(reach.length, (upper_length + lower_length) * IK_REACH_LIMIT))
+        distance = max(1e-6, min(reach.length, (upper_length + lower_length) * reach_limit))
         direction = reach.normalized()
-        bend_axis = (tip - root).cross(joint - root)
-        bend_axis -= bend_axis.project(direction)
+        bend_axis = perpendicular_to((tip - root).cross(joint - root) if pole is None else direction.cross(pole), direction)
         if bend_axis.length < 1e-6:
             bend_axis = direction.orthogonal()
         bend_axis.normalize()

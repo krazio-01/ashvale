@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import type { ISkeletonDescriptor, SkeletonSide } from "@/constants/characters";
+import type { ISkeletonDescriptor, SkeletonSide } from "@/types/characters";
 import type { AssetBuild, IBuildRecipe, IDetectionReport } from "./AssetBuilds";
 import type { CharacterJoints, IResolvedCharacterRecipe } from "./AssetManifest";
 
@@ -13,6 +13,7 @@ export const VALIDATION_LIMITS = {
     colliderRadiusMinMetres: 0.02,
     colliderRadiusMaxMetres: 0.35,
     latticeBindMillimetres: 0.5,
+    latticeStretchRatio: 1.1,
 };
 
 interface IGarmentMeasurements {
@@ -80,26 +81,26 @@ export abstract class BuildValidator<TRecipe extends IBuildRecipe, TMeasurements
     ): string[];
 }
 
-const heightFactor = (recipe: IResolvedCharacterRecipe): number =>
-    recipe.heightMetres / recipe.referenceHeightMetres;
-
 export class CharacterValidator extends BuildValidator<
     IResolvedCharacterRecipe,
     ICharacterMeasurements
 > {
+    private static readonly heightFactor = (recipe: IResolvedCharacterRecipe): number =>
+        recipe.heightMetres / recipe.referenceHeightMetres;
+
     protected findFailures(
         build: AssetBuild<IResolvedCharacterRecipe>,
         measurements: ICharacterMeasurements
     ): string[] {
         console.log(`\nValidating over ${measurements.poses} poses`);
-        return [
-            ...this.checkJoints(build),
-            ...this.checkSkeletonFit(measurements),
-            ...this.checkRigidity(measurements),
-            ...this.checkStretch(measurements),
-            ...this.checkPhysics(build, measurements),
-            ...this.checkTriangles(build.recipe, measurements),
-        ];
+        const failures = new Findings();
+        this.checkJoints(build, failures);
+        this.checkSkeletonFit(measurements, failures);
+        this.checkRigidity(measurements, failures);
+        this.checkStretch(measurements, failures);
+        this.checkPhysics(build, measurements, failures);
+        this.checkTriangles(build.recipe, measurements, failures);
+        return failures;
     }
 
     private kneeBendMetres(
@@ -121,15 +122,16 @@ export class CharacterValidator extends BuildValidator<
         return kneeOffset.dot(toesForward) / toesForward.length();
     }
 
-    private checkJoints(build: AssetBuild<IResolvedCharacterRecipe>): string[] {
+    private checkJoints(build: AssetBuild<IResolvedCharacterRecipe>, failures: Findings): void {
         const confirmed = build.recipe.joints;
-        if (!confirmed)
-            return [
+        if (!confirmed) {
+            failures.push(
                 "joints are measured but not confirmed: check them against the character and add " +
-                    "them to tools/assets/AssetManifest.ts",
-            ];
+                    "them to tools/assets/AssetManifest.ts"
+            );
+            return;
+        }
 
-        const failures = new Findings();
         const built = build.readJson<{ final: Record<string, readonly number[]> }>(
             "joints.json"
         ).final;
@@ -147,17 +149,17 @@ export class CharacterValidator extends BuildValidator<
             const bend = this.kneeBendMetres(confirmed.positions, skeleton, side);
             const kneeBone = skeleton.bones.legs[side][1];
             console.log(`  ${kneeBone} bends ${(bend * 100).toFixed(1)} cm toward the toes`);
-            const kneeLimit = VALIDATION_LIMITS.kneeBackwardMetres * heightFactor(build.recipe);
+            const kneeLimit =
+                VALIDATION_LIMITS.kneeBackwardMetres *
+                CharacterValidator.heightFactor(build.recipe);
             failures.failIf(
                 !(bend >= -kneeLimit),
                 `${kneeBone} bend is ${(bend * 100).toFixed(1)} cm toward the toes (limit ${(-kneeLimit * 100).toFixed(1)} cm): the leg is bent backwards or its joints are degenerate`
             );
         }
-        return failures;
     }
 
-    private checkSkeletonFit(measurements: ICharacterMeasurements): string[] {
-        const failures = new Findings();
+    private checkSkeletonFit(measurements: ICharacterMeasurements, failures: Findings): void {
         console.log(`  joint miss ${measurements.jointMissMm.toFixed(3)} mm`);
         failures.failIf(
             measurements.jointMissMm > VALIDATION_LIMITS.jointMissMm,
@@ -170,11 +172,9 @@ export class CharacterValidator extends BuildValidator<
                 `${limb} carries only ${share} of its weight on its own bones (limit ${VALIDATION_LIMITS.limbOwnership})`
             );
         }
-        return failures;
     }
 
-    private checkRigidity(measurements: ICharacterMeasurements): string[] {
-        const failures = new Findings();
+    private checkRigidity(measurements: ICharacterMeasurements, failures: Findings): void {
         for (const [group, { maxMm, rmsMm }] of Object.entries(measurements.rigidity)) {
             console.log(
                 `  rigid ${group.padEnd(18)} max ${maxMm.toFixed(3)} mm  rms ${rmsMm.toFixed(3)} mm`
@@ -189,33 +189,34 @@ export class CharacterValidator extends BuildValidator<
             measurements.seamGapMm > VALIDATION_LIMITS.seamGapMm,
             `UV seams open by ${measurements.seamGapMm} mm (limit ${VALIDATION_LIMITS.seamGapMm} mm)`
         );
-        return failures;
     }
 
-    private checkStretch(measurements: ICharacterMeasurements): string[] {
+    private checkStretch(measurements: ICharacterMeasurements, failures: Findings): void {
         for (const [region, { worst, mean }] of Object.entries(measurements.stretch))
             console.log(`  stretch ${region.padEnd(7)} worst x${worst}  mean x${mean}`);
         const { edges } = measurements;
         console.log(`  edges stretched >3x: ${edges.over3}, >5x: ${edges.over5} of ${edges.total}`);
         console.log(`  edges joining a prop to the body: ${edges.propBoundary}`);
-        return edges.propBoundary > 0
-            ? [
-                  `${edges.propBoundary} mesh edges join a rigid prop to the body: the prop is not detached`,
-              ]
-            : [];
+        failures.failIf(
+            edges.propBoundary > 0,
+            `${edges.propBoundary} mesh edges join a rigid prop to the body: the prop is not detached`
+        );
     }
 
     private checkPhysics(
         build: AssetBuild<IResolvedCharacterRecipe>,
-        measurements: ICharacterMeasurements
-    ): string[] {
+        measurements: ICharacterMeasurements,
+        failures: Findings
+    ): void {
         const detected = build.readJson<IDetectionReport>("detection.json").physics;
         const expectedBodies = detected.length;
-        if (expectedBodies === 0) return [];
+        if (expectedBodies === 0) return;
         const physics = measurements.physics;
-        if (!physics) return ["bodies were detected but measurements.json has no physics section"];
+        if (!physics) {
+            failures.push("bodies were detected but measurements.json has no physics section");
+            return;
+        }
 
-        const failures = new Findings();
         console.log(
             `  physics ${physics.bodies} bodies, ${physics.latticeBones} lattice bones, ${physics.colliders} colliders, ` +
                 `radius ${physics.colliderRadiusMin}-${physics.colliderRadiusMax} m`
@@ -247,30 +248,32 @@ export class CharacterValidator extends BuildValidator<
                     `${body.name} built ${physics.bodyNodes[body.name]} nodes, detection asks for ${body.columns * body.rows}`
                 );
         const minimumRadius =
-            VALIDATION_LIMITS.colliderRadiusMinMetres * heightFactor(build.recipe);
+            VALIDATION_LIMITS.colliderRadiusMinMetres *
+            CharacterValidator.heightFactor(build.recipe);
         const maximumRadius =
-            VALIDATION_LIMITS.colliderRadiusMaxMetres * heightFactor(build.recipe);
+            VALIDATION_LIMITS.colliderRadiusMaxMetres *
+            CharacterValidator.heightFactor(build.recipe);
         failures.failIf(
             physics.colliderRadiusMin < minimumRadius || physics.colliderRadiusMax > maximumRadius,
             `collider radii ${physics.colliderRadiusMin}-${physics.colliderRadiusMax} m are outside ${minimumRadius.toFixed(3)}-${maximumRadius.toFixed(3)} m`
         );
-        failures.push(...this.checkGarment(build, physics));
-        return failures;
+        this.checkGarment(build, physics, failures);
     }
 
     private checkGarment(
         build: AssetBuild<IResolvedCharacterRecipe>,
-        physics: IPhysicsMeasurements
-    ): string[] {
+        physics: IPhysicsMeasurements,
+        failures: Findings
+    ): void {
         const garment = physics.garment;
-        if (!garment) return [];
+        if (!garment) return;
         const { rig, weights } = build.recipe.tuning;
-        const liftLimitMm = weights.garmentLiftLimit * 1000 * heightFactor(build.recipe);
+        const liftLimitMm =
+            weights.garmentLiftLimit * 1000 * CharacterValidator.heightFactor(build.recipe);
         console.log(
             `  garment rim ${garment.rimVertices}, mantle ${garment.mantleVertices}, drape ${garment.drapeVertices}, ` +
                 `detached ${garment.detachedNodes}, drape arm share ${garment.maxDrapeArmShare}, lift ${garment.liftMm} mm (${garment.liftSamples} drape nodes measured)`
         );
-        const failures = new Findings();
         failures.failIf(
             garment.rimVertices > 0 && garment.mantleVertices === 0,
             "the garment covers an open body rim but no vertex was classed as mantle"
@@ -287,7 +290,7 @@ export class CharacterValidator extends BuildValidator<
             garment.liftMm > liftLimitMm,
             `the drape lifts ${garment.liftMm} mm off the body (limit ${liftLimitMm.toFixed(1)} mm)`
         );
-        const scale = heightFactor(build.recipe);
+        const scale = CharacterValidator.heightFactor(build.recipe);
         const spacingLimitMm = build.recipe.tuning.physics.nodeSpacing * 1.25 * 1000 * scale;
         console.log(
             `  garment lattice ${garment.latticeNodes} nodes, spacing ${garment.nodeSpacingMm} mm, ` +
@@ -302,19 +305,20 @@ export class CharacterValidator extends BuildValidator<
             `${garment.uncoveredVertices} driven garment vertices fall outside the lattice`
         );
         failures.failIf(
-            garment.bandStretch > garment.bandStretchRigid * weights.latticeStretchRatio,
-            `the lattice stretches the blend band ${garment.bandStretch}x against ${garment.bandStretchRigid}x for the rigid skin (allowed ratio ${weights.latticeStretchRatio}), which shows as a hinge`
+            garment.bandStretch > garment.bandStretchRigid * VALIDATION_LIMITS.latticeStretchRatio,
+            `the lattice stretches the blend band ${garment.bandStretch}x against ${garment.bandStretchRigid}x for the rigid skin (allowed ratio ${VALIDATION_LIMITS.latticeStretchRatio}), which shows as a hinge`
         );
-        return failures;
     }
 
     private checkTriangles(
         recipe: IResolvedCharacterRecipe,
-        measurements: ICharacterMeasurements
-    ): string[] {
+        measurements: ICharacterMeasurements,
+        failures: Findings
+    ): void {
         const drift = Math.abs(measurements.triangles - recipe.triangles) / recipe.triangles;
-        return drift > VALIDATION_LIMITS.triangleTolerance
-            ? [`${measurements.triangles} triangles, config asks for ${recipe.triangles}`]
-            : [];
+        failures.failIf(
+            drift > VALIDATION_LIMITS.triangleTolerance,
+            `${measurements.triangles} triangles, config asks for ${recipe.triangles}`
+        );
     }
 }

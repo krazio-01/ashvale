@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import dijkstra
+from scipy.spatial.transform import Rotation
 
 BLENDER_TO_GLTF = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]])
 BLENDER_TO_GLTF_4 = np.eye(4)
@@ -30,12 +31,7 @@ def matrices_to_blender(matrices):
 
 
 def quaternion_matrix(quaternion):
-    x, y, z, w = quaternion / np.linalg.norm(quaternion)
-    return np.array([
-        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-    ])
+    return Rotation.from_quat(quaternion).as_matrix()
 
 
 def compose(translation, rotation, scale):
@@ -55,17 +51,22 @@ def segment_distance(points, start, end):
     return np.linalg.norm(points - closest_on_segment(points, start, end), axis=1)
 
 
+def axis_distance(points, centre, axis):
+    offset = points - centre
+    return np.linalg.norm(offset - np.outer(offset @ axis, axis), axis=1)
+
+
 def triangle_areas(positions, corners):
     first, second, third = positions[corners[:, 0]], positions[corners[:, 1]], positions[corners[:, 2]]
     return 0.5 * np.linalg.norm(np.cross(second - first, third - first), axis=1)
 
 
-def smooth_unit(values):
+def smoothstep_unit(values):
     return values * values * (3.0 - 2.0 * values)
 
 
 def smoothstep(edge0, edge1, values):
-    return smooth_unit(np.clip((values - edge0) / (edge1 - edge0), 0.0, 1.0))
+    return smoothstep_unit(np.clip((values - edge0) / (edge1 - edge0), 0.0, 1.0))
 
 
 def face_edges(corners, pairs=((0, 1), (1, 2), (2, 0))):
@@ -76,7 +77,7 @@ def rounded(values, decimals):
     return [round(float(value), decimals) for value in values]
 
 
-def multi_source_distance(edges, lengths, count, sources):
+def graph_distance_to_sources(edges, lengths, count, sources):
     if not len(sources):
         return np.full(count, np.inf), np.full(count, -9999)
     graph = coo_matrix((lengths, (edges[:, 0], edges[:, 1])), shape=(count, count)).tocsr()
@@ -102,7 +103,8 @@ class SkinInfluences:
         np.add.at(dense, (np.arange(len(bone_of))[:, None], bone_of), self.shares)
         return dense
 
+    def blend(self, pose_skin):
+        return np.einsum("nk,nkij->nij", self.shares, matrices_to_blender(pose_skin[self.used])[self.columns])
+
     def deform(self, positions, pose_skin):
-        skinning = matrices_to_blender(pose_skin[self.used])
-        blended = np.einsum("nk,nkij->nij", self.shares, skinning[self.columns])
-        return np.einsum("nij,nj->ni", blended, np.c_[positions, np.ones(len(positions))])[:, :3]
+        return np.einsum("nij,nj->ni", self.blend(pose_skin), np.c_[positions, np.ones(len(positions))])[:, :3]

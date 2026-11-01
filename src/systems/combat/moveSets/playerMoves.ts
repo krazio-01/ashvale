@@ -2,14 +2,13 @@ import { CLIP } from "@/constants/characters";
 import { PARRY, TARGETING } from "@/constants/combat";
 import { ATTACK, DODGE, PLAYER } from "@/constants/player";
 import { WORLD } from "@/constants/world";
-import { metres } from "@/lib/helpers";
+import { metresToUnits } from "@/lib/helpers";
 import {
     clipGripWindow,
     clipMark,
     defineMove,
     SHARED_REACTIONS,
-    uniformParried,
-    WEAPON_HIT_SHAPE,
+    hitWindow,
     type MoveSpec,
 } from "@/systems/combat/moveSets/moveDefinition";
 import type {
@@ -18,7 +17,7 @@ import type {
     IMomentum,
     IMoveDefinition,
     IMoveSet,
-    IWarpWindow,
+    IGapCloseWindow,
     MoveTag,
     ParryTier,
     SwingDirection,
@@ -34,16 +33,27 @@ const EVERYTHING: readonly MoveTag[] = [
     "jump",
     "stance",
 ];
-const SWORD_WARP = { maxDistance: metres(5), strikeDistance: metres(0.45) };
+
+const SWORD_GAP_CLOSE = { maxDistance: metresToUnits(5), strikeDistance: metresToUnits(0.45) };
+
 const SLIDE_GLIDE: IMomentum = { deceleration: PLAYER.height, poseReach: PLAYER.slidePoseReach };
+
 const SLIDE_BRAKE: IMomentum = { ...SLIDE_GLIDE, deceleration: PLAYER.height * 3 };
+
 const SLIDE_FOLLOW_UP = { light: "sword_dash_attack" };
+
 const JUMP_RISE_SECONDS = PLAYER.jumpForce / Math.abs(WORLD.gravity);
+
 const LAND_SECONDS = 0.4;
+
 const PARRY_TIERS: readonly ParryTier[] = ["parry", "perfect"];
+
 const SWING_DIRECTIONS: readonly SwingDirection[] = ["high", "side"];
 
-const PARRY_DEFLECTS: Record<ParryTier, Record<SwingDirection, { id: string; clip: string }>> = {
+export const PARRY_DEFLECTS: Record<
+    ParryTier,
+    Record<SwingDirection, { id: string; clip: string }>
+> = {
     parry: {
         high: { id: "parry_deflect_high", clip: CLIP.parryDeflectHigh },
         side: { id: "parry_deflect_side", clip: CLIP.parryDeflectSide },
@@ -54,157 +64,10 @@ const PARRY_DEFLECTS: Record<ParryTier, Record<SwingDirection, { id: string; cli
     },
 };
 
-export const PARRY_DEFLECT_MOVES: Record<
-    ParryTier,
-    Record<SwingDirection, string>
-> = Object.fromEntries(
-    PARRY_TIERS.map((tier) => [
-        tier,
-        Object.fromEntries(
-            SWING_DIRECTIONS.map((swing) => [swing, PARRY_DEFLECTS[tier][swing].id])
-        ),
-    ])
-) as Record<ParryTier, Record<SwingDirection, string>>;
-
 const STANCE_MOVES = {
     draw: { clip: CLIP.swordDraw, target: "hand" },
     sheathe: { clip: CLIP.swordSheathe, target: "carry" },
 } as const;
-
-function stanceMove(direction: keyof typeof STANCE_MOVES): IMoveDefinition {
-    const { clip, target } = STANCE_MOVES[direction];
-    const fraction = clipMark(clip, "mount");
-    return move({
-        id: `sword_${direction}`,
-        clip,
-        tags: ["stance"],
-        mountAt: { fraction, target },
-        cancels: [
-            { from: 0, to: fraction, into: ["dodge"] },
-            { from: fraction, to: 1, into: EVERYTHING },
-        ],
-        yieldsToMovement: true,
-    });
-}
-
-function guardMove(id: string, clip: string, fadeSeconds: number): IMoveDefinition {
-    return move({
-        id,
-        clip,
-        tags: ["parry"],
-        fadeSeconds,
-        parrySeconds: PARRY.windowSeconds,
-        cancels: [{ from: clipMark(clip, "lowering"), to: 1, into: EVERYTHING }],
-        procedural: { grip: clipGripWindow(clip) },
-        yieldsToMovement: true,
-    });
-}
-
-function deflectMove(tier: ParryTier, swing: SwingDirection): IMoveDefinition {
-    const { id, clip } = PARRY_DEFLECTS[tier][swing];
-    const cancels: ICancelWindow[] =
-        tier === "perfect"
-            ? [{ from: clipMark(clip, "counter"), to: 1, into: EVERYTHING }]
-            : [
-                  { from: clipMark(clip, "out"), to: 1, into: ["parry", "dodge"] },
-                  { from: clipMark(clip, "idle"), to: 1, into: EVERYTHING },
-              ];
-    return move({
-        id,
-        clip,
-        tags: [],
-        fadeSeconds: 0,
-        cancels,
-        next: { parry: "parry_reguard" },
-        procedural: { grip: clipGripWindow(clip) },
-        ...(tier === "perfect"
-            ? { counterAt: clipMark(clip, "counter") }
-            : { yieldsToMovement: true }),
-    });
-}
-
-function attackRate(clipRate: number): number {
-    return clipRate * ATTACK.paceScale;
-}
-
-function bladeHit(from: number, to: number, overrides: Partial<IHitWindow> = {}): IHitWindow {
-    return {
-        from,
-        to,
-        shape: WEAPON_HIT_SHAPE,
-        damageScale: 1,
-        poiseDamage: 12,
-        impact: "light",
-        knockback: 3,
-        parryable: true,
-        perilous: false,
-        swing: "side",
-        ...overrides,
-    };
-}
-
-function comboCancels(chain: number, defensive: number, movement: number): ICancelWindow[] {
-    return [
-        { from: chain, to: 1, into: ["light", "heavy", "shoot"] },
-        { from: defensive, to: 1, into: ["dodge", "parry", "jump"] },
-        { from: movement, to: 1, into: ["movement", "stance"] },
-    ];
-}
-
-function move(spec: MoveSpec): IMoveDefinition {
-    return defineMove({ fadeSeconds: 0.06 }, spec);
-}
-
-function dodgeMove(
-    id: string,
-    clip: string,
-    invulnerableFrom: number,
-    invulnerableTo: number,
-    fadeSeconds: number,
-    spec: Partial<IMoveDefinition> = {}
-): IMoveDefinition {
-    return move({
-        id,
-        clip,
-        durationSeconds: DODGE.durationSeconds,
-        tags: ["dodge"],
-        staminaCost: 16,
-        fadeSeconds,
-        invulnerable: { from: invulnerableFrom, to: invulnerableTo },
-        cancels: [{ from: 0.5, to: 1, into: EVERYTHING }],
-        ...spec,
-    });
-}
-
-type DefaultedTagsSpec = Omit<MoveSpec, "tags"> & Partial<Pick<IMoveDefinition, "tags">>;
-
-function slideMove(spec: DefaultedTagsSpec): IMoveDefinition {
-    return move({
-        motion: "momentum",
-        tags: ["dodge"],
-        momentum: SLIDE_GLIDE,
-        next: SLIDE_FOLLOW_UP,
-        ...spec,
-    });
-}
-
-function airMove(spec: DefaultedTagsSpec): IMoveDefinition {
-    return move({ tags: ["jump"], motion: "physics", ...spec });
-}
-
-function trackedStrike(
-    spec: MoveSpec,
-    hit: IHitWindow,
-    turnRate: number,
-    warp: Omit<IWarpWindow, "to">
-): IMoveDefinition {
-    return move({
-        ...spec,
-        hits: [hit],
-        tracking: { from: 0, to: hit.from, turnRate },
-        warp: { ...warp, to: hit.from },
-    });
-}
 
 export const PLAYER_MOVE_IDS = {
     counter: "sword_counter",
@@ -223,9 +86,9 @@ export const PLAYER_MOVES: IMoveSet = {
                     cancels: comboCancels(0.63, 0.53, 0.84),
                     next: { light: "sword_light_2", heavy: "sword_heavy_finisher" },
                 },
-                bladeHit(0.37, 0.59),
+                hitWindow(0.37, 0.59),
                 14,
-                { from: 0.04, ...SWORD_WARP }
+                { from: 0.04, ...SWORD_GAP_CLOSE }
             ),
             trackedStrike(
                 {
@@ -237,9 +100,9 @@ export const PLAYER_MOVES: IMoveSet = {
                     cancels: comboCancels(0.62, 0.52, 0.83),
                     next: { light: "sword_light_3", heavy: "sword_heavy_finisher" },
                 },
-                bladeHit(0.33, 0.58),
+                hitWindow(0.33, 0.58),
                 14,
-                { from: 0.04, ...SWORD_WARP }
+                { from: 0.04, ...SWORD_GAP_CLOSE }
             ),
             trackedStrike(
                 {
@@ -251,9 +114,9 @@ export const PLAYER_MOVES: IMoveSet = {
                     cancels: comboCancels(0.78, 0.68, 0.95),
                     next: { light: "sword_light_4", heavy: "sword_heavy_finisher" },
                 },
-                bladeHit(0.41, 0.74, { poiseDamage: 14 }),
+                hitWindow(0.41, 0.74, { poiseDamage: 14 }),
                 14,
-                { from: 0.1, ...SWORD_WARP }
+                { from: 0.1, ...SWORD_GAP_CLOSE }
             ),
             trackedStrike(
                 {
@@ -265,14 +128,14 @@ export const PLAYER_MOVES: IMoveSet = {
                     cancels: comboCancels(0.46, 0.36, 0.8),
                     next: { light: "sword_light_1" },
                 },
-                bladeHit(0.21, 0.42, {
+                hitWindow(0.21, 0.42, {
                     damageScale: 1.6,
                     poiseDamage: 26,
                     impact: "heavy",
                     knockback: 6,
                 }),
                 12,
-                { from: 0, ...SWORD_WARP }
+                { from: 0, ...SWORD_GAP_CLOSE }
             ),
             trackedStrike(
                 {
@@ -286,7 +149,7 @@ export const PLAYER_MOVES: IMoveSet = {
                     armor: { from: 0.05, to: 0.74 },
                     cancels: comboCancels(0.8, 0.74, 0.9),
                 },
-                bladeHit(0.51, 0.72, {
+                hitWindow(0.51, 0.72, {
                     damageScale: 2.2,
                     poiseDamage: 38,
                     impact: "heavy",
@@ -294,7 +157,7 @@ export const PLAYER_MOVES: IMoveSet = {
                     parryable: false,
                 }),
                 10,
-                { from: 0.3, maxDistance: metres(4), strikeDistance: 0 }
+                { from: 0.3, maxDistance: metresToUnits(4), strikeDistance: 0 }
             ),
             trackedStrike(
                 {
@@ -307,7 +170,7 @@ export const PLAYER_MOVES: IMoveSet = {
                     armor: { from: 0.1, to: 0.9 },
                     cancels: comboCancels(0.94, 0.84, 0.97),
                 },
-                bladeHit(0.86, 0.9, {
+                hitWindow(0.86, 0.9, {
                     damageScale: 2.6,
                     poiseDamage: 46,
                     impact: "heavy",
@@ -315,7 +178,7 @@ export const PLAYER_MOVES: IMoveSet = {
                     parryable: false,
                 }),
                 10,
-                { from: 0.55, ...SWORD_WARP }
+                { from: 0.55, ...SWORD_GAP_CLOSE }
             ),
             move({
                 id: "sword_dash_attack",
@@ -325,29 +188,35 @@ export const PLAYER_MOVES: IMoveSet = {
                 staminaCost: 8,
                 focusGain: 0.2,
                 hits: [
-                    bladeHit(0.41, 0.74, { damageScale: 1.3, poiseDamage: 20, parryable: false }),
+                    hitWindow(0.41, 0.74, { damageScale: 1.3, poiseDamage: 20, parryable: false }),
                 ],
                 cancels: comboCancels(0.78, 0.68, 0.95),
-                warp: { from: 0, to: 0.41, maxDistance: metres(7), strikeDistance: metres(0.45) },
+                gapClose: {
+                    from: 0,
+                    to: 0.41,
+                    maxDistance: metresToUnits(7),
+                    strikeDistance: metresToUnits(0.45),
+                },
                 next: { light: "sword_light_4", heavy: "sword_heavy_finisher" },
             }),
-            move({
-                id: "sword_gap_closer",
-                clip: CLIP.swordDash,
-                tags: ["light"],
-                staminaCost: 12,
-                focusGain: 0.2,
-                hits: [bladeHit(0.17, 0.26, { damageScale: 1.2, poiseDamage: 18, knockback: 5 })],
-                cancels: comboCancels(0.4, 0.3, 0.8),
-                tracking: { from: 0, to: 0.17, turnRate: 20 },
-                warp: {
-                    from: 0,
-                    to: 0.17,
-                    maxDistance: TARGETING.gapCloseMaxDistance,
-                    strikeDistance: SWORD_WARP.strikeDistance,
+            trackedStrike(
+                {
+                    id: "sword_gap_closer",
+                    clip: CLIP.enemyLunge,
+                    tags: ["light"],
+                    staminaCost: 12,
+                    focusGain: 0.2,
+                    cancels: comboCancels(0.4, 0.3, 0.8),
+                    next: { light: "sword_light_2", heavy: "sword_heavy_finisher" },
                 },
-                next: { light: "sword_light_2", heavy: "sword_heavy_finisher" },
-            }),
+                hitWindow(0.17, 0.26, { damageScale: 1.2, poiseDamage: 18, knockback: 5 }),
+                20,
+                {
+                    from: 0,
+                    maxDistance: TARGETING.gapCloseMaxDistance,
+                    strikeDistance: SWORD_GAP_CLOSE.strikeDistance,
+                }
+            ),
             move({
                 id: "sword_counter",
                 clip: CLIP.swordCounter,
@@ -356,7 +225,7 @@ export const PLAYER_MOVES: IMoveSet = {
                 focusGain: 0.3,
                 invulnerable: { from: 0, to: 0.6 },
                 hits: [
-                    bladeHit(0.15, 0.33, {
+                    hitWindow(0.15, 0.33, {
                         damageScale: 1.8,
                         poiseDamage: 60,
                         impact: "heavy",
@@ -366,14 +235,19 @@ export const PLAYER_MOVES: IMoveSet = {
                 ],
                 cancels: comboCancels(0.37, 0.27, 0.8),
                 tracking: { from: 0, to: 0.25, turnRate: 20 },
-                warp: { from: 0, to: 0.25, maxDistance: metres(3), strikeDistance: metres(0.45) },
+                gapClose: {
+                    from: 0,
+                    to: 0.25,
+                    maxDistance: metresToUnits(3),
+                    strikeDistance: metresToUnits(0.45),
+                },
                 next: { light: "sword_light_2" },
             }),
-            dodgeMove("dodge_backstep", CLIP.dodgeBackstep, 0.05, 0.75, 0.04),
-            dodgeMove("dodge_left", CLIP.dodgeLeft, 0.1, 0.8, 0.04, {
+            dodgeMove("dodge_backstep", CLIP.dodgeBackstep, 0.05, 0.75),
+            dodgeMove("dodge_left", CLIP.dodgeLeft, 0.1, 0.8, {
                 rootMotionScale: DODGE.targetTravelMetres / DODGE.leftClipTravelMetres,
             }),
-            dodgeMove("dodge_right", CLIP.dodgeRight, 0.12, 0.8, 0.04, {
+            dodgeMove("dodge_right", CLIP.dodgeRight, 0.12, 0.8, {
                 rootMotionScale: DODGE.targetTravelMetres / DODGE.rightClipTravelMetres,
             }),
             slideMove({
@@ -447,7 +321,7 @@ export const PLAYER_MOVES: IMoveSet = {
                 requires: "airborne",
                 playbackRate: 1.2,
                 focusGain: 0.15,
-                hits: [bladeHit(0.37, 0.59)],
+                hits: [hitWindow(0.37, 0.59)],
                 tracking: { from: 0, to: 0.37, turnRate: 14 },
                 onLand: "air_slash_land",
                 followedBy: "airborne",
@@ -457,7 +331,7 @@ export const PLAYER_MOVES: IMoveSet = {
                 clip: CLIP.swordHeavyFinisher,
                 tags: ["heavy"],
                 hits: [
-                    bladeHit(0.55, 0.69, {
+                    hitWindow(0.55, 0.69, {
                         damageScale: 1.8,
                         poiseDamage: 30,
                         impact: "heavy",
@@ -494,7 +368,128 @@ export const PLAYER_MOVES: IMoveSet = {
         flinch: [CLIP.reactFlinch, CLIP.reactHitHead],
         knockback: [CLIP.reactCombatDamage],
         stagger: CLIP.reactCombatDamage,
-        parried: uniformParried(CLIP.reactParried),
+        parried: {
+            parry: { high: CLIP.reactParried, side: CLIP.reactParried },
+            perfect: { high: CLIP.reactParried, side: CLIP.reactParried },
+        },
         ...SHARED_REACTIONS,
     },
 };
+
+type DefaultedTagsSpec = Omit<MoveSpec, "tags"> & Partial<Pick<IMoveDefinition, "tags">>;
+
+function stanceMove(direction: keyof typeof STANCE_MOVES): IMoveDefinition {
+    const { clip, target } = STANCE_MOVES[direction];
+    const fraction = clipMark(clip, "mount");
+    return move({
+        id: `sword_${direction}`,
+        clip,
+        tags: ["stance"],
+        mountAt: { fraction, target },
+        cancels: [
+            { from: 0, to: fraction, into: ["dodge"] },
+            { from: fraction, to: 1, into: EVERYTHING },
+        ],
+        yieldsToMovement: true,
+    });
+}
+
+function guardMove(id: string, clip: string, fadeSeconds: number): IMoveDefinition {
+    return move({
+        id,
+        clip,
+        tags: ["parry"],
+        fadeSeconds,
+        parrySeconds: PARRY.windowSeconds,
+        cancels: [{ from: clipMark(clip, "lowering"), to: 1, into: EVERYTHING }],
+        procedural: { grip: clipGripWindow(clip) },
+        yieldsToMovement: true,
+    });
+}
+
+function deflectMove(tier: ParryTier, swing: SwingDirection): IMoveDefinition {
+    const { id, clip } = PARRY_DEFLECTS[tier][swing];
+    const cancels: ICancelWindow[] =
+        tier === "perfect"
+            ? [{ from: clipMark(clip, "counter"), to: 1, into: EVERYTHING }]
+            : [
+                  { from: clipMark(clip, "out"), to: 1, into: ["parry", "dodge"] },
+                  { from: clipMark(clip, "idle"), to: 1, into: EVERYTHING },
+              ];
+    return move({
+        id,
+        clip,
+        tags: [],
+        fadeSeconds: 0,
+        cancels,
+        next: { parry: "parry_reguard" },
+        procedural: { grip: clipGripWindow(clip) },
+        ...(tier === "perfect"
+            ? { counterAt: clipMark(clip, "counter") }
+            : { yieldsToMovement: true }),
+    });
+}
+
+function attackRate(clipRate: number): number {
+    return clipRate * ATTACK.animationSpeedScale;
+}
+
+function comboCancels(chain: number, defensive: number, movement: number): ICancelWindow[] {
+    return [
+        { from: chain, to: 1, into: ["light", "heavy", "shoot"] },
+        { from: defensive, to: 1, into: ["dodge", "parry", "jump"] },
+        { from: movement, to: 1, into: ["movement", "stance"] },
+    ];
+}
+
+function move(spec: MoveSpec): IMoveDefinition {
+    return defineMove({ fadeSeconds: 0.06 }, spec);
+}
+
+function dodgeMove(
+    id: string,
+    clip: string,
+    invulnerableFrom: number,
+    invulnerableTo: number,
+    spec: Partial<IMoveDefinition> = {}
+): IMoveDefinition {
+    return move({
+        id,
+        clip,
+        durationSeconds: DODGE.durationSeconds,
+        tags: ["dodge"],
+        staminaCost: 16,
+        fadeSeconds: 0.04,
+        invulnerable: { from: invulnerableFrom, to: invulnerableTo },
+        cancels: [{ from: 0.5, to: 1, into: EVERYTHING }],
+        ...spec,
+    });
+}
+
+function slideMove(spec: DefaultedTagsSpec): IMoveDefinition {
+    return move({
+        motion: "momentum",
+        tags: ["dodge"],
+        momentum: SLIDE_GLIDE,
+        next: SLIDE_FOLLOW_UP,
+        ...spec,
+    });
+}
+
+function airMove(spec: DefaultedTagsSpec): IMoveDefinition {
+    return move({ tags: ["jump"], motion: "physics", ...spec });
+}
+
+function trackedStrike(
+    spec: MoveSpec,
+    hit: IHitWindow,
+    turnRate: number,
+    gapClose: Omit<IGapCloseWindow, "to">
+): IMoveDefinition {
+    return move({
+        ...spec,
+        hits: [hit],
+        tracking: { from: 0, to: hit.from, turnRate },
+        gapClose: { ...gapClose, to: hit.from },
+    });
+}

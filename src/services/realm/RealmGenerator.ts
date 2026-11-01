@@ -1,17 +1,25 @@
 import "server-only";
 import {
-    CHAPTER_ARC,
+    CHAPTER_TITLES,
     CHAPTER_DESIGN,
     CHAPTER_TIERS_BY_COMMIT_COUNT,
     CHAPTER_TIERS_BY_DIRECTORY_COUNT,
-    FALLBACK_CHAPTER_ARC,
-    IChapterArcEntry,
-    IChapterTier,
+    FALLBACK_CHAPTER_TITLE,
     ROOT_REGION,
     SMALL_REPOSITORY_FILE_LIMIT,
 } from "@/constants/realm";
-import { HttpStatus } from "@/constants/strings";
-import { ErrorWrapper } from "@/lib/ResponseWrapper";
+import {
+    IChapterArcEntry,
+    IChapterTier,
+    ChapterSeason,
+    ChapterTheme,
+    IChapterBoss,
+    IChapterRegion,
+    IRealmChapter,
+    IResolvedRealm,
+} from "@/types/realm";
+import { HttpStatus, LOG_MESSAGES } from "@/constants/strings";
+import { HttpError } from "@/lib/ResponseWrapper";
 import {
     fetchCommitAtPosition,
     fetchContributorsBetweenDates,
@@ -24,14 +32,6 @@ import {
     isCommitDescendedFrom,
 } from "@/services/github/GithubService";
 import { packChapterRegions } from "@/services/realm/RegionPacker";
-import {
-    ChapterSeason,
-    ChapterTheme,
-    IChapterBoss,
-    IChapterRegion,
-    IRealmChapter,
-    IResolvedRealm,
-} from "@/types/realm";
 
 const NEWEST_COMMIT_POSITION = 0;
 const SEED_HASH_MULTIPLIER = 31;
@@ -52,7 +52,7 @@ export async function generateRealm(
     ]);
 
     if (totalCommitCount < CHAPTER_DESIGN.minChapters) {
-        throw new ErrorWrapper(
+        throw new HttpError(
             `repository has ${totalCommitCount} commits, needs at least ${CHAPTER_DESIGN.minChapters}`,
             HttpStatus.BAD_REQUEST
         );
@@ -80,7 +80,7 @@ export async function generateRealm(
     const finalSpan = chapterSpans[chapterSpans.length - 1];
 
     if (!finalSpan)
-        throw new ErrorWrapper("failed to resolve chapter boundaries", HttpStatus.INTERNAL_ERROR);
+        throw new HttpError("failed to resolve chapter boundaries", HttpStatus.INTERNAL_ERROR);
 
     const context: IRealmContext = {
         repositoryOwner,
@@ -166,7 +166,7 @@ async function resolveBoundaryOnFoundingHistory(
         if (position === NEWEST_COMMIT_POSITION) break;
     }
 
-    throw new ErrorWrapper(
+    throw new HttpError(
         `no commit on the founding history within ${maxPositionsToSkip} of position ${plannedPosition}`,
         HttpStatus.BAD_GATEWAY
     );
@@ -297,7 +297,7 @@ async function resolveChapterContributors(
     } catch (error) {
         if (isRateLimitError(error)) throw error;
 
-        console.warn(`contributors unavailable for chapter ending ${span.endCommit.sha}:`, error);
+        console.warn(LOG_MESSAGES.contributorsUnavailable(span.endCommit.sha), error);
 
         return [];
     }
@@ -305,7 +305,7 @@ async function resolveChapterContributors(
 
 function isRateLimitError(error: unknown): boolean {
     return (
-        error instanceof ErrorWrapper &&
+        error instanceof HttpError &&
         (error.statusCode === HttpStatus.FORBIDDEN ||
             error.statusCode === HttpStatus.TOO_MANY_REQUESTS)
     );
@@ -406,11 +406,11 @@ function resolveChapterPosition(chapterIndex: number, chapterCount: number): Cha
 }
 
 function resolveChapterArc(chapterIndex: number, chapterCount: number): IChapterArcEntry {
-    if (chapterCount <= 1) return CHAPTER_ARC[0] ?? FALLBACK_CHAPTER_ARC;
+    if (chapterCount <= 1) return CHAPTER_TITLES[0] ?? FALLBACK_CHAPTER_TITLE;
 
-    const arcIndex = Math.round((chapterIndex * (CHAPTER_ARC.length - 1)) / (chapterCount - 1));
+    const arcIndex = Math.round((chapterIndex * (CHAPTER_TITLES.length - 1)) / (chapterCount - 1));
 
-    return CHAPTER_ARC[arcIndex] ?? FALLBACK_CHAPTER_ARC;
+    return CHAPTER_TITLES[arcIndex] ?? FALLBACK_CHAPTER_TITLE;
 }
 
 function resolveChapterCount(totalCommitCount: number, directoryCount: number): number {

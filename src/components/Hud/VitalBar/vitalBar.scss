@@ -1,9 +1,9 @@
-@use "../../../styles/variable" as *;
 @use "../../../styles/mixins" as *;
 
 .vital-bar {
     .vital-frame {
         @include hud-pill-frame;
+        backdrop-filter: blur(14px) saturate(115%);
     }
 
     .vital-track {
@@ -23,7 +23,7 @@
 
     .vital-fill {
         background: var(--hud-fill);
-        transition: background 420ms $ease;
+        transition: background 420ms var(--ease);
     }
 
     .vital-details {
@@ -36,16 +36,14 @@
 
     .vital-label {
         font-size: 0.56rem;
-        font-weight: 400;
         letter-spacing: 0.32em;
         text-transform: uppercase;
         color: var(--hud-label);
     }
 
     .vital-readout {
-        font-family: $font-mono;
+        font-family: var(--font-numeric);
         font-size: 0.7rem;
-        font-weight: 400;
         font-variant-numeric: tabular-nums;
         color: var(--hud-readout);
     }

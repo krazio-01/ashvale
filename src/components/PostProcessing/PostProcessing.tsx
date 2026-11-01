@@ -13,13 +13,16 @@ import {
 import { ToneMappingMode } from "postprocessing";
 import { Vector2 } from "three";
 import type { Texture, WebGLRenderer } from "three";
-import { AtmosphereEffect } from "@/world/effects/AtmosphereEffect";
-import { FoliageMaskPass } from "@/world/effects/FoliageMaskPass";
-import { OutlineEffect } from "@/world/effects/OutlineEffect";
-import type { IThemeEnvironment } from "@/types/theme";
-import { POST_PROCESSING, RENDER } from "@/constants/rendering";
-import { useSettings } from "@/settings/SettingsStore";
-import { OUTLINE_MASK_SCALES } from "@/settings/QualityPresets";
+import {
+    AtmosphereEffect,
+    OutlineEffect,
+    FoliageMaskPass,
+} from "@/world/postProcessing/PostProcessPasses";
+import type { IThemeEnvironment } from "@/types/world";
+import { POST_PROCESSING, RENDER } from "@/constants/world";
+import { useStoreState } from "@/hooks/useStoreState";
+import { store } from "@/store/store";
+import { FOLIAGE_OUTLINE_MASK_SCALES } from "@/constants/ui";
 
 const FOLIAGE_MASK_RENDER_PRIORITY = 0;
 
@@ -59,10 +62,15 @@ const useFoliageMaskTexture = (enabled: boolean, scale: number): Texture => {
 };
 
 const PostProcessing = ({ environment }: { environment: IThemeEnvironment }) => {
-    const { bloom, antiAliasing, outlines, atmosphere: atmosphereEnabled } = useSettings();
+    const {
+        bloom,
+        antiAliasing,
+        outlines,
+        atmosphere: atmosphereEnabled,
+    } = useStoreState(store, (state) => state.settings.values);
     const camera = useThree((state) => state.camera);
 
-    const foliageMaskScale = OUTLINE_MASK_SCALES[outlines];
+    const foliageMaskScale = FOLIAGE_OUTLINE_MASK_SCALES[outlines];
     const foliageMaskEnabled = foliageMaskScale > 0;
     const foliageMask = useFoliageMaskTexture(foliageMaskEnabled, foliageMaskScale);
 
