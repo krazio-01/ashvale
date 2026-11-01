@@ -1,16 +1,24 @@
 import "server-only";
 import {
-    CHAPTER_ARC,
+    CHAPTER_TITLES,
     CHAPTER_DESIGN,
     CHAPTER_TIERS_BY_COMMIT_COUNT,
     CHAPTER_TIERS_BY_DIRECTORY_COUNT,
-    FALLBACK_CHAPTER_ARC,
-    IChapterArcEntry,
-    IChapterTier,
+    FALLBACK_CHAPTER_TITLE,
     ROOT_REGION,
     SMALL_REPOSITORY_FILE_LIMIT,
 } from "@/constants/realm";
-import { HttpStatus } from "@/constants/strings";
+import {
+    IChapterArcEntry,
+    IChapterTier,
+    ChapterSeason,
+    ChapterTheme,
+    IChapterBoss,
+    IChapterRegion,
+    IRealmChapter,
+    IResolvedRealm,
+} from "@/types/realm";
+import { HttpStatus, LOG_MESSAGES } from "@/constants/strings";
 import { HttpError } from "@/lib/ResponseWrapper";
 import {
     fetchCommitAtPosition,
@@ -24,14 +32,6 @@ import {
     isCommitDescendedFrom,
 } from "@/services/github/GithubService";
 import { packChapterRegions } from "@/services/realm/RegionPacker";
-import {
-    ChapterSeason,
-    ChapterTheme,
-    IChapterBoss,
-    IChapterRegion,
-    IRealmChapter,
-    IResolvedRealm,
-} from "@/types/realm";
 
 const NEWEST_COMMIT_POSITION = 0;
 const SEED_HASH_MULTIPLIER = 31;
@@ -297,7 +297,7 @@ async function resolveChapterContributors(
     } catch (error) {
         if (isRateLimitError(error)) throw error;
 
-        console.warn(`contributors unavailable for chapter ending ${span.endCommit.sha}:`, error);
+        console.warn(LOG_MESSAGES.contributorsUnavailable(span.endCommit.sha), error);
 
         return [];
     }
@@ -406,11 +406,11 @@ function resolveChapterPosition(chapterIndex: number, chapterCount: number): Cha
 }
 
 function resolveChapterArc(chapterIndex: number, chapterCount: number): IChapterArcEntry {
-    if (chapterCount <= 1) return CHAPTER_ARC[0] ?? FALLBACK_CHAPTER_ARC;
+    if (chapterCount <= 1) return CHAPTER_TITLES[0] ?? FALLBACK_CHAPTER_TITLE;
 
-    const arcIndex = Math.round((chapterIndex * (CHAPTER_ARC.length - 1)) / (chapterCount - 1));
+    const arcIndex = Math.round((chapterIndex * (CHAPTER_TITLES.length - 1)) / (chapterCount - 1));
 
-    return CHAPTER_ARC[arcIndex] ?? FALLBACK_CHAPTER_ARC;
+    return CHAPTER_TITLES[arcIndex] ?? FALLBACK_CHAPTER_TITLE;
 }
 
 function resolveChapterCount(totalCommitCount: number, directoryCount: number): number {

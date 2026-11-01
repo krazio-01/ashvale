@@ -7,7 +7,16 @@ import {
     ROUTE_DESIGN,
 } from "@/constants/realm";
 import { IChapterRegion, IRegionPathway } from "@/types/realm";
-import { FULL_TURN, QUARTER_TURN } from "@/lib/helpers";
+import {
+    FULL_TURN,
+    QUARTER_TURN,
+    distanceToSegment,
+    valueInRange,
+    randomOffset,
+    clamp,
+    createSeededRandom,
+} from "@/lib/helpers";
+import { ERRORS } from "@/constants/strings";
 
 const DEFAULT_SIZE_RATIO = 0.5;
 
@@ -31,7 +40,7 @@ export function packChapterRegions(
     );
 
     const [spawnRegion, ...regionsToPlace] = regions;
-    if (!spawnRegion) throw new Error("tree produced no directories containing files");
+    if (!spawnRegion) throw new Error(ERRORS.noDirectoriesWithFiles);
 
     const pathways = layoutRegionsAlongRoute(spawnRegion, regionsToPlace, nextRandom);
     assignSpawnDistances(regions, pathways, spawnRegion);
@@ -173,24 +182,16 @@ function buildRegion(
     sizeRatio: number,
     nextRandom: () => number
 ): IChapterRegion {
-    const footprint = scaleBetween(
-        REGION_DESIGN.minFootprint,
-        REGION_DESIGN.maxFootprint,
-        sizeRatio
-    );
+    const footprint = valueInRange(REGION_DESIGN.footprintRange, sizeRatio);
 
-    const aspectRatio = 1 + (nextRandom() - 0.5) * REGION_DESIGN.aspectJitter;
+    const aspectRatio = 1 + randomOffset(nextRandom, REGION_DESIGN.aspectJitter / 2);
 
     return {
         regionId: directory.path,
         displayName: directory.displayName,
         worldPosition: [0, 0, 0],
         floorSize: [footprint * aspectRatio, footprint / aspectRatio],
-        wallHeight: scaleBetween(
-            REGION_DESIGN.minWallHeight,
-            REGION_DESIGN.maxWallHeight,
-            sizeRatio
-        ),
+        wallHeight: valueInRange(REGION_DESIGN.wallHeightRange, sizeRatio),
         nestingDepth: directory.nestingDepth,
         spawnDistance: 0,
         fileCount: directory.fileCount,
@@ -263,7 +264,7 @@ function placeNextRouteRegion(
         const candidateHeading =
             heading +
             turnDirection *
-                scaleBetween(ROUTE_DESIGN.minTurnAngle, ROUTE_DESIGN.maxTurnAngle, nextRandom());
+                valueInRange([ROUTE_DESIGN.minTurnAngle, ROUTE_DESIGN.maxTurnAngle], nextRandom());
 
         region.worldPosition = resolveOffsetPosition(anchorRegion, candidateHeading, spacing);
 
@@ -365,7 +366,7 @@ function placeBesideHost(
         const heading =
             routeHeading +
             turnDirection * QUARTER_TURN +
-            (nextRandom() - 0.5) * ROUTE_DESIGN.maxTurnAngle;
+            randomOffset(nextRandom, ROUTE_DESIGN.maxTurnAngle / 2);
         const spacing = baseSpacing * (1 + attempt * ROUTE_DESIGN.spacingGrowthPerAttempt);
 
         sideRoom.worldPosition = resolveOffsetPosition(hostRegion, heading, spacing);
@@ -431,22 +432,7 @@ function distanceFromRegionToCorridor(
     const [fromX, , fromZ] = fromRegion.worldPosition;
     const [toX, , toZ] = toRegion.worldPosition;
 
-    const spanX = toX - fromX;
-    const spanZ = toZ - fromZ;
-    const spanLengthSquared = spanX * spanX + spanZ * spanZ;
-
-    if (spanLengthSquared === 0) return Math.hypot(regionX - fromX, regionZ - fromZ);
-
-    const projection = clamp(
-        ((regionX - fromX) * spanX + (regionZ - fromZ) * spanZ) / spanLengthSquared,
-        0,
-        1
-    );
-
-    return Math.hypot(
-        regionX - (fromX + projection * spanX),
-        regionZ - (fromZ + projection * spanZ)
-    );
+    return distanceToSegment(regionX, regionZ, fromX, fromZ, toX, toZ);
 }
 
 function resolveOffsetPosition(
@@ -516,10 +502,9 @@ function resolveBossRegionId(regions: IChapterRegion[], spawnRegion: IChapterReg
     const candidateRegions = regions.filter((region) => region !== spawnRegion);
     if (candidateRegions.length === 0) return spawnRegion.regionId;
 
-    const minimumFootprint = scaleBetween(
-        REGION_DESIGN.minFootprint,
-        REGION_DESIGN.maxFootprint,
-        REGION_DESIGN.objectiveFootprintRatio
+    const minimumFootprint = valueInRange(
+        REGION_DESIGN.footprintRange,
+        REGION_DESIGN.bossRegionMinSizeRatio
     );
 
     const regionsLargeEnoughForBoss = candidateRegions.filter(
@@ -557,26 +542,6 @@ function horizontalDistanceBetween(first: IChapterRegion, second: IChapterRegion
 
 function resolveFootprintRadius(region: IChapterRegion): number {
     return Math.max(region.floorSize[0], region.floorSize[1]) / 2;
-}
-
-function scaleBetween(minimum: number, maximum: number, ratio: number): number {
-    return minimum + ratio * (maximum - minimum);
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-    return Math.min(maximum, Math.max(minimum, value));
-}
-
-function createSeededRandom(seed: number): () => number {
-    let state = seed >>> 0;
-
-    return () => {
-        state = (state + 0x6d2b79f5) >>> 0;
-        let value = Math.imul(state ^ (state >>> 15), 1 | state);
-        value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
-
-        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-    };
 }
 
 interface IChapterGeometry {

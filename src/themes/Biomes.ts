@@ -1,5 +1,5 @@
 import { ChapterTheme } from "@/types/realm";
-import type { IThemeManifest, IThemeProp } from "@/types/world";
+import type { IThemeConfig, IThemeProp } from "@/types/world";
 import {
     CANOPY_TREES,
     PINE_TREES,
@@ -19,7 +19,7 @@ import {
     HIGHLANDS_PINE_TREES,
     HIGHLANDS_DEAD_TREES,
     HIGHLANDS_BOULDERS,
-    HIGHLANDS_SCREE,
+    HIGHLANDS_LOOSE_ROCKS,
     HIGHLANDS_SCRUB,
     HIGHLANDS_GRASS,
     WAYSIDE_CRATES,
@@ -54,16 +54,14 @@ const WOODLAND_PROPS: IThemeProp[] = [
     ...WAYSIDE_BOUNDARY,
 ];
 
-export const WOODLAND_MANIFEST: IThemeManifest = {
-    theme: ChapterTheme.Woodland,
-    scatterPropsPerFile: 0.6,
+const WOODLAND_THEME: IThemeConfig = {
     props: WOODLAND_PROPS,
     environment: {
         sky: {
             zenith: "#3d6480",
             middle: "#8fadb8",
             horizon: "#e6d9ba",
-            abyss: "#22303c",
+            belowHorizonColor: "#22303c",
             glow: "#f2b06a",
             sun: "#ffe6bc",
             sunElevation: 0.62,
@@ -73,26 +71,23 @@ export const WOODLAND_MANIFEST: IThemeManifest = {
             hazeStrength: 3,
         },
         lighting: {
-            keyColor: "#ffe8c4",
-            keyIntensity: 1.6,
+            sunLightColor: "#ffe8c4",
+            sunLightIntensity: 1.6,
             rimColor: "#9cb8d8",
             rimIntensity: 0.55,
-            skyFill: "#b8ccd4",
-            groundFill: "#59502e",
+            hemisphereSkyColor: "#b8ccd4",
+            hemisphereGroundColor: "#59502e",
             hemisphereIntensity: 0.65,
         },
         fogDensity: 0.0023,
         outlineColor: "#2a2318",
         terrain: {
-            wildColor: "#4e6238",
+            grassColor: "#4e6238",
             rockColor: "#6b6455",
             peakColor: "#a8b29a",
             soilColor: "#6a6247",
-            wildElevation: 11,
-            wildRelief: 5,
+            grasslandHeight: 11,
             mountainHeight: 30,
-            featureSize: 90,
-            ruggedness: 0.35,
             slopeShade: 0.45,
         },
         water: {
@@ -110,20 +105,18 @@ const HIGHLANDS_PROPS: IThemeProp[] = [
     ...HIGHLANDS_SCRUB,
     ...HIGHLANDS_GRASS,
     ...GRASS_TUFTS,
-    ...HIGHLANDS_SCREE,
+    ...HIGHLANDS_LOOSE_ROCKS,
     ...PEBBLES,
 ];
 
-export const HIGHLANDS_MANIFEST: IThemeManifest = {
-    theme: ChapterTheme.Highlands,
-    scatterPropsPerFile: 0.4,
+const HIGHLANDS_THEME: IThemeConfig = {
     props: HIGHLANDS_PROPS,
     environment: {
         sky: {
             zenith: "#24548c",
             middle: "#6b96be",
             horizon: "#e4ecef",
-            abyss: "#1a2734",
+            belowHorizonColor: "#1a2734",
             glow: "#ffd7a4",
             sun: "#fff4dc",
             sunElevation: 0.85,
@@ -133,26 +126,23 @@ export const HIGHLANDS_MANIFEST: IThemeManifest = {
             hazeStrength: 2,
         },
         lighting: {
-            keyColor: "#ffffff",
-            keyIntensity: 1.8,
+            sunLightColor: "#ffffff",
+            sunLightIntensity: 1.8,
             rimColor: "#8fb6d8",
             rimIntensity: 0.7,
-            skyFill: "#cfdee6",
-            groundFill: "#4c5a60",
+            hemisphereSkyColor: "#cfdee6",
+            hemisphereGroundColor: "#4c5a60",
             hemisphereIntensity: 0.7,
         },
         fogDensity: 0.0019,
         outlineColor: "#1a2028",
         terrain: {
-            wildColor: "#43563e",
+            grassColor: "#43563e",
             rockColor: "#5f6a70",
             peakColor: "#e2e9ee",
             soilColor: "#5f5c4a",
-            wildElevation: 15,
-            wildRelief: 7,
+            grasslandHeight: 15,
             mountainHeight: 46,
-            featureSize: 80,
-            ruggedness: 0.7,
             slopeShade: 0.5,
         },
         water: {
@@ -176,16 +166,14 @@ const RUINS_PROPS: IThemeProp[] = [
     ...RUINS_MONUMENTS,
 ];
 
-export const RUINS_MANIFEST: IThemeManifest = {
-    theme: ChapterTheme.Ruins,
-    scatterPropsPerFile: 0.35,
+const RUINS_THEME: IThemeConfig = {
     props: RUINS_PROPS,
     environment: {
         sky: {
             zenith: "#3b4b56",
             middle: "#7c8a88",
             horizon: "#c6bcae",
-            abyss: "#1d242a",
+            belowHorizonColor: "#1d242a",
             glow: "#d09a70",
             sun: "#f4d6ae",
             sunElevation: 0.52,
@@ -195,26 +183,23 @@ export const RUINS_MANIFEST: IThemeManifest = {
             hazeStrength: 3.6,
         },
         lighting: {
-            keyColor: "#f0d8b8",
-            keyIntensity: 1.4,
+            sunLightColor: "#f0d8b8",
+            sunLightIntensity: 1.4,
             rimColor: "#7f95a0",
             rimIntensity: 0.65,
-            skyFill: "#9caaa8",
-            groundFill: "#463f33",
+            hemisphereSkyColor: "#9caaa8",
+            hemisphereGroundColor: "#463f33",
             hemisphereIntensity: 0.6,
         },
         fogDensity: 0.0035,
         outlineColor: "#1c1a16",
         terrain: {
-            wildColor: "#525d44",
+            grassColor: "#525d44",
             rockColor: "#6e6a62",
             peakColor: "#a49c8e",
             soilColor: "#6d6650",
-            wildElevation: 10,
-            wildRelief: 4,
+            grasslandHeight: 10,
             mountainHeight: 26,
-            featureSize: 75,
-            ruggedness: 0.6,
             slopeShade: 0.55,
         },
         water: {
@@ -235,9 +220,7 @@ const SETTLEMENT_PROPS: IThemeProp[] = [
     ...PEBBLES,
 ];
 
-export const SETTLEMENT_MANIFEST: IThemeManifest = {
-    theme: ChapterTheme.Settlement,
-    scatterPropsPerFile: 0.45,
+const SETTLEMENT_THEME: IThemeConfig = {
     props: SETTLEMENT_PROPS,
     extraPreloadModelPaths: SETTLEMENT_EXTRA_PRELOAD_PATHS,
     environment: {
@@ -245,7 +228,7 @@ export const SETTLEMENT_MANIFEST: IThemeManifest = {
             zenith: "#56718a",
             middle: "#a2b0b8",
             horizon: "#ded2c0",
-            abyss: "#2a2f38",
+            belowHorizonColor: "#2a2f38",
             glow: "#e8bc90",
             sun: "#ffeacc",
             sunElevation: 0.75,
@@ -255,26 +238,23 @@ export const SETTLEMENT_MANIFEST: IThemeManifest = {
             hazeStrength: 2.4,
         },
         lighting: {
-            keyColor: "#ffeed6",
-            keyIntensity: 1.5,
+            sunLightColor: "#ffeed6",
+            sunLightIntensity: 1.5,
             rimColor: "#a8b6c4",
             rimIntensity: 0.5,
-            skyFill: "#bfc6c8",
-            groundFill: "#61533e",
+            hemisphereSkyColor: "#bfc6c8",
+            hemisphereGroundColor: "#61533e",
             hemisphereIntensity: 0.7,
         },
         fogDensity: 0.0028,
         outlineColor: "#241d16",
         terrain: {
-            wildColor: "#63704b",
+            grassColor: "#63704b",
             rockColor: "#7a7161",
             peakColor: "#b8b09c",
             soilColor: "#6f6a4a",
-            wildElevation: 8,
-            wildRelief: 3,
+            grasslandHeight: 8,
             mountainHeight: 20,
-            featureSize: 110,
-            ruggedness: 0.2,
             slopeShade: 0.4,
         },
         water: {
@@ -282,4 +262,11 @@ export const SETTLEMENT_MANIFEST: IThemeManifest = {
             deepColor: "#073f4a",
         },
     },
+};
+
+export const BIOME_THEMES: Record<ChapterTheme, IThemeConfig> = {
+    [ChapterTheme.Woodland]: WOODLAND_THEME,
+    [ChapterTheme.Settlement]: SETTLEMENT_THEME,
+    [ChapterTheme.Ruins]: RUINS_THEME,
+    [ChapterTheme.Highlands]: HIGHLANDS_THEME,
 };

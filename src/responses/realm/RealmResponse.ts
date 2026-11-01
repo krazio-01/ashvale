@@ -8,39 +8,47 @@ import type {
     IRegionPathway,
     IResolvedRealm,
 } from "@/types/realm";
-
-const WORLD_UNIT_PRECISION = 2;
-const RATIO_PRECISION = 3;
+import { mapFields, roundTo } from "@/lib/helpers";
 
 export class RealmResponse {
-    repositoryOwner: string;
-    repositoryName: string;
-    starCount: number;
-    primaryLanguage: string | null;
-    totalCommitCount: number;
-    generationSeed: number;
     chapters: ChapterResponse[];
 
     constructor(realm: IResolvedRealm) {
-        const [repositoryOwner = "", repositoryName = ""] = realm.repositoryFullName.split("/");
-        this.repositoryOwner = repositoryOwner;
-        this.repositoryName = repositoryName;
-        this.starCount = realm.starCount;
-        this.primaryLanguage = realm.primaryLanguage;
-        this.totalCommitCount = realm.totalCommitCount;
-        this.generationSeed = realm.generationSeed;
         this.chapters = realm.chapters.map((chapter) => new ChapterResponse(chapter));
     }
 }
 
 export class ChapterResponse {
+    private static readonly WORLD_UNIT_STEPS = 100;
+
+    private static readonly RATIO_STEPS = 1000;
+
+    private static roundRegion(region: IChapterRegion): IChapterRegion {
+        return {
+            ...mapFields(region, ["wallHeight"], (value) =>
+                roundTo(value, ChapterResponse.WORLD_UNIT_STEPS)
+            ),
+            worldPosition: region.worldPosition.map((value) =>
+                roundTo(value, ChapterResponse.WORLD_UNIT_STEPS)
+            ) as IChapterRegion["worldPosition"],
+            floorSize: region.floorSize.map((value) =>
+                roundTo(value, ChapterResponse.WORLD_UNIT_STEPS)
+            ) as IChapterRegion["floorSize"],
+        };
+    }
+
+    private static readonly roundPathway = (pathway: IRegionPathway): IRegionPathway =>
+        mapFields(pathway, ["corridorWidth"], (value) =>
+            roundTo(value, ChapterResponse.WORLD_UNIT_STEPS)
+        );
+
+    private static readonly roundBoss = (boss: IChapterBoss): IChapterBoss =>
+        mapFields(boss, ["commitShare", "commitGapVariation"], (value) =>
+            roundTo(value, ChapterResponse.RATIO_STEPS)
+        );
+
     chapterIndex: number;
     title: string;
-    startedAt: string;
-    endedAt: string;
-    commitCount: number;
-    artifactName: string;
-    interludeParagraphs: string[];
     spawnRegionId: string;
     bossRegionId: string;
     regions: IChapterRegion[];
@@ -52,16 +60,11 @@ export class ChapterResponse {
     constructor(chapter: IRealmChapter) {
         this.chapterIndex = chapter.chapterIndex;
         this.title = chapter.title;
-        this.startedAt = new Date(chapter.startedAt).toISOString();
-        this.endedAt = new Date(chapter.endedAt).toISOString();
-        this.commitCount = chapter.commitCount;
-        this.artifactName = chapter.artifactName;
-        this.interludeParagraphs = chapter.interludeParagraphs;
         this.spawnRegionId = chapter.spawnRegionId;
         this.bossRegionId = chapter.bossRegionId;
-        this.regions = chapter.regions.map(roundRegion);
-        this.pathways = chapter.pathways.map(roundPathway);
-        this.boss = chapter.boss === null ? null : roundBoss(chapter.boss);
+        this.regions = chapter.regions.map(ChapterResponse.roundRegion);
+        this.pathways = chapter.pathways.map(ChapterResponse.roundPathway);
+        this.boss = chapter.boss === null ? null : ChapterResponse.roundBoss(chapter.boss);
         this.theme = chapter.theme;
         this.season = chapter.season;
     }
@@ -70,55 +73,9 @@ export class ChapterResponse {
 export class FeaturedRealmResponse {
     owner: string;
     name: string;
-    fullName: string;
 
     constructor(realm: IFeaturedRealm) {
         this.owner = realm.repositoryOwner;
         this.name = realm.repositoryName;
-        this.fullName = realm.repositoryFullName;
     }
-}
-
-function roundRegion(region: IChapterRegion): IChapterRegion {
-    const [x, y, z] = region.worldPosition;
-    const [width, depth] = region.floorSize;
-
-    return {
-        regionId: region.regionId,
-        displayName: region.displayName,
-        worldPosition: [
-            round(x, WORLD_UNIT_PRECISION),
-            round(y, WORLD_UNIT_PRECISION),
-            round(z, WORLD_UNIT_PRECISION),
-        ],
-        floorSize: [round(width, WORLD_UNIT_PRECISION), round(depth, WORLD_UNIT_PRECISION)],
-        wallHeight: round(region.wallHeight, WORLD_UNIT_PRECISION),
-        nestingDepth: region.nestingDepth,
-        spawnDistance: region.spawnDistance,
-        fileCount: region.fileCount,
-    };
-}
-
-function roundPathway(pathway: IRegionPathway): IRegionPathway {
-    return {
-        fromRegionId: pathway.fromRegionId,
-        toRegionId: pathway.toRegionId,
-        corridorWidth: round(pathway.corridorWidth, WORLD_UNIT_PRECISION),
-    };
-}
-
-function roundBoss(boss: IChapterBoss): IChapterBoss {
-    return {
-        contributorLogin: boss.contributorLogin,
-        avatarUrl: boss.avatarUrl,
-        commitShare: round(boss.commitShare, RATIO_PRECISION),
-        commitGapVariation: round(boss.commitGapVariation, RATIO_PRECISION),
-        chapterAppearanceCount: boss.chapterAppearanceCount,
-    };
-}
-
-function round(value: number, decimals: number): number {
-    const scale = 10 ** decimals;
-
-    return Math.round(value * scale) / scale;
 }

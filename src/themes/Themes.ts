@@ -1,130 +1,124 @@
 import { Vector3 } from "three";
 import { WEAPONS } from "@/constants/combat";
+import { ATMOSPHERE } from "@/constants/world";
 import { ChapterSeason, ChapterTheme } from "@/types/realm";
 import type {
+    IEnvironmentOverrides,
     ISeasonProfile,
     ISeasonTint,
     ISkyGradient,
+    IThemeConfig,
     IThemeEnvironment,
     IThemeLighting,
-    IThemeManifest,
-    IWaterProfile,
 } from "@/types/world";
-import {
-    HIGHLANDS_MANIFEST,
-    RUINS_MANIFEST,
-    SETTLEMENT_MANIFEST,
-    WOODLAND_MANIFEST,
-} from "@/themes/Biomes";
-import { AUTUMN_SEASON, SPRING_SEASON, SUMMER_SEASON, WINTER_SEASON } from "@/themes/Seasons";
-import { blendColors, clamp, shiftColorHsl, tintKeepingLightness } from "@/lib/helpers";
+import { BIOME_THEMES } from "@/themes/Biomes";
+import { SEASONS } from "@/themes/Seasons";
+import { blendColors, clamp, mapFields, shiftColorHsl, tintKeepingLightness } from "@/lib/helpers";
 
-const BIOME_MANIFESTS: Record<ChapterTheme, IThemeManifest> = {
-    [ChapterTheme.Woodland]: WOODLAND_MANIFEST,
-    [ChapterTheme.Settlement]: SETTLEMENT_MANIFEST,
-    [ChapterTheme.Ruins]: RUINS_MANIFEST,
-    [ChapterTheme.Highlands]: HIGHLANDS_MANIFEST,
-};
+const SKY_TINTED_KEYS = [
+    "zenith",
+    "middle",
+    "horizon",
+    "belowHorizonColor",
+    "glow",
+    "sun",
+] as const satisfies readonly (keyof ISkyGradient)[];
 
-const SEASON_PROFILES: Record<ChapterSeason, ISeasonProfile> = {
-    [ChapterSeason.Spring]: SPRING_SEASON,
-    [ChapterSeason.Summer]: SUMMER_SEASON,
-    [ChapterSeason.Autumn]: AUTUMN_SEASON,
-    [ChapterSeason.Winter]: WINTER_SEASON,
-};
+const LIGHT_TINTED_KEYS = [
+    "sunLightColor",
+    "rimColor",
+    "hemisphereSkyColor",
+    "hemisphereGroundColor",
+] as const satisfies readonly (keyof IThemeLighting)[];
 
-const composedManifests = new Map<string, IThemeManifest>();
+const GROUND_SHIFTED_KEYS = ["grassColor", "rockColor", "peakColor"] as const;
 
-export function resolveThemeManifest(theme: ChapterTheme, season: ChapterSeason): IThemeManifest {
+const seasonalThemes = new Map<string, IThemeConfig>();
+
+export function resolveTheme(theme: ChapterTheme, season: ChapterSeason): IThemeConfig {
     const pairingKey = `${theme}:${season}`;
-    const cached = composedManifests.get(pairingKey);
+    const cached = seasonalThemes.get(pairingKey);
     if (cached) return cached;
 
-    const biomeManifest = BIOME_MANIFESTS[theme];
-    const composed: IThemeManifest = {
-        ...biomeManifest,
-        environment: applySeasonToEnvironment(biomeManifest.environment, SEASON_PROFILES[season]),
+    const biomeTheme = BIOME_THEMES[theme];
+    const composed: IThemeConfig = {
+        ...biomeTheme,
+        environment: seasonalEnvironment(biomeTheme.environment, SEASONS[season]),
         extraPreloadModelPaths: [
-            ...(biomeManifest.extraPreloadModelPaths ?? []),
+            ...(biomeTheme.extraPreloadModelPaths ?? []),
             ...Object.values(WEAPONS).map((weapon) => weapon.modelPath),
         ],
     };
 
-    composedManifests.set(pairingKey, composed);
+    seasonalThemes.set(pairingKey, composed);
 
     return composed;
 }
 
-function applySeasonToEnvironment(
+export function withEnvironmentOverrides(
+    theme: IThemeConfig,
+    { sky, lighting, ...rest }: IEnvironmentOverrides
+): IThemeConfig {
+    const environment = theme.environment;
+
+    return {
+        ...theme,
+        environment: {
+            ...environment,
+            sky: { ...environment.sky, ...sky },
+            lighting: { ...environment.lighting, ...lighting },
+            ...rest,
+        },
+    };
+}
+
+function seasonalEnvironment(
     environment: IThemeEnvironment,
     season: ISeasonProfile
 ): IThemeEnvironment {
+    const soilTint = season.soilTint;
+
     return {
         ...environment,
-        sky: applySeasonToSky(environment.sky, season),
-        lighting: applySeasonToLighting(environment.lighting, season),
-        fogDensity: Math.max(environment.fogDensity * season.fogDensityScale, 0),
-        water: applySeasonToWater(environment.water, season),
+        sky: seasonalSky(environment.sky, season),
+        lighting: seasonalLighting(environment.lighting, season),
+        fogDensity: environment.fogDensity * season.fogDensityScale,
         terrain: {
-            ...environment.terrain,
-            wildColor: shiftGround(environment.terrain.wildColor, season),
-            rockColor: shiftGround(environment.terrain.rockColor, season),
-            peakColor: shiftGround(environment.terrain.peakColor, season),
+            ...mapFields(environment.terrain, GROUND_SHIFTED_KEYS, (hex) =>
+                shiftColorHsl(hex, season.groundColorShift)
+            ),
             soilColor: tintKeepingLightness(
                 environment.terrain.soilColor,
-                season.groundTint.color,
-                season.groundTint.strength,
-                season.groundTint.lightnessShift
+                soilTint.color,
+                soilTint.strength,
+                soilTint.lightnessShift
             ),
         },
     };
 }
 
-const applySeasonToWater = (water: IWaterProfile, _season: ISeasonProfile): IWaterProfile => ({
-    shallowColor: water.shallowColor,
-    deepColor: water.deepColor,
-});
-
-const shiftGround = (hex: string, season: ISeasonProfile): string =>
-    shiftColorHsl(
-        hex,
-        season.ground.hueShift,
-        season.ground.saturationScale,
-        season.ground.lightnessShift
-    );
-
-const applyTint = (hex: string, tint: ISeasonTint): string =>
+const applyTint = (tint: ISeasonTint) => (hex: string) =>
     blendColors(hex, tint.color, tint.strength);
 
-function applySeasonToSky(sky: ISkyGradient, season: ISeasonProfile): ISkyGradient {
+function seasonalSky(sky: ISkyGradient, season: ISeasonProfile): ISkyGradient {
     return {
-        ...sky,
-        zenith: applyTint(sky.zenith, season.skyTint),
-        middle: applyTint(sky.middle, season.skyTint),
-        horizon: applyTint(sky.horizon, season.skyTint),
-        abyss: applyTint(sky.abyss, season.skyTint),
-        glow: applyTint(sky.glow, season.skyTint),
-        sun: applyTint(sky.sun, season.skyTint),
-        sunElevation: clamp(sky.sunElevation + season.sunElevationDelta, 0.15, 1.3),
-    };
-}
-
-function applySeasonToLighting(lighting: IThemeLighting, season: ISeasonProfile): IThemeLighting {
-    return {
-        ...lighting,
-        keyColor: applyTint(lighting.keyColor, season.lightTint),
-        rimColor: applyTint(lighting.rimColor, season.lightTint),
-        skyFill: applyTint(lighting.skyFill, season.lightTint),
-        groundFill: applyTint(lighting.groundFill, season.lightTint),
-        keyIntensity: Math.max(lighting.keyIntensity * season.keyIntensityScale, 0),
-        hemisphereIntensity: Math.max(
-            lighting.hemisphereIntensity * season.hemisphereIntensityScale,
-            0
+        ...mapFields(sky, SKY_TINTED_KEYS, applyTint(season.skyTint)),
+        sunElevation: clamp(
+            sky.sunElevation + season.sunElevationDelta,
+            ...ATMOSPHERE.seasonalSunElevationRange
         ),
     };
 }
 
-export function sunDirectionOf(sky: ISkyGradient): Vector3 {
+function seasonalLighting(lighting: IThemeLighting, season: ISeasonProfile): IThemeLighting {
+    return {
+        ...mapFields(lighting, LIGHT_TINTED_KEYS, applyTint(season.lightTint)),
+        sunLightIntensity: lighting.sunLightIntensity * season.keyIntensityScale,
+        hemisphereIntensity: lighting.hemisphereIntensity * season.hemisphereIntensityScale,
+    };
+}
+
+export function sunDirectionFromSky(sky: ISkyGradient): Vector3 {
     const horizontalScale = Math.cos(sky.sunElevation);
 
     return new Vector3(
