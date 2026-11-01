@@ -1,9 +1,9 @@
 import type { Vector3 } from "three";
 import type { AwarenessMeter } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
+import type { IEnemyArchetype, AlertPhase } from "@/types/combat";
 import { LOOK_AROUND } from "@/constants/enemies";
-import type { IEnemyArchetype } from "@/constants/enemies";
-import { scaleBetween } from "@/lib/helpers";
-import type { AlertPhase } from "@/types/combat";
+import { valueInRange, randomOffset } from "@/lib/helpers";
+import type { RandomSource } from "@/lib/helpers";
 
 export interface IEnemyBody {
     readonly position: Vector3;
@@ -12,33 +12,25 @@ export interface IEnemyBody {
     readonly archetype: IEnemyArchetype;
     moveTowards(point: Vector3, speed: number, stopDistance: number, pointRadius?: number): number;
     holdStill(): void;
-    lookTowards(yaw: number): void;
+    setFacingYaw(yaw: number): void;
 }
 
 export interface IEnemyCombatBody extends IEnemyBody {
     readonly bodyRadius: number;
     readonly activeMoveId: string | null;
     readonly healthFraction: number;
-    faceTarget(): void;
-    relax(): void;
+    startFacingTarget(): void;
+    stopFacingTarget(): void;
     moveAwayFrom(point: Vector3, speed: number): void;
     performMove(moveId: string): boolean;
 }
 
-export interface IEnemyBehaviour {
-    enter(): void;
-    tick(deltaSeconds: number): void;
-    exit(): void;
-}
-
-export abstract class EnemyBehaviour<
-    Body extends IEnemyBody = IEnemyBody,
-> implements IEnemyBehaviour {
+export abstract class EnemyBehaviour<Body extends IEnemyBody = IEnemyBody> {
     protected readonly body: Body;
     protected readonly awareness: AwarenessMeter;
-    protected readonly random: () => number;
+    protected readonly random: RandomSource;
 
-    constructor(body: Body, awareness: AwarenessMeter, random: () => number) {
+    constructor(body: Body, awareness: AwarenessMeter, random: RandomSource) {
         this.body = body;
         this.awareness = awareness;
         this.random = random;
@@ -53,11 +45,11 @@ export abstract class EnemyBehaviour<
 
 export class LookAround {
     private readonly body: IEnemyBody;
-    private readonly random: () => number;
+    private readonly random: RandomSource;
     private secondsUntilGlance = 0;
     private baseYaw = 0;
 
-    constructor(body: IEnemyBody, random: () => number) {
+    constructor(body: IEnemyBody, random: RandomSource) {
         this.body = body;
         this.random = random;
     }
@@ -71,16 +63,16 @@ export class LookAround {
         this.secondsUntilGlance -= deltaSeconds;
         if (this.secondsUntilGlance > 0) return;
 
-        this.secondsUntilGlance = scaleBetween(LOOK_AROUND.glanceSeconds, this.random());
-        this.body.lookTowards(this.baseYaw + (this.random() * 2 - 1) * LOOK_AROUND.maxTurn);
+        this.secondsUntilGlance = valueInRange(LOOK_AROUND.glanceSeconds, this.random());
+        this.body.setFacingYaw(this.baseYaw + randomOffset(this.random, LOOK_AROUND.maxTurn));
     }
 }
 
 export class BehaviourSelector {
-    private readonly behaviours: Readonly<Record<AlertPhase, IEnemyBehaviour>>;
-    private active: IEnemyBehaviour | null = null;
+    private readonly behaviours: Readonly<Record<AlertPhase, EnemyBehaviour>>;
+    private active: EnemyBehaviour | null = null;
 
-    constructor(behaviours: Readonly<Record<AlertPhase, IEnemyBehaviour>>) {
+    constructor(behaviours: Readonly<Record<AlertPhase, EnemyBehaviour>>) {
         this.behaviours = behaviours;
     }
 

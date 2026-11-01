@@ -1,30 +1,31 @@
 import { Group, Vector3 } from "three";
-import type { CombatEvents, ICombatEventMap } from "@/events/CombatEvents";
-import { NOISE } from "@/constants/enemies";
+import type { ICombatEventMap } from "@/events/CombatEvents";
+import { HEARING } from "@/constants/enemies";
 import type { ICombatant } from "@/types/combat";
 import type { IWorldEntity } from "@/types/world";
+import type { GameEvents } from "@/events/EventEmitter";
 
-export class CombatNoise implements IWorldEntity {
+export class CombatNoiseEmitter implements IWorldEntity {
     readonly sceneObject = new Group();
 
-    private readonly events: CombatEvents;
+    private readonly events: GameEvents;
     private readonly silentVictims = new WeakSet<ICombatant>();
     private readonly noise: ICombatEventMap["noise"] = { position: new Vector3(), radius: 0 };
     private readonly unsubscribers: (() => void)[];
 
-    constructor(events: CombatEvents) {
+    constructor(events: GameEvents) {
         this.events = events;
         this.unsubscribers = [
-            events.on("hitLanded", (event) => this.emit(event.point, NOISE.combatRadius)),
+            events.on("hitLanded", (event) => this.emit(event.point, HEARING.combatRadius)),
             events.on("parried", (event) =>
-                this.emit(event.defender.sceneObject.position, NOISE.combatRadius)
+                this.emit(event.defender.sceneObject.position, HEARING.combatRadius)
             ),
             events.on("finisherStarted", (event) => {
                 if (event.finisher.kind === "backstab") this.silentVictims.add(event.victim);
             }),
             events.on("killed", (event) => {
                 if (this.silentVictims.has(event.combatant)) return;
-                this.emit(event.combatant.sceneObject.position, NOISE.deathCryRadius);
+                this.emit(event.combatant.sceneObject.position, HEARING.deathCryRadius);
             }),
         ];
     }

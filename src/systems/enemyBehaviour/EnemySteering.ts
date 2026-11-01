@@ -1,16 +1,22 @@
 import { Vector3 } from "three";
 import type { CombatRegistry } from "@/systems/combat/CombatRegistry";
 import { ENEMY_STEERING, OBSTACLE_PROBE } from "@/constants/enemies";
-import { angleDelta } from "@/lib/helpers";
+import { COMBAT_MOVEMENT } from "@/constants/combat";
+import {
+    shortestAngleBetween,
+    yawFromDirection,
+    forwardFromYaw,
+    horizontalLength,
+} from "@/lib/helpers";
 import type { ICombatant } from "@/types/combat";
 
 interface ISteeringBody extends ICombatant {
     readonly bodyRadius: number;
     readonly position: Vector3;
-    isPathBlocked(directionX: number, directionZ: number, distance: number): boolean;
+    isObstacleAhead(directionX: number, directionZ: number, distance: number): boolean;
 }
 
-export class Movement {
+export class EnemySteering {
     private static readonly scratchSeparation = new Vector3();
 
     private static readonly scratchTeammates: ICombatant[] = [];
@@ -34,8 +40,8 @@ export class Movement {
 
     steer(direction: Vector3, speed: number, clearDistance: number): void {
         direction.add(this.separationFromTeammates());
-        const length = Math.hypot(direction.x, direction.z);
-        if (length < 1e-4) {
+        const length = horizontalLength(direction);
+        if (length < COMBAT_MOVEMENT.minimumPlanarLength) {
             direction.set(0, 0, 0);
             return;
         }
@@ -46,14 +52,14 @@ export class Movement {
     }
 
     private separationFromTeammates(): Vector3 {
-        const separation = Movement.scratchSeparation.set(0, 0, 0);
+        const separation = EnemySteering.scratchSeparation.set(0, 0, 0);
         const position = this.body.position;
         const ownRadius = this.body.bodyRadius;
         const teammates = this.registry.collectTeammates(
             this.body.team,
             position,
             ownRadius * 2 + ENEMY_STEERING.separationMargin,
-            Movement.scratchTeammates
+            EnemySteering.scratchTeammates
         );
 
         for (const teammate of teammates) {
@@ -63,7 +69,7 @@ export class Movement {
             const offsetZ = position.z - teammate.sceneObject.position.z;
             const distance = Math.hypot(offsetX, offsetZ);
             const comfortable = ownRadius + teammate.bodyRadius + ENEMY_STEERING.separationMargin;
-            if (distance >= comfortable || distance < 1e-4) continue;
+            if (distance >= comfortable || distance < COMBAT_MOVEMENT.minimumPlanarLength) continue;
 
             const intrusion = Math.min(
                 ENEMY_STEERING.maximumSeparationPush,
@@ -88,12 +94,13 @@ export class Movement {
             return;
         }
 
-        const length = Math.hypot(direction.x, direction.z);
-        const heading = Math.atan2(direction.x, direction.z);
+        const length = horizontalLength(direction);
+        const heading = yawFromDirection(direction.x, direction.z);
         const isProbeStale =
             this.probeAgeSeconds >= OBSTACLE_PROBE.cacheSeconds ||
             lookahead > this.probedLookahead * OBSTACLE_PROBE.reprobeLookaheadGrowth ||
-            Math.abs(angleDelta(this.probedHeading, heading)) > OBSTACLE_PROBE.reprobeHeadingChange;
+            Math.abs(shortestAngleBetween(this.probedHeading, heading)) >
+                OBSTACLE_PROBE.reprobeHeadingChange;
         if (isProbeStale) {
             this.avoidanceTurn = this.probeAvoidanceTurn(
                 direction.x / length,
@@ -108,7 +115,7 @@ export class Movement {
         const turn = this.avoidanceTurn;
         if (turn === null || turn === 0) return;
         const steeredHeading = heading + turn;
-        direction.set(Math.sin(steeredHeading) * length, 0, Math.cos(steeredHeading) * length);
+        forwardFromYaw(steeredHeading, direction, length);
     }
 
     private probeAvoidanceTurn(
@@ -116,7 +123,7 @@ export class Movement {
         forwardZ: number,
         lookahead: number
     ): number | null {
-        if (!this.body.isPathBlocked(forwardX, forwardZ, lookahead)) {
+        if (!this.body.isObstacleAhead(forwardX, forwardZ, lookahead)) {
             this.avoidanceSide = 0;
             return 0;
         }
@@ -131,7 +138,7 @@ export class Movement {
                 const sine = Math.sin(angle);
                 const steeredX = forwardX * cosine + forwardZ * sine;
                 const steeredZ = -forwardX * sine + forwardZ * cosine;
-                if (this.body.isPathBlocked(steeredX, steeredZ, lookahead)) continue;
+                if (this.body.isObstacleAhead(steeredX, steeredZ, lookahead)) continue;
 
                 this.avoidanceSide = side;
                 return angle;
