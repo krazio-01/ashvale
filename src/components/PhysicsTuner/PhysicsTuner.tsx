@@ -126,16 +126,6 @@ export const PhysicsTuner = () => {
                 <button type="button" onClick={() => void navigator.clipboard.writeText(snippet())}>
                     Copy values
                 </button>
-                <button
-                    type="button"
-                    onClick={() =>
-                        globalThis.__ashvalePhysics?.simulations.forEach((entry) =>
-                            entry.simulation.reset()
-                        )
-                    }
-                >
-                    Reset cloth
-                </button>
             </div>
         </div>
     );

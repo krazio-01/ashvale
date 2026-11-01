@@ -877,7 +877,6 @@ export abstract class CombatCharacter
         this.effects.dispose();
         this.animator.dispose();
         for (const skeleton of this.skeletons) skeleton.dispose();
-        this.proceduralRig.dispose();
         this.motor.dispose();
     }
 

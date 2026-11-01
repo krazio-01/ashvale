@@ -98,10 +98,6 @@ export class ProceduralRig {
         this.cloth?.reset();
     }
 
-    dispose(): void {
-        this.cloth?.dispose();
-    }
-
     private updatePose(frame: IProceduralFrame, rank: number, previousRank: number): void {
         for (let index = 0; index < this.bones.length; index++)
             this.animatedRotations[index].copy(this.bones[index].quaternion);

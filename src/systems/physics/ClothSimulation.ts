@@ -1,43 +1,35 @@
 import { Quaternion, Vector3 } from "three";
 import type { Object3D } from "three";
 import { PHYSICS } from "@/constants/physics";
-import { FULL_TURN } from "@/lib/helpers";
-import { createPhysicsBody } from "@/systems/physics/ClothBody";
-import type { PhysicsBody } from "@/systems/physics/ClothBody";
+import { FULL_TURN, lerp } from "@/lib/helpers";
+import { ClothSheet } from "@/systems/physics/ClothBody";
 import { ParticleSolver } from "@/systems/physics/ParticleSolver";
 import type { ICarriedMotion, ISolverEnvironment } from "@/systems/physics/ParticleSolver";
+import { SkeletonBinding } from "@/systems/physics/SkeletonBinding";
+import type { IGroundProbe } from "@/types/characters";
 import type {
     ICapsuleSource,
     IPhysicsBinding,
     IPhysicsDefinition,
     PhysicsDetail,
 } from "@/types/physics";
-import { SkeletonBinding } from "@/systems/physics/SkeletonBinding";
-import { PhysicsDiagnostics } from "@/systems/physics/PhysicsDiagnostics";
-import type { IGroundProbe } from "@/types/characters";
+import { ERRORS } from "@/constants/strings";
 
-export interface IPhysicsFrame {
-    deltaSeconds: number;
-    detail: PhysicsDetail;
-    floorY: number | null;
-}
+const DEGENERATE = PHYSICS.epsilon.motion;
+const scratchStart = new Vector3();
+const scratchEnd = new Vector3();
+const scratchMove = new Vector3();
+const scratchAxis = new Vector3();
+const scratchTurn = new Quaternion();
+const scratchOrigin = new Vector3();
+const scratchPush = new Vector3();
 
-export class PhysicsSimulation {
-    private static readonly DEGENERATE = PHYSICS.epsilon.motion;
-
-    private static readonly scratchStart = new Vector3();
-
-    private static readonly scratchEnd = new Vector3();
-
-    private static readonly scratchMove = new Vector3();
-
-    private static readonly scratchAxis = new Vector3();
-
-    private static readonly scratchTurn = new Quaternion();
-
+export class ClothSimulation {
     readonly solver: ParticleSolver;
-    private readonly bodies: PhysicsBody[];
+    private readonly bodies: ClothSheet[];
     private readonly binding: IPhysicsBinding;
+    private readonly character: Object3D;
+    private readonly groundProbe: IGroundProbe;
     private readonly colliderCount: number;
     private readonly capsuleSources: (ICapsuleSource | null)[] = Object.values(
         PHYSICS.capsuleSlots
@@ -77,17 +69,23 @@ export class PhysicsSimulation {
     private readonly nextRotation = new Quaternion();
     private previousDetail: PhysicsDetail = "full";
     private hasReference = false;
-    private clock = 0;
-    private calmSeconds = 0;
+    private windTime = 0;
+    private restartDampingRemaining = 0;
 
-    constructor(definition: IPhysicsDefinition, binding: IPhysicsBinding) {
+    private constructor(
+        model: Object3D,
+        character: Object3D,
+        probe: IGroundProbe,
+        definition: IPhysicsDefinition
+    ) {
+        const binding = new SkeletonBinding(model, definition);
         if (definition.version !== PHYSICS.dataVersion)
-            throw new Error(
-                `physics data version ${definition.version} is not ${PHYSICS.dataVersion}: re-import and cook the model`
-            );
+            throw new Error(ERRORS.physicsDataVersion(definition.version, PHYSICS.dataVersion));
         this.binding = binding;
+        this.character = character;
+        this.groundProbe = probe;
         this.colliderCount = definition.colliders.length;
-        this.bodies = definition.bodies.map(createPhysicsBody);
+        this.bodies = definition.bodies.map((body, index) => new ClothSheet(body, index));
         const totals = this.bodies.reduce(
             (sum, body) => ({
                 particles: sum.particles + body.counts.particles,
@@ -104,42 +102,57 @@ export class PhysicsSimulation {
         binding.prepareFrame();
         for (const body of this.bodies) body.build(this.solver, binding);
         this.updateColliders();
-        this.solver.snapFrame();
-        this.writeAnimated();
+        this.solver.syncPreviousFrame();
+        this.writeAnimatedPose();
     }
 
-    update(frame: IPhysicsFrame): void {
+    static create(
+        model: Object3D,
+        character: Object3D,
+        probe: IGroundProbe
+    ): ClothSimulation | null {
+        const definition = model.userData[PHYSICS.dataKey] as IPhysicsDefinition | undefined;
+        return definition ? new ClothSimulation(model, character, probe, definition) : null;
+    }
+
+    update(deltaSeconds: number, detail: PhysicsDetail, isPoseCurrent: boolean): void {
+        const floorY = detail === "frozen" ? null : this.floorHeightBelowCharacter();
         const wasFrozen = this.previousDetail === "frozen";
-        this.previousDetail = frame.detail;
-        this.binding.prepareFrame();
-        if (frame.detail === "frozen") {
-            this.writeAnimated();
+        this.previousDetail = detail;
+        const isFrozen = detail === "frozen";
+        this.binding.prepareFrame(!isFrozen, isPoseCurrent);
+        if (isFrozen) {
+            this.writeAnimatedPose();
             this.hasReference = false;
             return;
         }
-        const seconds = Number.isFinite(frame.deltaSeconds) ? Math.max(frame.deltaSeconds, 0) : 0;
+        const seconds = Number.isFinite(deltaSeconds) ? Math.max(deltaSeconds, 0) : 0;
         for (const body of this.bodies) {
-            body.refreshFeel();
-            body.followHomes(this.solver, this.binding);
+            body.reloadTuning();
+            body.updateHomeTargets(this.solver, this.binding);
         }
         this.updateColliders();
         this.binding.referenceWorld(this.nextPosition, this.nextRotation);
         if (!this.hasReference || this.isTeleport(seconds)) this.restart(wasFrozen);
-        else this.carryReference(seconds);
+        else this.carryClothWithCharacter(seconds);
         this.rememberReference();
-        const { calmSeconds, dampingScale } = PHYSICS.restart;
-        this.solver.dampingScale = 1 + (dampingScale - 1) * (this.calmSeconds / calmSeconds);
-        this.calmSeconds = Math.max(0, this.calmSeconds - seconds);
-        this.clock += seconds;
+        const { dampingSeconds, dampingScale } = PHYSICS.restart;
+        this.solver.dampingScale = lerp(
+            1,
+            dampingScale,
+            this.restartDampingRemaining / dampingSeconds
+        );
+        this.restartDampingRemaining = Math.max(0, this.restartDampingRemaining - seconds);
+        this.windTime += seconds;
         this.updateWind();
-        this.environment.floorY = frame.floorY;
-        if (this.solver.step(seconds, this.environment, frame.detail === "reduced")) {
+        this.environment.floorY = floorY;
+        if (this.solver.step(seconds, this.environment, detail === "reduced")) {
             if (!this.solver.isFinite()) this.reset();
-            for (const body of this.bodies) body.writeBack(this.solver, this.binding);
+            for (const body of this.bodies) body.writeSimulatedPose(this.solver, this.binding);
         }
     }
 
-    attachCapsule(slot: number, source: ICapsuleSource | null): void {
+    attachCapsule(slot: number, source: ICapsuleSource): void {
         this.capsuleSources[slot] = source;
     }
 
@@ -149,73 +162,62 @@ export class PhysicsSimulation {
         this.restart(false);
     }
 
+    applyHitImpulse(push: Vector3, strength: number): void {
+        if (push.lengthSq() < PHYSICS.impulse.minimumPushLengthSquared) return;
+        const speed = strength * PHYSICS.impulse.speedPerStrength;
+        const scaled = scratchPush.copy(push).normalize().multiplyScalar(speed);
+        this.solver.addImpulse(scaled.x, scaled.y, scaled.z);
+    }
+
     private restart(isCalmed: boolean): void {
-        this.calmSeconds = isCalmed ? PHYSICS.restart.calmSeconds : 0;
+        this.restartDampingRemaining = isCalmed ? PHYSICS.restart.dampingSeconds : 0;
         for (const body of this.bodies) body.resetToRest(this.solver, this.binding);
         this.updateColliders();
-        this.solver.snapFrame();
+        this.solver.syncPreviousFrame();
         this.rememberReference();
         this.environment.flingX = this.environment.flingY = this.environment.flingZ = 0;
-        this.writeAnimated();
+        this.writeAnimatedPose();
     }
 
-    set measuring(on: boolean) {
-        this.solver.measuring = on;
-    }
-
-    private writeAnimated(): void {
-        for (const body of this.bodies) body.writeAnimated(this.binding);
+    private writeAnimatedPose(): void {
+        for (const body of this.bodies) body.writeAnimatedPose(this.binding);
     }
 
     private updateColliders(): void {
         for (let collider = 0; collider < this.colliderCount; collider++) {
-            const radius = this.binding.colliderWorld(
-                collider,
-                PhysicsSimulation.scratchStart,
-                PhysicsSimulation.scratchEnd
-            );
-            this.solver.setCollider(
-                collider,
-                PhysicsSimulation.scratchStart,
-                PhysicsSimulation.scratchEnd,
-                radius
-            );
+            const radius = this.binding.colliderWorld(collider, scratchStart, scratchEnd);
+            this.solver.setCollider(collider, scratchStart, scratchEnd, radius);
         }
         for (let slot = 0; slot < this.capsuleSources.length; slot++) {
             const source = this.capsuleSources[slot];
-            const radius = source
-                ? source.worldCapsule(PhysicsSimulation.scratchStart, PhysicsSimulation.scratchEnd)
-                : null;
+            const radius = source ? source.worldCapsule(scratchStart, scratchEnd) : null;
             if (radius === null) this.solver.disableCollider(this.colliderCount + slot);
             else
                 this.solver.setCollider(
                     this.colliderCount + slot,
-                    PhysicsSimulation.scratchStart,
-                    PhysicsSimulation.scratchEnd,
+                    scratchStart,
+                    scratchEnd,
                     radius
                 );
         }
     }
 
     private isTeleport(seconds: number): boolean {
-        const { maxLinearSpeed, maxAngularSpeed, teleportDistance, teleportAngle } =
+        const { maxLagMoveSpeed, maxLagTurnSpeed, teleportDistance, teleportAngle } =
             PHYSICS.reference;
         return (
-            this.nextPosition.distanceTo(this.referencePosition) - maxLinearSpeed * seconds >
+            this.nextPosition.distanceTo(this.referencePosition) - maxLagMoveSpeed * seconds >
                 teleportDistance ||
-            this.nextRotation.angleTo(this.referenceRotation) - maxAngularSpeed * seconds >
+            this.nextRotation.angleTo(this.referenceRotation) - maxLagTurnSpeed * seconds >
                 teleportAngle
         );
     }
 
-    private carryReference(seconds: number): void {
-        const { linearInertia, angularInertia, flingScale, maxLinearSpeed, maxAngularSpeed } =
+    private carryClothWithCharacter(seconds: number): void {
+        const { moveLag, turnLag, turnFlingScale, maxLagMoveSpeed, maxLagTurnSpeed } =
             PHYSICS.reference;
-        const move = PhysicsSimulation.scratchMove.subVectors(
-            this.nextPosition,
-            this.referencePosition
-        );
-        const turn = PhysicsSimulation.scratchTurn
+        const move = scratchMove.subVectors(this.nextPosition, this.referencePosition);
+        const turn = scratchTurn
             .copy(this.referenceRotation)
             .invert()
             .premultiply(this.nextRotation);
@@ -223,20 +225,19 @@ export class PhysicsSimulation {
         const angle = 2 * Math.acos(Math.min(turn.w, 1));
         const sine = Math.sqrt(Math.max(1 - turn.w * turn.w, 0));
         const axis =
-            sine > PhysicsSimulation.DEGENERATE
-                ? PhysicsSimulation.scratchAxis.set(turn.x / sine, turn.y / sine, turn.z / sine)
-                : PhysicsSimulation.scratchAxis.set(0, 1, 0);
+            sine > DEGENERATE
+                ? scratchAxis.set(turn.x / sine, turn.y / sine, turn.z / sine)
+                : scratchAxis.set(0, 1, 0);
         this.motion.referenceMoveX = move.x;
         this.motion.referenceMoveY = move.y;
         this.motion.referenceMoveZ = move.z;
         const distance = move.length();
         const simulatedSeconds = Math.min(seconds, PHYSICS.step.maxFrameSeconds);
-        const cappedDistance = Math.min(distance, maxLinearSpeed * simulatedSeconds);
-        const cappedAngle = Math.min(angle, maxAngularSpeed * simulatedSeconds);
-        const carriedDistance = distance - cappedDistance + (1 - linearInertia) * cappedDistance;
-        const carriedAngle = angle - cappedAngle + (1 - angularInertia) * cappedAngle;
-        if (distance > PhysicsSimulation.DEGENERATE)
-            move.multiplyScalar(carriedDistance / distance);
+        const cappedDistance = Math.min(distance, maxLagMoveSpeed * simulatedSeconds);
+        const cappedAngle = Math.min(angle, maxLagTurnSpeed * simulatedSeconds);
+        const carriedDistance = distance - cappedDistance + (1 - moveLag) * cappedDistance;
+        const carriedAngle = angle - cappedAngle + (1 - turnLag) * cappedAngle;
+        if (distance > DEGENERATE) move.multiplyScalar(carriedDistance / distance);
         this.motion.axisX = axis.x;
         this.motion.axisY = axis.y;
         this.motion.axisZ = axis.z;
@@ -249,11 +250,11 @@ export class PhysicsSimulation {
         this.motion.moveZ = move.z;
         this.solver.carry(this.motion);
         const removedRate =
-            simulatedSeconds > 0 ? ((1 - angularInertia) * cappedAngle) / simulatedSeconds : 0;
+            simulatedSeconds > 0 ? ((1 - turnLag) * cappedAngle) / simulatedSeconds : 0;
         this.environment.flingX = axis.x * removedRate;
         this.environment.flingY = axis.y * removedRate;
         this.environment.flingZ = axis.z * removedRate;
-        this.environment.flingScale = flingScale;
+        this.environment.flingScale = turnFlingScale;
         if (
             distance > PHYSICS.solver.wakeSpeed * seconds ||
             angle > PHYSICS.solver.wakeAngularSpeed * seconds
@@ -273,70 +274,16 @@ export class PhysicsSimulation {
     private updateWind(): void {
         const { direction, base, gustAmplitude, gustHertz } = PHYSICS.environment.wind;
         const gust =
-            0.6 * Math.sin(FULL_TURN * gustHertz * this.clock) +
-            0.4 * Math.sin(FULL_TURN * gustHertz * 2.3 * this.clock + 1.3);
+            0.6 * Math.sin(FULL_TURN * gustHertz * this.windTime) +
+            0.4 * Math.sin(FULL_TURN * gustHertz * 2.3 * this.windTime + 1.3);
         const strength = Math.max(0, base + gustAmplitude * gust);
         this.environment.windX = direction[0] * strength;
         this.environment.windY = direction[1] * strength;
         this.environment.windZ = direction[2] * strength;
     }
-}
 
-export class PhysicsLayer {
-    private static readonly scratch = {
-        origin: new Vector3(),
-        push: new Vector3(),
-    };
-    private readonly simulation: PhysicsSimulation;
-    private readonly body: Object3D;
-    private readonly probe: IGroundProbe;
-    private readonly frame: IPhysicsFrame = {
-        deltaSeconds: 0,
-        detail: "frozen",
-        floorY: null,
-    };
-
-    private constructor(
-        model: Object3D,
-        body: Object3D,
-        probe: IGroundProbe,
-        definition: IPhysicsDefinition
-    ) {
-        this.body = body;
-        this.probe = probe;
-        this.simulation = new PhysicsSimulation(definition, new SkeletonBinding(model, definition));
-        PhysicsDiagnostics.register(body, this.simulation);
-    }
-
-    static create(model: Object3D, body: Object3D, probe: IGroundProbe): PhysicsLayer | null {
-        const definition = model.userData[PHYSICS.dataKey] as IPhysicsDefinition | undefined;
-        return definition ? new PhysicsLayer(model, body, probe, definition) : null;
-    }
-
-    impact(push: Vector3, strength: number): void {
-        if (push.lengthSq() < PHYSICS.impulse.minimumPushLengthSquared) return;
-        const speed = strength * PHYSICS.impulse.speedPerStrength;
-        const scaled = PhysicsLayer.scratch.push.copy(push).normalize().multiplyScalar(speed);
-        this.simulation.solver.kick(scaled.x, scaled.y, scaled.z);
-    }
-
-    attachCapsule(slot: number, source: ICapsuleSource | null): void {
-        this.simulation.attachCapsule(slot, source);
-    }
-
-    update(deltaSeconds: number, detail: PhysicsDetail): void {
-        const origin = this.body.getWorldPosition(PhysicsLayer.scratch.origin);
-        this.frame.deltaSeconds = deltaSeconds;
-        this.frame.detail = detail;
-        this.frame.floorY = this.probe.groundHeightAt(origin.x, origin.z, origin.y);
-        this.simulation.update(this.frame);
-    }
-
-    reset(): void {
-        this.simulation.reset();
-    }
-
-    dispose(): void {
-        PhysicsDiagnostics.unregister(this.simulation);
+    private floorHeightBelowCharacter(): number | null {
+        const origin = this.character.getWorldPosition(scratchOrigin);
+        return this.groundProbe.groundHeightAt(origin.x, origin.z, origin.y);
     }
 }

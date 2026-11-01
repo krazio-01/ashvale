@@ -1,12 +1,8 @@
 import { Vector3 } from "three";
 import { PHYSICS } from "@/constants/physics";
 import type { LinkKind, ParticleSolver } from "@/systems/physics/ParticleSolver";
-import type {
-    IClothFeel,
-    IPhysicsBinding,
-    IPhysicsBodyDefinition,
-    PhysicsBodyKind,
-} from "@/types/physics";
+import type { IClothTuning, IPhysicsBinding, IPhysicsBodyDefinition } from "@/types/physics";
+import { ERRORS } from "@/constants/strings";
 
 const scratchFrom = new Vector3();
 
@@ -17,30 +13,7 @@ interface IBodyCounts {
     tethers: number;
 }
 
-export abstract class PhysicsBody {
-    readonly feel: IClothFeel = { ...PHYSICS.cloth };
-    protected firstParticle = 0;
-
-    constructor(
-        readonly definition: IPhysicsBodyDefinition,
-        readonly index: number
-    ) {
-        this.refreshFeel();
-    }
-
-    abstract readonly counts: IBodyCounts;
-    abstract build(solver: ParticleSolver, binding: IPhysicsBinding): void;
-    abstract followHomes(solver: ParticleSolver, binding: IPhysicsBinding): void;
-    abstract resetToRest(solver: ParticleSolver, binding: IPhysicsBinding): void;
-    abstract writeBack(solver: ParticleSolver, binding: IPhysicsBinding): void;
-    abstract writeAnimated(binding: IPhysicsBinding): void;
-
-    refreshFeel(): void {
-        Object.assign(this.feel, PHYSICS.cloth, this.definition.feel);
-    }
-}
-
-class SheetBody extends PhysicsBody {
+export class ClothSheet {
     private static readonly LINK_SPANS: readonly {
         kind: LinkKind;
         span: number;
@@ -62,14 +35,20 @@ class SheetBody extends PhysicsBody {
 
     private static readonly scratchAcross = new Vector3();
 
+    readonly tuning: IClothTuning = { ...PHYSICS.cloth };
     readonly counts: IBodyCounts;
+    private firstParticle = 0;
 
-    constructor(definition: IPhysicsBodyDefinition, index: number) {
-        super(definition, index);
+    constructor(
+        readonly definition: IPhysicsBodyDefinition,
+        readonly index: number
+    ) {
+        if (definition.kind !== "sheet")
+            throw new Error(ERRORS.unknownPhysicsBodyKind(definition.name, definition.kind));
+        this.reloadTuning();
         const { columns, rows, name, pinned, nearestPin, geodesicDistance } = definition;
         const nodes = columns * rows;
-        if (columns < 2 || rows < 2)
-            throw new Error(`physics body ${name}: a sheet needs at least 2 columns and 2 rows`);
+        if (columns < 2 || rows < 2) throw new Error(ERRORS.sheetTooSmall(name));
         const perNode = [definition.nodeBones, pinned, nearestPin, geodesicDistance];
         if (
             perNode.some((values) => values.length !== nodes) ||
@@ -78,10 +57,10 @@ class SheetBody extends PhysicsBody {
             definition.skinBones.length !== nodes * 4 ||
             definition.skinWeights.length !== nodes * 4
         )
-            throw new Error(`physics body ${name}: node data does not match ${columns}x${rows}`);
+            throw new Error(ERRORS.sheetNodeMismatch(name, columns, rows));
         nearestPin.forEach((pin, node) => {
             if (!pinned[node] && !(pinned[pin] && Number.isFinite(geodesicDistance[node])))
-                throw new Error(`physics body ${name}: node ${node} has no pinned anchor`);
+                throw new Error(ERRORS.sheetNodeUnpinned(name, node));
         });
         this.counts = {
             particles: nodes,
@@ -91,60 +70,64 @@ class SheetBody extends PhysicsBody {
         };
     }
 
+    reloadTuning(): void {
+        Object.assign(this.tuning, PHYSICS.cloth, this.definition.feel);
+    }
+
     build(solver: ParticleSolver, binding: IPhysicsBinding): void {
         const unit = binding.unitScale(this.index);
-        const body = solver.addBody(this.feel);
+        const body = solver.addBody(this.tuning);
         this.firstParticle = solver.particleCount;
         this.addParticles(solver, binding, body);
         this.addLinks(solver, body, unit);
         this.addTethers(solver, unit);
     }
 
-    followHomes(solver: ParticleSolver, binding: IPhysicsBinding): void {
+    updateHomeTargets(solver: ParticleSolver, binding: IPhysicsBinding): void {
         for (let node = 0; node < this.counts.particles; node++) {
-            binding.homeWorld(this.index, node, SheetBody.scratchHome, SheetBody.scratchNormal);
+            binding.homeWorld(this.index, node, ClothSheet.scratchHome, ClothSheet.scratchNormal);
             solver.setHome(
                 this.firstParticle + node,
-                SheetBody.scratchHome,
-                SheetBody.scratchNormal
+                ClothSheet.scratchHome,
+                ClothSheet.scratchNormal
             );
         }
     }
 
     resetToRest(solver: ParticleSolver, binding: IPhysicsBinding): void {
         for (let node = 0; node < this.counts.particles; node++) {
-            binding.homeWorld(this.index, node, SheetBody.scratchHome, SheetBody.scratchNormal);
-            solver.place(this.firstParticle + node, SheetBody.scratchHome);
+            binding.homeWorld(this.index, node, ClothSheet.scratchHome, ClothSheet.scratchNormal);
+            solver.resetParticleTo(this.firstParticle + node, ClothSheet.scratchHome);
             solver.setHome(
                 this.firstParticle + node,
-                SheetBody.scratchHome,
-                SheetBody.scratchNormal
+                ClothSheet.scratchHome,
+                ClothSheet.scratchNormal
             );
         }
     }
 
-    writeBack(solver: ParticleSolver, binding: IPhysicsBinding): void {
+    writeSimulatedPose(solver: ParticleSolver, binding: IPhysicsBinding): void {
         for (let node = 0; node < this.counts.particles; node++) {
-            solver.readPosition(this.firstParticle + node, SheetBody.scratchPosition);
+            solver.readPosition(this.firstParticle + node, ClothSheet.scratchPosition);
             sheetTangents(
                 this.definition,
                 node,
                 solver.position,
                 this.firstParticle,
-                SheetBody.scratchDown,
-                SheetBody.scratchAcross
+                ClothSheet.scratchDown,
+                ClothSheet.scratchAcross
             );
             binding.writeNode(
                 this.index,
                 node,
-                SheetBody.scratchPosition,
-                SheetBody.scratchDown,
-                SheetBody.scratchAcross
+                ClothSheet.scratchPosition,
+                ClothSheet.scratchDown,
+                ClothSheet.scratchAcross
             );
         }
     }
 
-    writeAnimated(binding: IPhysicsBinding): void {
+    writeAnimatedPose(binding: IPhysicsBinding): void {
         for (let node = 0; node < this.counts.particles; node++)
             binding.writeAnimatedNode(this.index, node);
     }
@@ -153,19 +136,19 @@ class SheetBody extends PhysicsBody {
         const { pinned, geodesicDistance } = this.definition;
         const longest = Math.max(...geodesicDistance);
         for (let node = 0; node < this.counts.particles; node++) {
-            binding.homeWorld(this.index, node, SheetBody.scratchHome, SheetBody.scratchNormal);
+            binding.homeWorld(this.index, node, ClothSheet.scratchHome, ClothSheet.scratchNormal);
             solver.addParticle({
-                x: SheetBody.scratchHome.x,
-                y: SheetBody.scratchHome.y,
-                z: SheetBody.scratchHome.z,
+                x: ClothSheet.scratchHome.x,
+                y: ClothSheet.scratchHome.y,
+                z: ClothSheet.scratchHome.z,
                 body,
                 pinned: pinned[node],
-                leashShare: longest > 0 ? geodesicDistance[node] / longest : 0,
+                hemShare: longest > 0 ? geodesicDistance[node] / longest : 0,
             });
             solver.setHome(
                 this.firstParticle + node,
-                SheetBody.scratchHome,
-                SheetBody.scratchNormal
+                ClothSheet.scratchHome,
+                ClothSheet.scratchNormal
             );
         }
     }
@@ -175,7 +158,7 @@ class SheetBody extends PhysicsBody {
         for (let row = 0; row < rows; row++)
             for (let column = 0; column < columns; column++) {
                 const node = row * columns + column;
-                for (const { kind, span, alongRow } of SheetBody.LINK_SPANS) {
+                for (const { kind, span, alongRow } of ClothSheet.LINK_SPANS) {
                     if ((alongRow ? row : column) + span >= (alongRow ? rows : columns)) continue;
                     const partner = node + (alongRow ? span * columns : span);
                     solver.addLink(
@@ -233,14 +216,3 @@ export function sheetTangents(
         .fromArray(points, (firstPoint + right) * 3)
         .sub(scratchFrom.fromArray(points, (firstPoint + left) * 3));
 }
-
-export function createPhysicsBody(definition: IPhysicsBodyDefinition, index: number): PhysicsBody {
-    const kind = PHYSICS_BODY_KINDS[definition.kind];
-    if (!kind) throw new Error(`physics body ${definition.name}: unknown kind ${definition.kind}`);
-    return new kind(definition, index);
-}
-
-export const PHYSICS_BODY_KINDS: Record<
-    PhysicsBodyKind,
-    new (definition: IPhysicsBodyDefinition, index: number) => PhysicsBody
-> = { sheet: SheetBody };
