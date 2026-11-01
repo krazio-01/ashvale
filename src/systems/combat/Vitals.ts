@@ -1,15 +1,5 @@
-export interface IVitalsSpec {
-    maxHealth: number;
-    maxPoise: number;
-    maxStamina: number;
-    maxFocus: number;
-    poiseRegenDelay: number;
-    poiseRegenRate: number;
-    staminaRegenDelay: number;
-    staminaRegenRate: number;
-    staggerSeconds: number;
-}
-
+import { clamp } from "@/lib/helpers";
+import type { IVitalsSpec } from "@/types/combat";
 interface IDamageResult {
     killed: boolean;
     poiseBroken: boolean;
@@ -22,7 +12,7 @@ export class Vitals {
     stamina: number;
     focus = 0;
 
-    private readonly spec: IVitalsSpec;
+    readonly spec: IVitalsSpec;
     private readonly damageResult: IDamageResult = { killed: false, poiseBroken: false, dealt: 0 };
     private poiseRegenWait = 0;
     private staminaRegenWait = 0;
@@ -38,22 +28,6 @@ export class Vitals {
         return this.health <= 0;
     }
 
-    get staggerSeconds(): number {
-        return this.spec.staggerSeconds;
-    }
-
-    get maxHealth(): number {
-        return this.spec.maxHealth;
-    }
-
-    get maxStamina(): number {
-        return this.spec.maxStamina;
-    }
-
-    get maxFocus(): number {
-        return this.spec.maxFocus;
-    }
-
     get healthFraction(): number {
         return this.health / this.spec.maxHealth;
     }
@@ -64,7 +38,7 @@ export class Vitals {
 
     applyDamage(damage: number, poiseDamage: number, isStaggered: boolean): IDamageResult {
         const result = this.damageResult;
-        result.dealt = Math.min(this.health, Math.max(0, damage));
+        result.dealt = clamp(damage, 0, this.health);
         result.poiseBroken = false;
         this.health -= result.dealt;
         result.killed = this.health <= 0;
@@ -95,16 +69,14 @@ export class Vitals {
         if (cost <= 0) return true;
         if (this.stamina <= 0) return false;
 
-        this.stamina = Math.max(0, this.stamina - cost);
-        this.staminaRegenWait = this.spec.staminaRegenDelay;
+        this.spendStamina(cost);
         return true;
     }
 
     drainStamina(amount: number): boolean {
         if (this.stamina <= 0) return false;
 
-        this.stamina = Math.max(0, this.stamina - amount);
-        this.staminaRegenWait = this.spec.staminaRegenDelay;
+        this.spendStamina(amount);
         return this.stamina > 0;
     }
 
@@ -143,5 +115,10 @@ export class Vitals {
         this.focus = 0;
         this.poiseRegenWait = 0;
         this.staminaRegenWait = 0;
+    }
+
+    private spendStamina(amount: number): void {
+        this.stamina = Math.max(0, this.stamina - amount);
+        this.staminaRegenWait = this.spec.staminaRegenDelay;
     }
 }

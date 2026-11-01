@@ -7,34 +7,24 @@ import type {
 } from "@dimforge/rapier3d-compat";
 import { Vector3 } from "three";
 import type { Vector3Tuple } from "three";
-import { CONTACT, KNOCKBACK_DECAY } from "@/constants/combat";
+import { BODY_CONTACT, KNOCKBACK_DECAY } from "@/constants/combat";
 import { COLLISION_GROUPS, WORLD } from "@/constants/world";
-export interface IMotorSpec {
-    height: number;
-    radius: number;
-    colliderOffset: number;
-    maxSlopeClimbAngle: number;
-    minSlopeSlideAngle: number;
-    autostepMaxHeight: number;
-    autostepMinWidth: number;
-    snapToGroundDistance: number;
-    terminalVelocity: number;
-    groundAcceleration: number;
-    airAcceleration: number;
-    pushesDynamicBodies: boolean;
-}
+import { smoothingFactor, horizontalLength, clamp } from "@/lib/helpers";
+import type { IMotorSpec } from "@/types/physics";
 
-export interface IMotorContact {
+interface IMotorContact {
     movedFraction: number;
     isHeadOn: boolean;
     readonly resolvedVelocity: Vector3;
 }
 
-const REST_EPSILON = 1e-4;
-const WALKABLE_NORMAL_Y = 0.6;
-const PROBE_HEIGHT_FRACTION = 0.25;
-
 export class CharacterMotor {
+    private static readonly REST_EPSILON = 1e-4;
+
+    private static readonly WALKABLE_NORMAL_Y = 0.6;
+
+    private static readonly PROBE_HEIGHT_FRACTION = 0.25;
+
     readonly collider: Collider;
     readonly velocity = new Vector3();
     readonly renderPosition = new Vector3();
@@ -49,6 +39,8 @@ export class CharacterMotor {
     private readonly simulatedPosition = new Vector3();
     private readonly movementRequest = { x: 0, y: 0, z: 0 };
     private readonly nextTranslation = { x: 0, y: 0, z: 0 };
+    private readonly resolvedMovement = { x: 0, y: 0, z: 0 };
+    private readonly physicsTranslation = { x: 0, y: 0, z: 0 };
     private readonly obstacleProbe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
     private readonly groundProbe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
     private readonly footProbe = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
@@ -59,6 +51,7 @@ export class CharacterMotor {
         resolvedVelocity: new Vector3(),
     };
     private autostepEnabled = true;
+    private collisionEnabled = true;
     private verticalVelocity = 0;
     private grounded = false;
 
@@ -105,14 +98,16 @@ export class CharacterMotor {
     }
 
     get isCollidable(): boolean {
-        return this.collider.isEnabled();
+        return this.collisionEnabled;
     }
 
     disableCollision(): void {
+        this.collisionEnabled = false;
         this.collider.setEnabled(false);
     }
 
     enableCollision(): void {
+        this.collisionEnabled = true;
         this.collider.setEnabled(true);
     }
 
@@ -139,14 +134,18 @@ export class CharacterMotor {
         const acceleration = this.grounded
             ? this.spec.groundAcceleration
             : this.spec.airAcceleration;
-        const approach = 1 - Math.exp(-acceleration * deltaSeconds);
+        const approach = smoothingFactor(acceleration, deltaSeconds);
         this.velocity.x += (desiredVelocity.x - this.velocity.x) * approach;
         this.velocity.z += (desiredVelocity.z - this.velocity.z) * approach;
-        if (Math.abs(this.velocity.x) < REST_EPSILON && Math.abs(this.velocity.z) < REST_EPSILON)
+        if (
+            Math.abs(this.velocity.x) < CharacterMotor.REST_EPSILON &&
+            Math.abs(this.velocity.z) < CharacterMotor.REST_EPSILON
+        )
             this.velocity.set(0, 0, 0);
 
         this.knockback.multiplyScalar(Math.exp(-KNOCKBACK_DECAY * deltaSeconds));
-        if (this.knockback.lengthSq() < REST_EPSILON * REST_EPSILON) this.knockback.set(0, 0, 0);
+        if (this.knockback.lengthSq() < CharacterMotor.REST_EPSILON * CharacterMotor.REST_EPSILON)
+            this.knockback.set(0, 0, 0);
 
         const moveX = (this.velocity.x + this.knockback.x) * deltaSeconds + (displacement?.x ?? 0);
         const moveZ = (this.velocity.z + this.knockback.z) * deltaSeconds + (displacement?.z ?? 0);
@@ -163,7 +162,7 @@ export class CharacterMotor {
         this.controller.computeColliderMovement(this.collider, request);
         this.grounded = this.controller.computedGrounded();
 
-        const resolved = this.controller.computedMovement();
+        const resolved = this.controller.computedMovement(this.resolvedMovement);
         this.recordContact(moveX, moveZ, resolved.x, resolved.z, deltaSeconds);
         const current = this.simulatedPosition;
         this.commitTranslation(
@@ -173,23 +172,23 @@ export class CharacterMotor {
         );
     }
 
-    isPathBlocked(directionX: number, directionZ: number, distance: number): boolean {
-        return this.isWallWithin(
+    isObstacleAhead(directionX: number, directionZ: number, distance: number): boolean {
+        return this.hasWallAlong(
             directionX,
             directionZ,
             distance,
-            PROBE_HEIGHT_FRACTION,
+            CharacterMotor.PROBE_HEIGHT_FRACTION,
             COLLISION_GROUPS.obstacleProbe
         );
     }
 
-    isWorldBlockedAhead(
+    isWallAhead(
         directionX: number,
         directionZ: number,
         distance: number,
         heightFraction: number
     ): boolean {
-        return this.isWallWithin(
+        return this.hasWallAlong(
             directionX,
             directionZ,
             distance,
@@ -198,7 +197,7 @@ export class CharacterMotor {
         );
     }
 
-    private isWallWithin(
+    private hasWallAlong(
         directionX: number,
         directionZ: number,
         distance: number,
@@ -222,7 +221,7 @@ export class CharacterMotor {
             groups,
             this.collider
         );
-        return hit !== null && hit.normal.y < WALKABLE_NORMAL_Y;
+        return hit !== null && hit.normal.y < CharacterMotor.WALKABLE_NORMAL_Y;
     }
 
     private recordContact(
@@ -236,15 +235,16 @@ export class CharacterMotor {
         contact.resolvedVelocity.set(resolvedX / deltaSeconds, 0, resolvedZ / deltaSeconds);
 
         const requested = Math.hypot(requestX, requestZ);
-        if (requested < REST_EPSILON) return;
+        if (requested < CharacterMotor.REST_EPSILON) return;
 
         const directionX = requestX / requested;
         const directionZ = requestZ / requested;
-        contact.movedFraction = Math.max(
+        contact.movedFraction = clamp(
+            (resolvedX * directionX + resolvedZ * directionZ) / requested,
             0,
-            Math.min(1, (resolvedX * directionX + resolvedZ * directionZ) / requested)
+            1
         );
-        if (contact.movedFraction > 1 - REST_EPSILON) return;
+        if (contact.movedFraction > 1 - CharacterMotor.REST_EPSILON) return;
 
         const collisions = this.controller.numComputedCollisions();
 
@@ -252,9 +252,16 @@ export class CharacterMotor {
             const collision = this.controller.computedCollision(index, this.collisionScratch);
             if (!collision) continue;
             const normal = collision.normal1;
-            const horizontal = Math.hypot(normal.x, normal.z);
-            if (normal.y >= WALKABLE_NORMAL_Y || horizontal < REST_EPSILON) continue;
-            if ((normal.x * directionX + normal.z * directionZ) / horizontal < CONTACT.headOnDot) {
+            const horizontal = horizontalLength(normal);
+            if (
+                normal.y >= CharacterMotor.WALKABLE_NORMAL_Y ||
+                horizontal < CharacterMotor.REST_EPSILON
+            )
+                continue;
+            if (
+                (normal.x * directionX + normal.z * directionZ) / horizontal <
+                BODY_CONTACT.headOnDot
+            ) {
                 contact.isHeadOn = true;
                 return;
             }
@@ -277,7 +284,7 @@ export class CharacterMotor {
         return hit && hit.timeOfImpact > 0 ? fromY - hit.timeOfImpact : null;
     }
 
-    groundGap(maxGap: number): number {
+    distanceToGround(maxGap: number): number {
         const halfHeight = this.spec.height / 2;
         const origin = this.groundProbe.origin;
         origin.x = this.simulatedPosition.x;
@@ -314,16 +321,16 @@ export class CharacterMotor {
     private slopeRise(moveX: number, moveZ: number, followGround: boolean): number {
         const slopeReach =
             this.spec.snapToGroundDistance +
-            this.spec.radius * (1 / WALKABLE_NORMAL_Y - 1) +
+            this.spec.radius * (1 / CharacterMotor.WALKABLE_NORMAL_Y - 1) +
             this.spec.colliderOffset;
-        if (!followGround || !Number.isFinite(this.groundGap(slopeReach))) return 0;
+        if (!followGround || !Number.isFinite(this.distanceToGround(slopeReach))) return 0;
 
         const normal = this.groundNormal;
-        if (normal.y < WALKABLE_NORMAL_Y) return 0;
+        if (normal.y < CharacterMotor.WALKABLE_NORMAL_Y) return 0;
         return -(normal.x * moveX + normal.z * moveZ) / normal.y;
     }
 
-    hold(): void {
+    holdPosition(): void {
         this.previousPosition.copy(this.simulatedPosition);
     }
 
@@ -381,8 +388,8 @@ export class CharacterMotor {
         this.stop();
     }
 
-    postStep(): void {
-        const translation = this.rigidBody.translation();
+    syncPositionFromPhysics(): void {
+        const translation = this.rigidBody.translation(this.physicsTranslation);
         this.simulatedPosition.set(translation.x, translation.y, translation.z);
     }
 

@@ -1,19 +1,19 @@
 import { Group, Mesh, MeshBasicMaterial, SphereGeometry, Vector3 } from "three";
-import { WeaponSweep } from "@/systems/combat/hit/SweptHitDetector";
-import { emitHitLanded } from "@/events/CombatEvents";
-import type { CombatEvents, ICombatEventMap } from "@/events/CombatEvents";
+import { SweptHitDetector } from "@/systems/combat/hit/SweptHitDetector";
+import { createHitEvent, createHitPayload, emitHitLanded } from "@/events/CombatEvents";
+import type { ICombatEventMap } from "@/events/CombatEvents";
+import type { GameEvents } from "@/events/EventEmitter";
 import { isConnected } from "@/systems/combat/hit/HitResolver";
 import type { CombatRegistry } from "@/systems/combat/CombatRegistry";
 import { PROJECTILE_POOL, PROJECTILES } from "@/constants/combat";
-import type { IProjectileSpec } from "@/constants/combat";
-import type { ICombatant, IHitPayload, ProjectileKind } from "@/types/combat";
+import type { IProjectileSpec, ICombatant, IHitPayload, ProjectileKind } from "@/types/combat";
 
 type IProjectileOwner = ICombatant & { readonly attackPower: number };
 type WorldBlockTest = (from: Vector3, to: Vector3) => boolean;
 
 interface IProjectile {
     readonly mesh: Mesh;
-    readonly sweep: WeaponSweep;
+    readonly sweep: SweptHitDetector;
     readonly position: Vector3;
     readonly previous: Vector3;
     readonly velocity: Vector3;
@@ -27,15 +27,15 @@ export class ProjectileSystem {
     readonly sceneObject = new Group();
 
     private readonly registry: CombatRegistry;
-    private readonly events: CombatEvents;
+    private readonly events: GameEvents;
     private readonly isWorldBlocked: WorldBlockTest;
     private readonly geometry = new SphereGeometry(1, 8, 6);
     private readonly materials: Record<ProjectileKind, MeshBasicMaterial>;
     private readonly pool: IProjectile[] = [];
-    private readonly struck: ICombatant[] = [];
+    private readonly hitDefenders: ICombatant[] = [];
     private hitEvent: ICombatEventMap["hitLanded"] | null = null;
 
-    constructor(registry: CombatRegistry, events: CombatEvents, isWorldBlocked: WorldBlockTest) {
+    constructor(registry: CombatRegistry, events: GameEvents, isWorldBlocked: WorldBlockTest) {
         this.registry = registry;
         this.events = events;
         this.isWorldBlocked = isWorldBlocked;
@@ -50,7 +50,7 @@ export class ProjectileSystem {
             this.sceneObject.add(mesh);
             this.pool.push({
                 mesh,
-                sweep: new WeaponSweep(),
+                sweep: new SweptHitDetector(),
                 position: mesh.position,
                 previous: new Vector3(),
                 velocity: new Vector3(),
@@ -82,19 +82,7 @@ export class ProjectileSystem {
         projectile.velocity.normalize().multiplyScalar(spec.speed);
         projectile.sweep.begin();
 
-        const payload = (projectile.payload ??= {
-            attacker: owner,
-            moveId: kind,
-            damage: 0,
-            poiseDamage: 0,
-            impact: spec.impact,
-            knockback: 0,
-            parryable: true,
-            perilous: false,
-            ranged: true,
-            swing: "side",
-            origin: new Vector3(),
-        });
+        const payload = (projectile.payload ??= createHitPayload(owner, true));
         payload.attacker = owner;
         payload.moveId = kind;
         payload.damage = owner.attackPower * spec.damageScale;
@@ -102,7 +90,7 @@ export class ProjectileSystem {
         payload.impact = spec.impact;
         payload.knockback = spec.knockback;
         payload.parryable = spec.parryable;
-        payload.perilous = spec.perilous;
+        payload.dodgeOnly = spec.dodgeOnly;
 
         projectile.mesh.material = this.materials[kind];
         projectile.mesh.scale.setScalar(spec.radius);
@@ -119,7 +107,7 @@ export class ProjectileSystem {
             projectile.age += deltaSeconds;
 
             if (
-                projectile.payload?.attacker.isDead ||
+                projectile.payload!.attacker.isDead ||
                 projectile.age >= PROJECTILE_POOL.lifetimeSeconds ||
                 this.isWorldBlocked(projectile.previous, projectile.position)
             ) {
@@ -138,20 +126,18 @@ export class ProjectileSystem {
     }
 
     private resolveHits(projectile: IProjectile): void {
-        const payload = projectile.payload;
-        if (!payload) return;
+        const payload = projectile.payload!;
         const count = projectile.sweep.sweep(
             projectile.previous,
             projectile.position,
             projectile.spec.radius,
             payload.attacker.team,
             this.registry,
-            this.struck
+            this.hitDefenders
         );
 
         for (let index = 0; index < count; index += 1) {
-            const defender = this.struck[index];
-            if (!defender) continue;
+            const defender = this.hitDefenders[index];
 
             payload.origin.copy(projectile.previous);
             const outcome = defender.receiveHit(payload);
@@ -161,13 +147,7 @@ export class ProjectileSystem {
             }
             if (!isConnected(outcome)) continue;
 
-            const event = (this.hitEvent ??= {
-                attacker: payload.attacker,
-                defender,
-                outcome,
-                impact: payload.impact,
-                point: new Vector3(),
-            });
+            const event = (this.hitEvent ??= createHitEvent(payload.attacker));
             event.attacker = payload.attacker;
             emitHitLanded(
                 this.events,

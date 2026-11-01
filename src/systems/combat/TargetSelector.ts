@@ -1,5 +1,5 @@
 import type { Vector3 } from "three";
-import { TARGETING } from "@/constants/combat";
+import { COMBAT_MOVEMENT, TARGETING } from "@/constants/combat";
 import { horizontalDistance } from "@/lib/helpers";
 import type { ICombatant } from "@/types/combat";
 
@@ -22,7 +22,8 @@ function scoreCandidate(
     const distance = Math.hypot(dx, dz);
 
     if (distance > maxRange) return Number.NEGATIVE_INFINITY;
-    if (distance < 1e-4) return TARGETING.angleWeight + TARGETING.distanceWeight;
+    if (distance < COMBAT_MOVEMENT.minimumPlanarLength)
+        return TARGETING.angleWeight + TARGETING.distanceWeight;
 
     const dot = (dx * facing.x + dz * facing.z) / distance;
     if (dot < minDot) return Number.NEGATIVE_INFINITY;
