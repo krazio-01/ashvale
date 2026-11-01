@@ -1,8 +1,8 @@
 import { CanvasTexture, Color, LinearFilter, RepeatWrapping, Vector2, Vector4 } from "three";
-import { GROUND_MATERIAL, SOIL_RAMP, TRAIL } from "@/constants/world";
+import { GROUND_MATERIAL, SOIL_COLOUR_SHIFTS, TRAIL } from "@/constants/world";
 import { clamp, shiftColorHsl } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
-import type { ITerrainProfile } from "@/types/world";
+import type { IColorShift, ITerrainProfile } from "@/types/world";
 
 const TRAIL_WEAR_BAND: [number, number] = [
     TRAIL.halfWidth,
@@ -75,6 +75,14 @@ export const GROUND_MATERIAL_GLSL = `
     }
 `;
 
+export interface IGroundMaterials {
+    loam: Color;
+    driedEarth: Color;
+    dust: Color;
+    mud: Color;
+    grit: Color;
+}
+
 export function groundMaterialUniforms(
     splatTexture: CanvasTexture,
     detailTexture: CanvasTexture,
@@ -106,29 +114,15 @@ export function groundMaterialUniforms(
 }
 
 export function deriveGroundMaterials(profile: ITerrainProfile): IGroundMaterials {
-    const fromSoil = (step: ISoilRampStep): Color =>
-        new Color(
-            shiftColorHsl(
-                profile.soilColor,
-                step.hueShift,
-                step.saturationScale,
-                step.lightnessShift
-            )
-        );
+    const fromSoil = (step: IColorShift): Color =>
+        new Color(shiftColorHsl(profile.soilColor, step));
 
     return {
-        loam: fromSoil(SOIL_RAMP.loam),
-        driedEarth: fromSoil(SOIL_RAMP.driedEarth),
-        dust: fromSoil(SOIL_RAMP.dust),
-        mud: fromSoil(SOIL_RAMP.mud),
-        grit: new Color(
-            shiftColorHsl(
-                profile.rockColor,
-                SOIL_RAMP.gritFromRock.hueShift,
-                SOIL_RAMP.gritFromRock.saturationScale,
-                SOIL_RAMP.gritFromRock.lightnessShift
-            )
-        ),
+        loam: fromSoil(SOIL_COLOUR_SHIFTS.loam),
+        driedEarth: fromSoil(SOIL_COLOUR_SHIFTS.driedEarth),
+        dust: fromSoil(SOIL_COLOUR_SHIFTS.dust),
+        mud: fromSoil(SOIL_COLOUR_SHIFTS.mud),
+        grit: new Color(shiftColorHsl(profile.rockColor, SOIL_COLOUR_SHIFTS.gritFromRock)),
     };
 }
 
@@ -178,7 +172,7 @@ function buildMaskTexture(tileCounts: number[], seed: number): CanvasTexture {
         const span = largest - smallest;
 
         for (let texel = 0; texel < channel.length; texel += 1) {
-            const stretched = span > 1e-6 ? ((channel[texel] ?? 0) - smallest) / span : 0.5;
+            const stretched = span > 1e-6 ? (channel[texel] - smallest) / span : 0.5;
 
             pixels.data[texel * 4 + channelIndex] = Math.round(255 * clamp(stretched, 0, 1));
         }
@@ -194,18 +188,4 @@ function buildMaskTexture(tileCounts: number[], seed: number): CanvasTexture {
     texture.generateMipmaps = false;
 
     return texture;
-}
-
-interface ISoilRampStep {
-    hueShift: number;
-    saturationScale: number;
-    lightnessShift: number;
-}
-
-export interface IGroundMaterials {
-    loam: Color;
-    driedEarth: Color;
-    dust: Color;
-    mud: Color;
-    grit: Color;
 }

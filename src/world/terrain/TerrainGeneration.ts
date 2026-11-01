@@ -1,3 +1,4 @@
+import type { IRegionFloor, ICorridorPath, IWaterCourse } from "@/types/world";
 import {
     ClampToEdgeWrapping,
     DataTexture,
@@ -17,39 +18,304 @@ import {
 import { GROUND_COVER } from "@/constants/placement";
 import { clamp, distanceOutsideBox, lerp, smoothstep } from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
-import { createChannelReading, WaterChannel } from "@/world/water/WaterCourse";
-import type { IWaterCourse } from "@/world/water/WaterCourse";
+import { createChannelReading, WaterChannel, isCliffCorridor } from "@/world/water/WaterCourse";
+import { CorridorClimbStyle } from "@/types/world";
 
-export const WALKABLE_REACH = WORLD_EDGE.groundApron + WORLD_EDGE.lipWidth;
+export const WALKABLE_REACH = WORLD_EDGE.flatBorderWidth + WORLD_EDGE.lipWidth;
 
-export class TerrainGenerator {
+interface ITerrainSample {
+    elevation: number;
+    carveStrength: number;
+    trailDistance: number;
+    nestingDepth: number;
+    isCorridor: boolean;
+    footprintDistance: number;
+    waterDepth: number;
+}
+
+interface IPreparedCorridor {
+    fromX: number;
+    fromZ: number;
+    spanX: number;
+    spanZ: number;
+    spanLengthSquared: number;
+    spanLength: number;
+    halfWidth: number;
+    fromElevation: number;
+    toElevation: number;
+    climbStyle: CorridorClimbStyle;
+}
+
+interface IGroundAccumulator {
+    dominantCarveWeight: number;
+    weightedFloorElevation: number;
+    totalCarveWeight: number;
+    nearestEdgeDistance: number;
+    nearestFloorElevation: number;
+    nearestFeatureIsCorridor: boolean;
+    influenceWeightedElevation: number;
+    totalInfluenceWeight: number;
+}
+
+type TerrainField = keyof ITerrainFields;
+
+interface ITerrainFields {
+    elevation: Float32Array;
+    steepness: Float32Array;
+    carveStrength: Float32Array;
+    trailDistance: Float32Array;
+    corridorFlag: Uint8Array;
+    nestingDepth: Uint8Array;
+    footprintDistance: Float32Array;
+    waterDepth: Float32Array;
+}
+
+interface IInterpolationWeights {
+    acrossRatio: number;
+    downRatio: number;
+    nearLeftIndex: number;
+    farLeftIndex: number;
+}
+
+export interface IGridSample {
+    elevation: number;
+    trailDistance: number;
+    steepness: number;
+    footprintDistance: number;
+    waterDepth: number;
+}
+
+export class TerrainHeightField {
+    private static readonly GROUND_ACCUMULATOR_DEFAULTS: Readonly<IGroundAccumulator> = {
+        dominantCarveWeight: 0,
+        weightedFloorElevation: 0,
+        totalCarveWeight: 0,
+        nearestEdgeDistance: Infinity,
+        nearestFloorElevation: TERRAIN.pathLevel,
+        nearestFeatureIsCorridor: false,
+        influenceWeightedElevation: 0,
+        totalInfluenceWeight: 0,
+    };
+
+    private static edgeDropAt(footprintDistance: number): number {
+        const rolloverRatio = smoothstep(
+            WORLD_EDGE.flatBorderWidth,
+            WALKABLE_REACH,
+            footprintDistance
+        );
+
+        if (rolloverRatio <= 0) return 0;
+
+        return -Math.pow(rolloverRatio, WORLD_EDGE.dropCurve) * WORLD_EDGE.dropDepth;
+    }
+
+    private static createGroundAccumulator(): IGroundAccumulator {
+        return { ...TerrainHeightField.GROUND_ACCUMULATOR_DEFAULTS };
+    }
+
+    private static resetGroundAccumulator(ground: IGroundAccumulator): IGroundAccumulator {
+        return Object.assign(ground, TerrainHeightField.GROUND_ACCUMULATOR_DEFAULTS);
+    }
+
+    private static accumulateFeature(
+        ground: IGroundAccumulator,
+        featureElevation: number,
+        edgeDistance: number,
+        isCorridor: boolean
+    ): number {
+        if (edgeDistance < ground.nearestEdgeDistance) {
+            ground.nearestEdgeDistance = edgeDistance;
+            ground.nearestFloorElevation = featureElevation;
+            ground.nearestFeatureIsCorridor = isCorridor;
+        }
+
+        const influenceWeight = 1 - smoothstep(0, WALKABLE_REACH, edgeDistance);
+        ground.influenceWeightedElevation += featureElevation * influenceWeight;
+        ground.totalInfluenceWeight += influenceWeight;
+
+        const carveWeight = 1 - smoothstep(0, TERRAIN.bankWidth, edgeDistance);
+        if (carveWeight <= 0) return 0;
+
+        ground.weightedFloorElevation += featureElevation * carveWeight;
+        ground.totalCarveWeight += carveWeight;
+
+        return carveWeight;
+    }
+
+    private static measureNeighbourSpacing(regionFloors: IRegionFloor[]): number {
+        let smallestRegionSpan = Infinity;
+
+        for (const region of regionFloors)
+            smallestRegionSpan = Math.min(
+                smallestRegionSpan,
+                region.halfWidth * 2,
+                region.halfDepth * 2
+            );
+
+        if (!Number.isFinite(smallestRegionSpan)) return TERRAIN.bankWidth;
+
+        const gapsToNearestNeighbour: number[] = [];
+
+        for (const region of regionFloors) {
+            let nearestGap = Infinity;
+
+            for (const other of regionFloors) {
+                if (other === region) continue;
+
+                const centreGapX = Math.abs(other.centerX - region.centerX);
+                const centreGapZ = Math.abs(other.centerZ - region.centerZ);
+                const edgeGapX = Math.max(centreGapX - region.halfWidth - other.halfWidth, 0);
+                const edgeGapZ = Math.max(centreGapZ - region.halfDepth - other.halfDepth, 0);
+
+                nearestGap = Math.min(
+                    nearestGap,
+                    Math.sqrt(edgeGapX * edgeGapX + edgeGapZ * edgeGapZ)
+                );
+            }
+
+            if (Number.isFinite(nearestGap)) gapsToNearestNeighbour.push(nearestGap);
+        }
+
+        if (gapsToNearestNeighbour.length === 0)
+            return smallestRegionSpan * LANDFORM.minimumOpennessRatio;
+
+        gapsToNearestNeighbour.sort((first, second) => first - second);
+
+        const medianGap = gapsToNearestNeighbour[Math.floor(gapsToNearestNeighbour.length / 2)];
+
+        return Math.max(medianGap, smallestRegionSpan * LANDFORM.minimumOpennessRatio);
+    }
+
+    private static prepareCorridor(path: ICorridorPath): IPreparedCorridor {
+        const spanX = path.toX - path.fromX;
+        const spanZ = path.toZ - path.fromZ;
+        const spanLengthSquared = spanX * spanX + spanZ * spanZ;
+
+        return {
+            fromX: path.fromX,
+            fromZ: path.fromZ,
+            spanX,
+            spanZ,
+            spanLengthSquared,
+            spanLength: Math.sqrt(spanLengthSquared),
+            halfWidth: path.halfWidth,
+            fromElevation: path.fromElevation,
+            toElevation: path.toElevation,
+            climbStyle: path.climbStyle,
+        };
+    }
+
+    private static corridorElevationAt(corridor: IPreparedCorridor, travelRatio: number): number {
+        if (corridor.fromElevation === corridor.toElevation) return corridor.fromElevation;
+
+        if (corridor.climbStyle === CorridorClimbStyle.Ramp)
+            return lerp(corridor.fromElevation, corridor.toElevation, travelRatio);
+
+        const stepDistance = corridorStepFaceDistance(corridor.spanLength);
+        const halfFace = TERRAIN.corridorStepFaceWidth / 2;
+
+        return lerp(
+            corridor.fromElevation,
+            corridor.toElevation,
+            smoothstep(
+                stepDistance - halfFace,
+                stepDistance + halfFace,
+                travelRatio * corridor.spanLength
+            )
+        );
+    }
+
+    private static distanceOutsideRegionFloor(x: number, z: number, region: IRegionFloor): number {
+        return distanceOutsideBox(
+            x,
+            z,
+            region.centerX,
+            region.centerZ,
+            region.halfWidth,
+            region.halfDepth
+        );
+    }
+
+    private static corridorTravelRatioAt(
+        x: number,
+        z: number,
+        corridor: IPreparedCorridor
+    ): number {
+        if (corridor.spanLengthSquared === 0) return 0;
+
+        return clamp(
+            ((x - corridor.fromX) * corridor.spanX + (z - corridor.fromZ) * corridor.spanZ) /
+                corridor.spanLengthSquared,
+            0,
+            1
+        );
+    }
+
+    private static distanceToCorridorCentreAt(
+        x: number,
+        z: number,
+        corridor: IPreparedCorridor,
+        travelRatio: number
+    ): number {
+        const gapX = x - corridor.fromX - corridor.spanX * travelRatio;
+        const gapZ = z - corridor.fromZ - corridor.spanZ * travelRatio;
+
+        return Math.sqrt(gapX * gapX + gapZ * gapZ);
+    }
+
     private readonly regionFloors: IRegionFloor[];
     private readonly preparedCorridors: IPreparedCorridor[];
+    private readonly cliffCorridors: IPreparedCorridor[];
     private readonly waterChannel: WaterChannel | null;
     private readonly undulationNoise: FractalNoise;
     private readonly trailEdgeNoise: FractalNoise;
     private readonly elevationRampDistance: number;
     private readonly scratchSample = createTerrainSample();
-    private readonly scratchGround = createGroundAccumulator();
-    private readonly scratchChannel = createChannelReading();
+    private readonly scratchGround = TerrainHeightField.createGroundAccumulator();
+    private readonly scratchChannelReading = createChannelReading();
 
     constructor(
         regionFloors: IRegionFloor[],
         corridorPaths: ICorridorPath[],
-        waterCourses: IWaterCourse[] | IWaterCourse | null,
+        waterCourses: IWaterCourse[] | null,
         seed: number
     ) {
         this.regionFloors = regionFloors;
-        this.preparedCorridors = corridorPaths.map(prepareCorridor);
+        this.preparedCorridors = corridorPaths.map(TerrainHeightField.prepareCorridor);
+        this.cliffCorridors = this.preparedCorridors.filter(isCliffCorridor);
         this.waterChannel = waterCourses ? WaterChannel.from(waterCourses) : null;
         this.undulationNoise = new FractalNoise(seed);
         this.trailEdgeNoise = new FractalNoise(seed + 11);
         this.elevationRampDistance =
-            measureNeighbourSpacing(regionFloors) * LANDFORM.openGroundRampRatio;
+            TerrainHeightField.measureNeighbourSpacing(regionFloors) * LANDFORM.openGroundRampRatio;
     }
 
     sampleInto(localX: number, localZ: number, sample: ITerrainSample): ITerrainSample {
-        const ground = resetGroundAccumulator(this.scratchGround);
+        const nearestTrailCentreDistance = this.accumulateFeatures(localX, localZ, sample);
+        sample.trailDistance = clamp(
+            nearestTrailCentreDistance + this.trailEdgeWobbleAt(localX, localZ),
+            0,
+            TRAIL.distanceLimit
+        );
+        this.applyGroundElevationTo(sample, localX, localZ);
+
+        return sample;
+    }
+
+    elevationAt(localX: number, localZ: number): number {
+        const sample = this.scratchSample;
+        this.accumulateFeatures(localX, localZ, sample);
+        this.applyGroundElevationTo(sample, localX, localZ);
+        return sample.elevation;
+    }
+
+    footprintDistanceAt(localX: number, localZ: number): number {
+        this.accumulateFeatures(localX, localZ, this.scratchSample);
+        return this.scratchSample.footprintDistance;
+    }
+
+    private accumulateFeatures(localX: number, localZ: number, sample: ITerrainSample): number {
+        const ground = TerrainHeightField.resetGroundAccumulator(this.scratchGround);
 
         sample.nestingDepth = 0;
         sample.isCorridor = false;
@@ -57,10 +323,10 @@ export class TerrainGenerator {
         let nearestTrailCentreDistance = Infinity;
 
         for (const region of this.regionFloors) {
-            const carveWeight = accumulateFeature(
+            const carveWeight = TerrainHeightField.accumulateFeature(
                 ground,
                 region.floorElevation,
-                distanceOutsideRegionFloor(localX, localZ, region),
+                TerrainHeightField.distanceOutsideRegionFloor(localX, localZ, region),
                 false
             );
 
@@ -72,8 +338,8 @@ export class TerrainGenerator {
         }
 
         for (const corridor of this.preparedCorridors) {
-            const travelRatio = corridorTravelRatioAt(localX, localZ, corridor);
-            const centreDistance = distanceToCorridorCentreAt(
+            const travelRatio = TerrainHeightField.corridorTravelRatioAt(localX, localZ, corridor);
+            const centreDistance = TerrainHeightField.distanceToCorridorCentreAt(
                 localX,
                 localZ,
                 corridor,
@@ -83,9 +349,10 @@ export class TerrainGenerator {
             if (centreDistance < nearestTrailCentreDistance)
                 nearestTrailCentreDistance = centreDistance;
 
-            const carveWeight = accumulateFeature(
+            const carveWeight = TerrainHeightField.accumulateFeature(
                 ground,
-                corridorElevationAt(corridor, travelRatio) - TERRAIN.corridorDrop,
+                TerrainHeightField.corridorElevationAt(corridor, travelRatio) -
+                    TERRAIN.corridorDrop,
                 Math.max(centreDistance - corridor.halfWidth, 0),
                 true
             );
@@ -98,27 +365,18 @@ export class TerrainGenerator {
 
         sample.carveStrength = ground.dominantCarveWeight;
         sample.footprintDistance = ground.nearestEdgeDistance;
-        sample.trailDistance = clamp(
-            nearestTrailCentreDistance + this.trailEdgeWobbleAt(localX, localZ),
-            0,
-            TRAIL.distanceLimit
-        );
+        return nearestTrailCentreDistance;
+    }
+
+    private applyGroundElevationTo(sample: ITerrainSample, localX: number, localZ: number): void {
+        const ground = this.scratchGround;
         this.applyWaterChannelTo(
             sample,
             localX,
             localZ,
-            this.resolveElevationAt(localX, localZ, ground) + edgeDropAt(ground.nearestEdgeDistance)
+            this.resolveElevationAt(localX, localZ, ground) +
+                TerrainHeightField.edgeDropAt(ground.nearestEdgeDistance)
         );
-
-        return sample;
-    }
-
-    elevationAt(localX: number, localZ: number): number {
-        return this.sampleInto(localX, localZ, this.scratchSample).elevation;
-    }
-
-    footprintDistanceAt(localX: number, localZ: number): number {
-        return this.sampleInto(localX, localZ, this.scratchSample).footprintDistance;
     }
 
     private applyWaterChannelTo(
@@ -133,7 +391,7 @@ export class TerrainGenerator {
         const channel = this.waterChannel;
         if (!channel) return;
 
-        const reading = channel.readInto(localX, localZ, this.scratchChannel);
+        const reading = channel.readInto(localX, localZ, this.scratchChannelReading);
         if (reading.bankBlend <= 0 || this.isCliffCorridorAt(localX, localZ)) return;
 
         const bedElevation =
@@ -147,16 +405,18 @@ export class TerrainGenerator {
     }
 
     private isCliffCorridorAt(localX: number, localZ: number): boolean {
-        for (const corridor of this.preparedCorridors) {
-            if (Math.abs(corridor.toElevation - corridor.fromElevation) <= 1.5) continue;
-            const travelRatio = corridorTravelRatioAt(localX, localZ, corridor);
-            const spanX = corridor.spanX;
-            const spanZ = corridor.spanZ;
-            const dist = Math.hypot(
-                localX - corridor.fromX - spanX * travelRatio,
-                localZ - corridor.fromZ - spanZ * travelRatio
-            );
-            if (dist < corridor.halfWidth + 5.0) return true;
+        for (const corridor of this.cliffCorridors) {
+            const travelRatio = TerrainHeightField.corridorTravelRatioAt(localX, localZ, corridor);
+            if (
+                TerrainHeightField.distanceToCorridorCentreAt(
+                    localX,
+                    localZ,
+                    corridor,
+                    travelRatio
+                ) <
+                corridor.halfWidth + TERRAIN.waterCliffClearance
+            )
+                return true;
         }
         return false;
     }
@@ -238,259 +498,17 @@ export class TerrainGenerator {
     }
 }
 
-function createTerrainSample(): ITerrainSample {
-    return {
-        elevation: 0,
-        carveStrength: 0,
-        trailDistance: TRAIL.distanceLimit,
-        nestingDepth: 0,
-        isCorridor: false,
-        footprintDistance: 0,
-        waterDepth: WATER_CHANNEL.dryDepth,
-    };
-}
-
-function edgeDropAt(footprintDistance: number): number {
-    const rolloverRatio = smoothstep(WORLD_EDGE.groundApron, WALKABLE_REACH, footprintDistance);
-
-    if (rolloverRatio <= 0) return 0;
-
-    return -Math.pow(rolloverRatio, WORLD_EDGE.dropCurve) * WORLD_EDGE.dropDepth;
-}
-
-function createGroundAccumulator(): IGroundAccumulator {
-    return {
-        dominantCarveWeight: 0,
-        weightedFloorElevation: 0,
-        totalCarveWeight: 0,
-        nearestEdgeDistance: Infinity,
-        nearestFloorElevation: TERRAIN.pathLevel,
-        nearestFeatureIsCorridor: false,
-        influenceWeightedElevation: 0,
-        totalInfluenceWeight: 0,
-    };
-}
-
-function resetGroundAccumulator(ground: IGroundAccumulator): IGroundAccumulator {
-    ground.dominantCarveWeight = 0;
-    ground.weightedFloorElevation = 0;
-    ground.totalCarveWeight = 0;
-    ground.nearestEdgeDistance = Infinity;
-    ground.nearestFloorElevation = TERRAIN.pathLevel;
-    ground.nearestFeatureIsCorridor = false;
-    ground.influenceWeightedElevation = 0;
-    ground.totalInfluenceWeight = 0;
-
-    return ground;
-}
-
-function accumulateFeature(
-    ground: IGroundAccumulator,
-    featureElevation: number,
-    edgeDistance: number,
-    isCorridor: boolean
-): number {
-    if (edgeDistance < ground.nearestEdgeDistance) {
-        ground.nearestEdgeDistance = edgeDistance;
-        ground.nearestFloorElevation = featureElevation;
-        ground.nearestFeatureIsCorridor = isCorridor;
-    }
-
-    const influenceWeight = 1 - smoothstep(0, WALKABLE_REACH, edgeDistance);
-    ground.influenceWeightedElevation += featureElevation * influenceWeight;
-    ground.totalInfluenceWeight += influenceWeight;
-
-    const carveWeight = 1 - smoothstep(0, TERRAIN.bankWidth, edgeDistance);
-    if (carveWeight <= 0) return 0;
-
-    ground.weightedFloorElevation += featureElevation * carveWeight;
-    ground.totalCarveWeight += carveWeight;
-
-    return carveWeight;
-}
-
-function measureNeighbourSpacing(regionFloors: IRegionFloor[]): number {
-    let smallestRegionSpan = Infinity;
-
-    for (const region of regionFloors)
-        smallestRegionSpan = Math.min(
-            smallestRegionSpan,
-            region.halfWidth * 2,
-            region.halfDepth * 2
-        );
-
-    if (!Number.isFinite(smallestRegionSpan)) return TERRAIN.bankWidth;
-
-    const gapsToNearestNeighbour: number[] = [];
-
-    for (const region of regionFloors) {
-        let nearestGap = Infinity;
-
-        for (const other of regionFloors) {
-            if (other === region) continue;
-
-            const centreGapX = Math.abs(other.centerX - region.centerX);
-            const centreGapZ = Math.abs(other.centerZ - region.centerZ);
-            const edgeGapX = Math.max(centreGapX - region.halfWidth - other.halfWidth, 0);
-            const edgeGapZ = Math.max(centreGapZ - region.halfDepth - other.halfDepth, 0);
-
-            nearestGap = Math.min(nearestGap, Math.sqrt(edgeGapX * edgeGapX + edgeGapZ * edgeGapZ));
-        }
-
-        if (Number.isFinite(nearestGap)) gapsToNearestNeighbour.push(nearestGap);
-    }
-
-    if (gapsToNearestNeighbour.length === 0)
-        return smallestRegionSpan * LANDFORM.minimumOpennessRatio;
-
-    gapsToNearestNeighbour.sort((first, second) => first - second);
-
-    const medianGap = gapsToNearestNeighbour[Math.floor(gapsToNearestNeighbour.length / 2)] ?? 0;
-
-    return Math.max(medianGap, smallestRegionSpan * LANDFORM.minimumOpennessRatio);
-}
-
-function prepareCorridor(path: ICorridorPath): IPreparedCorridor {
-    const spanX = path.toX - path.fromX;
-    const spanZ = path.toZ - path.fromZ;
-    const spanLengthSquared = spanX * spanX + spanZ * spanZ;
-
-    return {
-        fromX: path.fromX,
-        fromZ: path.fromZ,
-        spanX,
-        spanZ,
-        spanLengthSquared,
-        spanLength: Math.sqrt(spanLengthSquared),
-        halfWidth: path.halfWidth,
-        fromElevation: path.fromElevation,
-        toElevation: path.toElevation,
-        climbStyle: path.climbStyle,
-    };
-}
-
-export function corridorStepDistanceOf(spanLength: number): number {
-    return spanLength * TERRAIN.corridorStepRatio;
-}
-
-function corridorElevationAt(corridor: IPreparedCorridor, travelRatio: number): number {
-    if (corridor.fromElevation === corridor.toElevation) return corridor.fromElevation;
-
-    if (corridor.climbStyle === CorridorClimbStyle.Ramp)
-        return lerp(corridor.fromElevation, corridor.toElevation, travelRatio);
-
-    const stepDistance = corridorStepDistanceOf(corridor.spanLength);
-    const halfFace = TERRAIN.corridorStepFaceWidth / 2;
-
-    return lerp(
-        corridor.fromElevation,
-        corridor.toElevation,
-        smoothstep(
-            stepDistance - halfFace,
-            stepDistance + halfFace,
-            travelRatio * corridor.spanLength
-        )
-    );
-}
-
-function distanceOutsideRegionFloor(x: number, z: number, region: IRegionFloor): number {
-    return distanceOutsideBox(
-        x,
-        z,
-        region.centerX,
-        region.centerZ,
-        region.halfWidth,
-        region.halfDepth
-    );
-}
-
-function corridorTravelRatioAt(x: number, z: number, corridor: IPreparedCorridor): number {
-    if (corridor.spanLengthSquared === 0) return 0;
-
-    return clamp(
-        ((x - corridor.fromX) * corridor.spanX + (z - corridor.fromZ) * corridor.spanZ) /
-            corridor.spanLengthSquared,
-        0,
-        1
-    );
-}
-
-function distanceToCorridorCentreAt(
-    x: number,
-    z: number,
-    corridor: IPreparedCorridor,
-    travelRatio: number
-): number {
-    const gapX = x - corridor.fromX - corridor.spanX * travelRatio;
-    const gapZ = z - corridor.fromZ - corridor.spanZ * travelRatio;
-
-    return Math.sqrt(gapX * gapX + gapZ * gapZ);
-}
-
-export interface IRegionFloor {
-    centerX: number;
-    centerZ: number;
-    halfWidth: number;
-    halfDepth: number;
-    floorElevation: number;
-    nestingDepth: number;
-    isBossRegion?: boolean;
-    isSpawnRegion?: boolean;
-}
-
-export enum CorridorClimbStyle {
-    Ramp = "ramp",
-    Straight = "straight",
-    Zigzag = "zigzag",
-    Hidden = "hidden",
-}
-
-export interface ICorridorPath {
-    fromX: number;
-    fromZ: number;
-    toX: number;
-    toZ: number;
-    halfWidth: number;
-    fromElevation: number;
-    toElevation: number;
-    climbStyle: CorridorClimbStyle;
-    lateralSeed: number;
-}
-
-interface ITerrainSample {
-    elevation: number;
-    carveStrength: number;
-    trailDistance: number;
-    nestingDepth: number;
-    isCorridor: boolean;
-    footprintDistance: number;
-    waterDepth: number;
-}
-
-interface IPreparedCorridor {
-    fromX: number;
-    fromZ: number;
-    spanX: number;
-    spanZ: number;
-    spanLengthSquared: number;
-    spanLength: number;
-    halfWidth: number;
-    fromElevation: number;
-    toElevation: number;
-    climbStyle: CorridorClimbStyle;
-}
-
-interface IGroundAccumulator {
-    dominantCarveWeight: number;
-    weightedFloorElevation: number;
-    totalCarveWeight: number;
-    nearestEdgeDistance: number;
-    nearestFloorElevation: number;
-    nearestFeatureIsCorridor: boolean;
-    influenceWeightedElevation: number;
-    totalInfluenceWeight: number;
-}
 export class TerrainSampleGrid {
+    private static growthStopDistanceOf(footprintDistance: number, waterDepth: number): number {
+        const fadeStart = WORLD_EDGE.flatBorderWidth - GROUND_COVER.worldEdgeFadeWidth;
+        const waterlineApproach = smoothstep(-WATER_CHANNEL.shoreGrassBand, 0, waterDepth);
+
+        return Math.max(
+            footprintDistance,
+            fadeStart + GROUND_COVER.worldEdgeFadeWidth * waterlineApproach
+        );
+    }
+
     readonly span: number;
     readonly originX: number;
     readonly originZ: number;
@@ -498,16 +516,15 @@ export class TerrainSampleGrid {
     readonly pointsPerSide: number;
     readonly cellsPerSide: number;
 
-    private readonly elevations: Float32Array;
-    private readonly steepnesses: Float32Array;
-    private readonly carveStrengths: Float32Array;
-    private readonly trailDistances: Float32Array;
-    private readonly corridorDominates: Uint8Array;
-    private readonly nestingDepths: Uint8Array;
-    private readonly footprintDistances: Float32Array;
-    private readonly waterDepths: Float32Array;
+    private readonly fields: ITerrainFields;
+    private readonly interpolationWeights: IInterpolationWeights = {
+        acrossRatio: 0,
+        downRatio: 0,
+        nearLeftIndex: 0,
+        farLeftIndex: 0,
+    };
 
-    constructor(heightField: TerrainGenerator, outerRadius: number) {
+    constructor(heightField: TerrainHeightField, outerRadius: number) {
         this.span = outerRadius * 2;
         this.originX = -outerRadius;
         this.originZ = -outerRadius;
@@ -520,14 +537,16 @@ export class TerrainSampleGrid {
         this.pointsPerSide = this.cellsPerSide + 1;
 
         const pointCount = this.pointsPerSide * this.pointsPerSide;
-        this.elevations = new Float32Array(pointCount);
-        this.steepnesses = new Float32Array(pointCount);
-        this.carveStrengths = new Float32Array(pointCount);
-        this.trailDistances = new Float32Array(pointCount);
-        this.corridorDominates = new Uint8Array(pointCount);
-        this.nestingDepths = new Uint8Array(pointCount);
-        this.footprintDistances = new Float32Array(pointCount);
-        this.waterDepths = new Float32Array(pointCount);
+        this.fields = {
+            elevation: new Float32Array(pointCount),
+            steepness: new Float32Array(pointCount),
+            carveStrength: new Float32Array(pointCount),
+            trailDistance: new Float32Array(pointCount),
+            corridorFlag: new Uint8Array(pointCount),
+            nestingDepth: new Uint8Array(pointCount),
+            footprintDistance: new Float32Array(pointCount),
+            waterDepth: new Float32Array(pointCount),
+        };
 
         const sample = createTerrainSample();
         const slopeReach = TERRAIN.macroSlopeGrainWavelengths / TERRAIN_DETAIL.grainNoiseScale / 2;
@@ -540,13 +559,13 @@ export class TerrainSampleGrid {
                 const localX = this.originX + column * this.cellSize;
                 heightField.sampleInto(localX, localZ, sample);
 
-                this.elevations[index] = sample.elevation;
-                this.carveStrengths[index] = sample.carveStrength;
-                this.trailDistances[index] = sample.trailDistance;
-                this.corridorDominates[index] = sample.isCorridor ? 1 : 0;
-                this.nestingDepths[index] = Math.min(sample.nestingDepth, 255);
-                this.footprintDistances[index] = sample.footprintDistance;
-                this.waterDepths[index] = sample.waterDepth;
+                this.fields.elevation[index] = sample.elevation;
+                this.fields.carveStrength[index] = sample.carveStrength;
+                this.fields.trailDistance[index] = sample.trailDistance;
+                this.fields.corridorFlag[index] = sample.isCorridor ? 1 : 0;
+                this.fields.nestingDepth[index] = Math.min(sample.nestingDepth, 255);
+                this.fields.footprintDistance[index] = sample.footprintDistance;
+                this.fields.waterDepth[index] = sample.waterDepth;
 
                 const riseAcross =
                     heightField.elevationAt(localX + slopeReach, localZ) -
@@ -555,7 +574,7 @@ export class TerrainSampleGrid {
                     heightField.elevationAt(localX, localZ + slopeReach) -
                     heightField.elevationAt(localX, localZ - slopeReach);
 
-                this.steepnesses[index] =
+                this.fields.steepness[index] =
                     Math.sqrt(riseAcross * riseAcross + riseAlong * riseAlong) / (2 * slopeReach);
             }
         }
@@ -565,88 +584,49 @@ export class TerrainSampleGrid {
         return this.sampleTriangleSurface(this.computeInterpolationWeights(localX, localZ));
     }
 
-    carveStrengthAt(localX: number, localZ: number): number {
-        return this.interpolate(this.carveStrengths, localX, localZ);
-    }
-
     steepnessAt(localX: number, localZ: number): number {
-        return this.interpolate(this.steepnesses, localX, localZ);
+        return this.interpolate(this.fields.steepness, localX, localZ);
     }
 
     sampleAt(localX: number, localZ: number, sample: IGridSample): IGridSample {
         const weights = this.computeInterpolationWeights(localX, localZ);
 
         sample.elevation = this.sampleTriangleSurface(weights);
-        sample.carveStrength = this.interpolateWithWeights(this.carveStrengths, weights);
-        sample.trailDistance = this.interpolateWithWeights(this.trailDistances, weights);
-        sample.steepness = this.interpolateWithWeights(this.steepnesses, weights);
-        sample.footprintDistance = this.interpolateWithWeights(this.footprintDistances, weights);
-        sample.waterDepth = this.interpolateWithWeights(this.waterDepths, weights);
+        sample.trailDistance = this.interpolateWithWeights(this.fields.trailDistance, weights);
+        sample.steepness = this.interpolateWithWeights(this.fields.steepness, weights);
+        sample.footprintDistance = this.interpolateWithWeights(
+            this.fields.footprintDistance,
+            weights
+        );
+        sample.waterDepth = this.interpolateWithWeights(this.fields.waterDepth, weights);
 
         return sample;
     }
 
-    nearestPointIndex(localX: number, localZ: number): number {
-        const column = this.clampPointIndex(Math.round((localX - this.originX) / this.cellSize));
-        const row = this.clampPointIndex(Math.round((localZ - this.originZ) / this.cellSize));
-
-        return row * this.pointsPerSide + column;
-    }
-
-    elevationAtPoint(pointIndex: number): number {
-        return this.elevations[pointIndex] ?? 0;
-    }
-
-    carveStrengthAtPoint(pointIndex: number): number {
-        return this.carveStrengths[pointIndex] ?? 0;
-    }
-
-    trailDistanceAtPoint(pointIndex: number): number {
-        return this.trailDistances[pointIndex] ?? TRAIL.distanceLimit;
-    }
-
-    steepnessAtPoint(pointIndex: number): number {
-        return this.steepnesses[pointIndex] ?? 0;
-    }
-
-    isCorridorAtPoint(pointIndex: number): boolean {
-        return (this.corridorDominates[pointIndex] ?? 0) === 1;
-    }
-
-    nestingDepthAtPoint(pointIndex: number): number {
-        return this.nestingDepths[pointIndex] ?? 0;
-    }
-
-    footprintDistanceAtPoint(pointIndex: number): number {
-        return this.footprintDistances[pointIndex] ?? Infinity;
-    }
-
-    waterDepthAtPoint(pointIndex: number): number {
-        return this.waterDepths[pointIndex] ?? WATER_CHANNEL.dryDepth;
+    valueAtPoint(field: TerrainField, pointIndex: number): number {
+        return this.fields[field][pointIndex];
     }
 
     hasGroundAtPoint(pointIndex: number): boolean {
         return (
-            this.footprintDistanceAtPoint(pointIndex) <= WALKABLE_REACH &&
-            Number.isFinite(this.elevationAtPoint(pointIndex))
+            this.valueAtPoint("footprintDistance", pointIndex) <= WALKABLE_REACH &&
+            Number.isFinite(this.valueAtPoint("elevation", pointIndex))
         );
     }
 
     createShaderTexture(): DataTexture {
-        const channels = new Uint16Array(this.elevations.length * 4);
+        const channels = new Uint16Array(this.fields.elevation.length * 4);
 
-        for (let index = 0; index < this.elevations.length; index += 1) {
+        for (let index = 0; index < this.fields.elevation.length; index += 1) {
             const channelStart = index * 4;
 
-            channels[channelStart] = DataUtils.toHalfFloat(this.elevations[index] ?? 0);
-            channels[channelStart + 1] = DataUtils.toHalfFloat(
-                this.trailDistances[index] ?? TRAIL.distanceLimit
-            );
-            channels[channelStart + 2] = DataUtils.toHalfFloat(this.steepnesses[index] ?? 0);
+            channels[channelStart] = DataUtils.toHalfFloat(this.fields.elevation[index]);
+            channels[channelStart + 1] = DataUtils.toHalfFloat(this.fields.trailDistance[index]);
+            channels[channelStart + 2] = DataUtils.toHalfFloat(this.fields.steepness[index]);
             channels[channelStart + 3] = DataUtils.toHalfFloat(
-                growthStopDistanceOf(
-                    this.footprintDistances[index] ?? 0,
-                    this.waterDepths[index] ?? WATER_CHANNEL.dryDepth
+                TerrainSampleGrid.growthStopDistanceOf(
+                    this.fields.footprintDistance[index],
+                    this.fields.waterDepth[index]
                 )
             );
         }
@@ -683,21 +663,21 @@ export class TerrainSampleGrid {
         const column = this.clampCellIndex(Math.floor(columnPosition));
         const row = this.clampCellIndex(Math.floor(rowPosition));
         const nearLeftIndex = row * this.pointsPerSide + column;
+        const weights = this.interpolationWeights;
 
-        return {
-            acrossRatio: clamp(columnPosition - column, 0, 1),
-            downRatio: clamp(rowPosition - row, 0, 1),
-            nearLeftIndex,
-            farLeftIndex: nearLeftIndex + this.pointsPerSide,
-        };
+        weights.acrossRatio = clamp(columnPosition - column, 0, 1);
+        weights.downRatio = clamp(rowPosition - row, 0, 1);
+        weights.nearLeftIndex = nearLeftIndex;
+        weights.farLeftIndex = nearLeftIndex + this.pointsPerSide;
+        return weights;
     }
 
     private interpolateWithWeights(values: Float32Array, weights: IInterpolationWeights): number {
         const { nearLeftIndex, farLeftIndex, acrossRatio, downRatio } = weights;
 
         return lerp(
-            lerp(values[nearLeftIndex] ?? 0, values[nearLeftIndex + 1] ?? 0, acrossRatio),
-            lerp(values[farLeftIndex] ?? 0, values[farLeftIndex + 1] ?? 0, acrossRatio),
+            lerp(values[nearLeftIndex], values[nearLeftIndex + 1], acrossRatio),
+            lerp(values[farLeftIndex], values[farLeftIndex + 1], acrossRatio),
             downRatio
         );
     }
@@ -705,16 +685,16 @@ export class TerrainSampleGrid {
     private sampleTriangleSurface(weights: IInterpolationWeights): number {
         const { nearLeftIndex, farLeftIndex, acrossRatio, downRatio } = weights;
 
-        const nearLeft = this.elevations[nearLeftIndex] ?? 0;
-        const nearRight = this.elevations[nearLeftIndex + 1] ?? 0;
-        const farLeft = this.elevations[farLeftIndex] ?? 0;
+        const nearLeft = this.fields.elevation[nearLeftIndex];
+        const nearRight = this.fields.elevation[nearLeftIndex + 1];
+        const farLeft = this.fields.elevation[farLeftIndex];
 
         if (acrossRatio + downRatio <= 1)
             return (
                 nearLeft + (nearRight - nearLeft) * acrossRatio + (farLeft - nearLeft) * downRatio
             );
 
-        const farRight = this.elevations[farLeftIndex + 1] ?? 0;
+        const farRight = this.fields.elevation[farLeftIndex + 1];
 
         return (
             farRight +
@@ -726,42 +706,27 @@ export class TerrainSampleGrid {
     private clampCellIndex(value: number): number {
         return clamp(value, 0, this.pointsPerSide - 2);
     }
-
-    private clampPointIndex(value: number): number {
-        return clamp(value, 0, this.pointsPerSide - 1);
-    }
 }
 
-function growthStopDistanceOf(footprintDistance: number, waterDepth: number): number {
-    const fadeStart = WORLD_EDGE.groundApron - GROUND_COVER.worldEdgeFadeWidth;
-    const waterlineApproach = smoothstep(-WATER_CHANNEL.shoreGrassBand, 0, waterDepth);
-
-    return Math.max(
-        footprintDistance,
-        fadeStart + GROUND_COVER.worldEdgeFadeWidth * waterlineApproach
-    );
+function createTerrainSample(): ITerrainSample {
+    return {
+        elevation: 0,
+        carveStrength: 0,
+        trailDistance: TRAIL.distanceLimit,
+        nestingDepth: 0,
+        isCorridor: false,
+        footprintDistance: 0,
+        waterDepth: WATER_CHANNEL.dryDepth,
+    };
 }
 
-interface IInterpolationWeights {
-    acrossRatio: number;
-    downRatio: number;
-    nearLeftIndex: number;
-    farLeftIndex: number;
-}
-
-export interface IGridSample {
-    elevation: number;
-    carveStrength: number;
-    trailDistance: number;
-    steepness: number;
-    footprintDistance: number;
-    waterDepth: number;
+export function corridorStepFaceDistance(spanLength: number): number {
+    return spanLength * TERRAIN.corridorStepRatio;
 }
 
 export function createGridSample(): IGridSample {
     return {
         elevation: 0,
-        carveStrength: 0,
         trailDistance: TRAIL.distanceLimit,
         steepness: 0,
         footprintDistance: 0,

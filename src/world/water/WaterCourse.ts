@@ -1,43 +1,41 @@
-import { WATER_COURSE, WORLD_EDGE, WATER_CHANNEL } from "@/constants/world";
-import { catmullRomAt, clamp, distanceOutsideBox, lerp, smoothstep } from "@/lib/helpers";
+import type {
+    IRegionLink,
+    IWaterPoint,
+    IWaterCourse,
+    ISurfaceHeightProbe,
+    ICorridorPath,
+    IRegionFloor,
+    IRegionBox,
+} from "@/types/world";
+import { WATER_COURSE, WORLD_EDGE, WATER_CHANNEL, TERRAIN } from "@/constants/world";
+import {
+    distanceOutsideBox,
+    lerp,
+    smoothstep,
+    resampleSmoothPath,
+    pathDirectionAt,
+    clamp,
+    distanceToSegment,
+    accumulatePathLengths,
+    segmentFrame,
+} from "@/lib/helpers";
 import { FractalNoise } from "@/lib/noise";
-import type { ICorridorPath, IRegionFloor } from "@/world/terrain/TerrainGeneration";
+import type { IPlanarPoint } from "@/lib/helpers";
 
-const SOLID_GROUND_LIMIT = WORLD_EDGE.groundApron - WATER_COURSE.rimSafetyMargin;
+const scratchDirection: IPlanarPoint = { x: 0, z: 0 };
 
-interface IGroundProbe {
-    elevationAt(localX: number, localZ: number): number;
-    footprintDistanceAt(localX: number, localZ: number): number;
-}
-
-export interface IRegionLink {
-    fromIndex: number;
-    toIndex: number;
-}
-
-export interface IWaterPoint {
-    x: number;
-    z: number;
-    waterlineElevation: number;
-    halfWidth: number;
-    bedRatio: number;
-}
-
-export interface IWaterCourse {
-    points: IWaterPoint[];
-    isMudhole?: boolean;
-}
+const SOLID_GROUND_LIMIT = WORLD_EDGE.flatBorderWidth - WATER_COURSE.rimSafetyMargin;
 
 interface IWaterAnchor {
     x: number;
     z: number;
 }
 
-interface IArenaCore {
-    centerX: number;
-    centerZ: number;
-    halfWidth: number;
-    halfDepth: number;
+interface ICellBox {
+    minX: number;
+    minZ: number;
+    maxX: number;
+    maxZ: number;
 }
 
 interface IChannelReading {
@@ -62,17 +60,10 @@ export class WaterChannel {
     private readonly fromBedRatio: Float32Array;
     private readonly toBedRatio: Float32Array;
 
-    private readonly originX: number;
-    private readonly originZ: number;
-    private readonly cellSize: number;
-    private readonly cellsAcross: number;
-    private readonly cellsDown: number;
-    private readonly cellStarts: Int32Array;
-    private readonly cellSegments: Int32Array;
+    private readonly segmentCells: CellIndex;
 
-    static from(input: IWaterCourse | IWaterCourse[]): WaterChannel | null {
-        const courses = Array.isArray(input) ? input : [input];
-        const validCourses = courses.filter((c) => c.points.length > 1);
+    static from(courses: IWaterCourse[]): WaterChannel | null {
+        const validCourses = courses.filter((course) => course.points.length > 1);
         return validCourses.length > 0 ? new WaterChannel(validCourses) : null;
     }
 
@@ -102,9 +93,9 @@ export class WaterChannel {
         let cursor = 0;
         for (const course of courses) {
             const courseSegments = course.points.length - 1;
-            for (let seg = 0; seg < courseSegments; seg += 1) {
-                const from = course.points[seg];
-                const to = course.points[seg + 1];
+            for (let segment = 0; segment < courseSegments; segment += 1) {
+                const from = course.points[segment];
+                const to = course.points[segment + 1];
                 if (!from || !to) continue;
 
                 const reachX = to.x - from.x;
@@ -132,35 +123,24 @@ export class WaterChannel {
             }
         }
 
-        this.cellSize = WATER_COURSE.halfWidthWide + WATER_CHANNEL.bankWidth;
-        this.originX = smallestX - this.cellSize;
-        this.originZ = smallestZ - this.cellSize;
-        this.cellsAcross =
-            Math.floor((largestX + this.cellSize - this.originX) / this.cellSize) + 1;
-        this.cellsDown = Math.floor((largestZ + this.cellSize - this.originZ) / this.cellSize) + 1;
-
-        const cellStarts = new Int32Array(this.cellsAcross * this.cellsDown + 1);
-
-        for (let segment = 0; segment < segmentCount; segment += 1)
-            this.forEachTouchedCell(segment, (cell) => {
-                cellStarts[cell + 1] = (cellStarts[cell + 1] ?? 0) + 1;
-            });
-
-        for (let cell = 0; cell < cellStarts.length - 1; cell += 1)
-            cellStarts[cell + 1] = (cellStarts[cell + 1] ?? 0) + (cellStarts[cell] ?? 0);
-
-        const cellSegments = new Int32Array(cellStarts[cellStarts.length - 1] ?? 0);
-        const fillCursor = Int32Array.from(cellStarts.subarray(0, cellStarts.length - 1));
-
-        for (let segment = 0; segment < segmentCount; segment += 1)
-            this.forEachTouchedCell(segment, (cell) => {
-                const cursor = fillCursor[cell] ?? 0;
-                cellSegments[cursor] = segment;
-                fillCursor[cell] = cursor + 1;
-            });
-
-        this.cellStarts = cellStarts;
-        this.cellSegments = cellSegments;
+        this.segmentCells = new CellIndex(
+            WATER_COURSE.halfWidthWide + WATER_CHANNEL.bankWidth,
+            { minX: smallestX, minZ: smallestZ, maxX: largestX, maxZ: largestZ },
+            segmentCount,
+            (segment, box) => {
+                const startX = this.fromX[segment];
+                const startZ = this.fromZ[segment];
+                const endX = startX + this.spanX[segment];
+                const endZ = startZ + this.spanZ[segment];
+                const reach =
+                    Math.max(this.fromHalfWidth[segment], this.toHalfWidth[segment]) +
+                    WATER_CHANNEL.bankWidth;
+                box.minX = Math.min(startX, endX) - reach;
+                box.maxX = Math.max(startX, endX) + reach;
+                box.minZ = Math.min(startZ, endZ) - reach;
+                box.maxZ = Math.max(startZ, endZ) + reach;
+            }
+        );
     }
 
     readInto(localX: number, localZ: number, reading: IChannelReading): IChannelReading {
@@ -168,29 +148,26 @@ export class WaterChannel {
         reading.bedProfile = 0;
         reading.waterlineElevation = 0;
 
-        const column = Math.floor((localX - this.originX) / this.cellSize);
-        const row = Math.floor((localZ - this.originZ) / this.cellSize);
+        const cells = this.segmentCells;
+        const cell = cells.cellAt(localX, localZ);
+        if (cell < 0) return reading;
 
-        if (column < 0 || row < 0 || column >= this.cellsAcross || row >= this.cellsDown)
-            return reading;
-
-        const cell = row * this.cellsAcross + column;
-        const cellEnd = this.cellStarts[cell + 1] ?? 0;
+        const cellEnd = cells.endOf(cell);
 
         let nearestDistance = Infinity;
         let nearestSegment = -1;
         let nearestTravelRatio = 0;
 
-        for (let cursor = this.cellStarts[cell] ?? 0; cursor < cellEnd; cursor += 1) {
-            const segment = this.cellSegments[cursor] ?? 0;
-            const startX = this.fromX[segment] ?? 0;
-            const startZ = this.fromZ[segment] ?? 0;
-            const reachX = this.spanX[segment] ?? 0;
-            const reachZ = this.spanZ[segment] ?? 0;
+        for (let cursor = cells.startOf(cell); cursor < cellEnd; cursor += 1) {
+            const segment = cells.itemAt(cursor);
+            const startX = this.fromX[segment];
+            const startZ = this.fromZ[segment];
+            const reachX = this.spanX[segment];
+            const reachZ = this.spanZ[segment];
 
             const travelRatio = clamp(
                 ((localX - startX) * reachX + (localZ - startZ) * reachZ) *
-                    (this.inverseSpanLengthSquared[segment] ?? 0),
+                    this.inverseSpanLengthSquared[segment],
                 0,
                 1
             );
@@ -209,8 +186,8 @@ export class WaterChannel {
         if (nearestSegment < 0) return reading;
 
         const halfWidth = lerp(
-            this.fromHalfWidth[nearestSegment] ?? 0,
-            this.toHalfWidth[nearestSegment] ?? 0,
+            this.fromHalfWidth[nearestSegment],
+            this.toHalfWidth[nearestSegment],
             nearestTravelRatio
         );
         if (halfWidth <= 0) return reading;
@@ -220,40 +197,95 @@ export class WaterChannel {
         if (reading.bankBlend <= 0) return reading;
 
         const bedRatio = lerp(
-            this.fromBedRatio[nearestSegment] ?? 1,
-            this.toBedRatio[nearestSegment] ?? 1,
+            this.fromBedRatio[nearestSegment],
+            this.toBedRatio[nearestSegment],
             nearestTravelRatio
         );
 
         reading.bedProfile = WaterChannel.bedProfileAt(nearestDistance / halfWidth) * bedRatio;
         reading.waterlineElevation = lerp(
-            this.fromWaterline[nearestSegment] ?? 0,
-            this.toWaterline[nearestSegment] ?? 0,
+            this.fromWaterline[nearestSegment],
+            this.toWaterline[nearestSegment],
             nearestTravelRatio
         );
 
         return reading;
     }
+}
 
-    private forEachTouchedCell(segment: number, visit: (cell: number) => void): void {
-        const startX = this.fromX[segment] ?? 0;
-        const startZ = this.fromZ[segment] ?? 0;
-        const endX = startX + (this.spanX[segment] ?? 0);
-        const endZ = startZ + (this.spanZ[segment] ?? 0);
-        const reach =
-            Math.max(this.fromHalfWidth[segment] ?? 0, this.toHalfWidth[segment] ?? 0) +
-            WATER_CHANNEL.bankWidth;
+export class CellIndex {
+    private readonly originX: number;
+    private readonly originZ: number;
+    private readonly cellsAcross: number;
+    private readonly cellsDown: number;
+    private readonly cellStarts: Int32Array;
+    private readonly cellItems: Int32Array;
 
-        const firstColumn = Math.floor(
-            (Math.min(startX, endX) - reach - this.originX) / this.cellSize
-        );
-        const lastColumn = Math.floor(
-            (Math.max(startX, endX) + reach - this.originX) / this.cellSize
-        );
-        const firstRow = Math.floor(
-            (Math.min(startZ, endZ) - reach - this.originZ) / this.cellSize
-        );
-        const lastRow = Math.floor((Math.max(startZ, endZ) + reach - this.originZ) / this.cellSize);
+    constructor(
+        private readonly cellSize: number,
+        extent: Readonly<ICellBox>,
+        itemCount: number,
+        fillItemBox: (item: number, box: ICellBox) => void
+    ) {
+        this.originX = extent.minX - cellSize;
+        this.originZ = extent.minZ - cellSize;
+        this.cellsAcross = Math.floor((extent.maxX + cellSize - this.originX) / cellSize) + 1;
+        this.cellsDown = Math.floor((extent.maxZ + cellSize - this.originZ) / cellSize) + 1;
+
+        const box: ICellBox = { minX: 0, minZ: 0, maxX: 0, maxZ: 0 };
+        const cellStarts = new Int32Array(this.cellsAcross * this.cellsDown + 1);
+
+        for (let item = 0; item < itemCount; item += 1) {
+            fillItemBox(item, box);
+            this.forEachCellIn(box, (cell) => {
+                cellStarts[cell + 1] = cellStarts[cell + 1] + 1;
+            });
+        }
+
+        for (let cell = 0; cell < cellStarts.length - 1; cell += 1)
+            cellStarts[cell + 1] = cellStarts[cell + 1] + cellStarts[cell];
+
+        const cellItems = new Int32Array(cellStarts[cellStarts.length - 1]);
+        const fillCursor = Int32Array.from(cellStarts.subarray(0, cellStarts.length - 1));
+
+        for (let item = 0; item < itemCount; item += 1) {
+            fillItemBox(item, box);
+            this.forEachCellIn(box, (cell) => {
+                const cursor = fillCursor[cell];
+                cellItems[cursor] = item;
+                fillCursor[cell] = cursor + 1;
+            });
+        }
+
+        this.cellStarts = cellStarts;
+        this.cellItems = cellItems;
+    }
+
+    cellAt(localX: number, localZ: number): number {
+        const column = Math.floor((localX - this.originX) / this.cellSize);
+        const row = Math.floor((localZ - this.originZ) / this.cellSize);
+
+        if (column < 0 || row < 0 || column >= this.cellsAcross || row >= this.cellsDown) return -1;
+        return row * this.cellsAcross + column;
+    }
+
+    startOf(cell: number): number {
+        return this.cellStarts[cell];
+    }
+
+    endOf(cell: number): number {
+        return this.cellStarts[cell + 1];
+    }
+
+    itemAt(cursor: number): number {
+        return this.cellItems[cursor];
+    }
+
+    private forEachCellIn(box: Readonly<ICellBox>, visit: (cell: number) => void): void {
+        const firstColumn = Math.floor((box.minX - this.originX) / this.cellSize);
+        const lastColumn = Math.floor((box.maxX - this.originX) / this.cellSize);
+        const firstRow = Math.floor((box.minZ - this.originZ) / this.cellSize);
+        const lastRow = Math.floor((box.maxZ - this.originZ) / this.cellSize);
 
         for (
             let row = Math.max(firstRow, 0);
@@ -273,7 +305,7 @@ export function plotWaterCourses(
     regionFloors: IRegionFloor[],
     regionLinks: IRegionLink[],
     corridorPaths: ICorridorPath[],
-    ground: IGroundProbe,
+    ground: ISurfaceHeightProbe,
     seed: number
 ): IWaterCourse[] {
     if (regionFloors.length === 0) return [];
@@ -284,7 +316,7 @@ export function plotWaterCourses(
 
     if (riverResult) {
         courses.push(riverResult.course);
-        for (const reg of riverResult.regions) occupiedRegions.add(reg);
+        for (const regionIndex of riverResult.regions) occupiedRegions.add(regionIndex);
     }
 
     const eligibleMudholeRegions: number[] = [];
@@ -297,19 +329,16 @@ export function plotWaterCourses(
         }
     }
 
-    const count = Math.min(3, Math.max(1, eligibleMudholeRegions.length));
-    for (let m = 0; m < count; m += 1) {
-        if (eligibleMudholeRegions.length === 0) break;
-        const pickSeed = seed + 300 + m * 47;
-        const listIndex = (Math.abs(pickSeed) + m) % eligibleMudholeRegions.length;
-        const regionIndex = eligibleMudholeRegions[listIndex];
-        if (regionIndex === undefined) continue;
-
-        const region = regionFloors[regionIndex];
-        if (region) {
-            const mudhole = generateMudholeCourse(region, pickSeed, ground);
-            if (mudhole) courses.push(mudhole);
-        }
+    for (
+        let mudholeIndex = 0;
+        mudholeIndex < 3 && eligibleMudholeRegions.length > 0;
+        mudholeIndex += 1
+    ) {
+        const pickSeed = seed + 300 + mudholeIndex * 47;
+        const listIndex = (Math.abs(pickSeed) + mudholeIndex) % eligibleMudholeRegions.length;
+        const region = regionFloors[eligibleMudholeRegions[listIndex]];
+        const mudhole = generateMudholeCourse(region, pickSeed, ground);
+        if (mudhole) courses.push(mudhole);
 
         eligibleMudholeRegions.splice(listIndex, 1);
     }
@@ -321,11 +350,9 @@ function plotPrimaryRiver(
     regionFloors: IRegionFloor[],
     regionLinks: IRegionLink[],
     corridorPaths: ICorridorPath[],
-    ground: IGroundProbe,
+    ground: ISurfaceHeightProbe,
     seed: number
 ): { course: IWaterCourse; regions: number[] } | null {
-    if (regionFloors.length === 0) return null;
-
     const courseRegions = findCourseRegions(regionFloors, regionLinks, seed);
     if (courseRegions.length < WATER_COURSE.minimumRegionsInCourse) return null;
 
@@ -350,7 +377,7 @@ function plotPrimaryRiver(
 function generateMudholeCourse(
     region: IRegionFloor,
     localSeed: number,
-    ground: IGroundProbe
+    ground: ISurfaceHeightProbe
 ): IWaterCourse | null {
     const noise = new FractalNoise(localSeed);
     const angleNoise = noise.sample(region.centerX * 0.05, region.centerZ * 0.05, 1, 0.5);
@@ -380,13 +407,13 @@ function generateMudholeCourse(
 
     const points: IWaterPoint[] = [];
     for (let i = 0; i < anchors.length; i += 1) {
-        const anchor = anchors[i]!;
+        const anchor = anchors[i];
         points.push({
             x: anchor.x,
             z: anchor.z,
             waterlineElevation: restingElevation,
-            halfWidth: widths[i] ?? radius,
-            bedRatio: bedRatios[i] ?? 1.0,
+            halfWidth: widths[i],
+            bedRatio: bedRatios[i],
         });
     }
 
@@ -403,24 +430,23 @@ function findCourseRegions(
 ): number[] {
     const sameLevelPath = findLongestSameLevelPath(regionFloors, regionLinks);
     if (sameLevelPath.length >= 2) {
-        const startsInBoss = regionFloors[sameLevelPath[0]!]?.isBossRegion;
+        const startsInBoss = regionFloors[sameLevelPath[0]].isBossRegion;
         if (!startsInBoss) return sameLevelPath;
 
-        const endsInBoss = regionFloors[sameLevelPath[sameLevelPath.length - 1]!]?.isBossRegion;
+        const endsInBoss = regionFloors[sameLevelPath[sameLevelPath.length - 1]].isBossRegion;
         if (!endsInBoss) return [...sameLevelPath].reverse();
     }
 
     const eligibleNonBoss: number[] = [];
     for (let index = 0; index < regionFloors.length; index += 1) {
         const floor = regionFloors[index];
-        if (!floor) continue;
         if (!floor.isBossRegion && floor.halfWidth >= 22 && floor.halfDepth >= 22) {
             eligibleNonBoss.push(index);
         }
     }
 
     if (eligibleNonBoss.length > 0) {
-        const picked = eligibleNonBoss[Math.abs(seed) % eligibleNonBoss.length]!;
+        const picked = eligibleNonBoss[Math.abs(seed) % eligibleNonBoss.length];
         return [picked];
     }
 
@@ -431,7 +457,6 @@ function findCourseRegions(
 
     for (let index = 0; index < regionFloors.length; index += 1) {
         const floor = regionFloors[index];
-        if (!floor) continue;
         const area = floor.halfWidth * floor.halfDepth;
         if (area > largestArea) {
             largestArea = area;
@@ -502,10 +527,8 @@ function placeCourseAnchors(
     regionFloors: IRegionFloor[],
     noise: FractalNoise
 ): IWaterAnchor[] {
-    if (courseRegions.length === 0) return [];
-
     if (courseRegions.length === 1) {
-        const regionIndex = courseRegions[0]!;
+        const regionIndex = courseRegions[0];
         const region = regionFloors[regionIndex];
         if (!region) return [];
 
@@ -556,14 +579,16 @@ function placeCourseAnchors(
         if (regionIndex === undefined) continue;
 
         const region = regionFloors[regionIndex];
-        if (!region) continue;
 
         const before = regionFloors[courseRegions[position - 1] ?? regionIndex] ?? region;
         const after = regionFloors[courseRegions[position + 1] ?? regionIndex] ?? region;
 
-        const travelX = after.centerX - before.centerX;
-        const travelZ = after.centerZ - before.centerZ;
-        const travelLength = Math.hypot(travelX, travelZ) || 1;
+        const { alongX, alongZ } = segmentFrame(
+            before.centerX,
+            before.centerZ,
+            after.centerX,
+            after.centerZ
+        );
 
         const rimSide =
             noise.sample(
@@ -578,15 +603,15 @@ function placeCourseAnchors(
             Math.min(region.halfWidth, region.halfDepth) * WATER_COURSE.rimOffsetRatio * rimSide;
 
         const anchor = {
-            x: region.centerX + (travelZ / travelLength) * rimOffset,
-            z: region.centerZ - (travelX / travelLength) * rimOffset,
+            x: region.centerX + alongZ * rimOffset,
+            z: region.centerZ - alongX * rimOffset,
         };
 
         if (position === 0 && courseRegions.length > 1) {
             const headReach = Math.min(region.halfWidth, region.halfDepth) * 0.95;
             anchors.push({
-                x: anchor.x - (travelX / travelLength) * headReach,
-                z: anchor.z - (travelZ / travelLength) * headReach,
+                x: anchor.x - alongX * headReach,
+                z: anchor.z - alongZ * headReach,
             });
         }
 
@@ -602,33 +627,12 @@ function placeCourseAnchors(
 }
 
 function resampleAlongSpline(anchors: IWaterAnchor[]): IWaterPoint[] {
-    const points: IWaterPoint[] = [];
-
-    for (let index = 0; index < anchors.length - 1; index += 1) {
-        const start = anchors[index];
-        const end = anchors[index + 1];
-        if (!start || !end) continue;
-
-        const before = anchors[index - 1] ?? start;
-        const after = anchors[index + 2] ?? end;
-        const steps = Math.max(
-            Math.ceil(Math.hypot(end.x - start.x, end.z - start.z) / WATER_COURSE.pointSpacing),
-            1
-        );
-
-        for (let step = 0; step < steps; step += 1)
-            points.push(
-                createWaterPoint(
-                    catmullRomAt(before.x, start.x, end.x, after.x, step / steps),
-                    catmullRomAt(before.z, start.z, end.z, after.z, step / steps)
-                )
-            );
-    }
-
-    const lastAnchor = anchors[anchors.length - 1];
-    if (lastAnchor) points.push(createWaterPoint(lastAnchor.x, lastAnchor.z));
-
-    return points;
+    return resampleSmoothPath(
+        anchors,
+        WATER_COURSE.pointSpacing,
+        (x, z) => createWaterPoint(x, z),
+        (last) => createWaterPoint(last.x, last.z)
+    );
 }
 
 const createWaterPoint = (x: number, z: number): IWaterPoint => ({
@@ -641,35 +645,26 @@ const createWaterPoint = (x: number, z: number): IWaterPoint => ({
 
 function meanderCourse(points: IWaterPoint[], noise: FractalNoise): void {
     const displacements = new Float32Array(points.length * 2);
-    let travelledLength = 0;
+    const travelledLengths = new Float64Array(points.length);
+    accumulatePathLengths(points, travelledLengths);
 
     for (let index = 0; index < points.length; index += 1) {
-        const point = points[index];
-        if (!point) continue;
-
-        const previous = points[index - 1] ?? point;
-        const next = points[index + 1] ?? point;
-
-        travelledLength += Math.hypot(point.x - previous.x, point.z - previous.z);
-
-        const travelX = next.x - previous.x;
-        const travelZ = next.z - previous.z;
-        const travelLength = Math.hypot(travelX, travelZ) || 1;
+        const travelledLength = travelledLengths[index];
+        const direction = pathDirectionAt(points, index, scratchDirection);
         const sway =
             (noise.sample(travelledLength / WATER_COURSE.meanderWavelength, 2.1, 3, 0.5) - 0.5) *
             2 *
             WATER_COURSE.meanderAmplitude;
 
-        displacements[index * 2] = (travelZ / travelLength) * sway;
-        displacements[index * 2 + 1] = -(travelX / travelLength) * sway;
+        displacements[index * 2] = direction.z * sway;
+        displacements[index * 2 + 1] = -direction.x * sway;
     }
 
     for (let index = 0; index < points.length; index += 1) {
         const point = points[index];
-        if (!point) continue;
 
-        point.x += displacements[index * 2] ?? 0;
-        point.z += displacements[index * 2 + 1] ?? 0;
+        point.x += displacements[index * 2];
+        point.z += displacements[index * 2 + 1];
     }
 }
 
@@ -698,7 +693,7 @@ function fitCourseBesideArenas(
 
 function clampWidthToArenaRoom(
     points: IWaterPoint[],
-    arenaCores: IArenaCore[],
+    arenaCores: IRegionBox[],
     corridorPaths: ICorridorPath[],
     mayPushOutwards: boolean
 ): void {
@@ -714,17 +709,17 @@ function clampWidthToArenaRoom(
         }
 
         for (const corridor of corridorPaths) {
-            if (Math.abs(corridor.toElevation - corridor.fromElevation) <= 1.5) continue;
-            const dist = distanceToCorridorCentre(point, corridor);
-            const minClearance = corridor.halfWidth + 8.0;
-            if (dist < minClearance) {
+            if (!isCliffCorridor(corridor)) continue;
+            const distance = distanceToCorridorCentre(point, corridor);
+            const minClearance = corridor.halfWidth + WATER_COURSE.cliffClearance;
+            if (distance < minClearance) {
                 if (mayPushOutwards) {
-                    pushOutsideCliffCorridor(point, corridor, minClearance);
+                    pushOutsideCliffCorridor(point, corridor, minClearance, distance);
                 }
-                const newDist = distanceToCorridorCentre(point, corridor);
+                const newDistance = distanceToCorridorCentre(point, corridor);
                 point.halfWidth = Math.min(
                     point.halfWidth,
-                    Math.max(0, newDist - corridor.halfWidth - 3.0)
+                    Math.max(0, newDistance - corridor.halfWidth - WATER_COURSE.cliffBankGap)
                 );
             }
         }
@@ -734,26 +729,25 @@ function clampWidthToArenaRoom(
 function pushOutsideCliffCorridor(
     point: IWaterPoint,
     corridor: ICorridorPath,
-    minDistance: number
+    minDistance: number,
+    distance: number
 ): void {
-    const dist = distanceToCorridorCentre(point, corridor);
-    if (dist >= minDistance) return;
-
-    const spanX = corridor.toX - corridor.fromX;
-    const spanZ = corridor.toZ - corridor.fromZ;
-    const spanLen = Math.hypot(spanX, spanZ) || 1;
-    const normAcrossX = -spanZ / spanLen;
-    const normAcrossZ = spanX / spanLen;
+    const { acrossX, acrossZ } = segmentFrame(
+        corridor.fromX,
+        corridor.fromZ,
+        corridor.toX,
+        corridor.toZ
+    );
     const toPointX = point.x - corridor.fromX;
     const toPointZ = point.z - corridor.fromZ;
-    const side = toPointX * normAcrossX + toPointZ * normAcrossZ >= 0 ? 1 : -1;
-    const push = minDistance - dist;
+    const side = toPointX * acrossX + toPointZ * acrossZ >= 0 ? 1 : -1;
+    const push = minDistance - distance;
 
-    point.x += normAcrossX * side * push;
-    point.z += normAcrossZ * side * push;
+    point.x += acrossX * side * push;
+    point.z += acrossZ * side * push;
 }
 
-function roomBesideCores(point: IWaterPoint, arenaCores: IArenaCore[]): number {
+function roomBesideCores(point: IWaterPoint, arenaCores: IRegionBox[]): number {
     let smallestRoom = Infinity;
 
     for (const core of arenaCores)
@@ -772,7 +766,7 @@ function roomBesideCores(point: IWaterPoint, arenaCores: IArenaCore[]): number {
     return smallestRoom;
 }
 
-function pushOutsideCores(point: IWaterPoint, arenaCores: IArenaCore[], clearance: number): void {
+function pushOutsideCores(point: IWaterPoint, arenaCores: IRegionBox[], clearance: number): void {
     for (const core of arenaCores) {
         const gapX = point.x - core.centerX;
         const gapZ = point.z - core.centerZ;
@@ -810,10 +804,9 @@ function relaxCourse(points: IWaterPoint[]): void {
 
     for (let index = 1; index < points.length - 1; index += 1) {
         const point = points[index];
-        if (!point) continue;
 
-        point.x = relaxed[index * 2] ?? point.x;
-        point.z = relaxed[index * 2 + 1] ?? point.z;
+        point.x = relaxed[index * 2];
+        point.z = relaxed[index * 2 + 1];
     }
 }
 
@@ -822,14 +815,12 @@ function shapeCourseWidth(
     corridorPaths: ICorridorPath[],
     noise: FractalNoise
 ): void {
-    let travelledLength = 0;
+    const travelledLengths = new Float64Array(points.length);
+    accumulatePathLengths(points, travelledLengths);
 
     for (let index = 0; index < points.length; index += 1) {
         const point = points[index];
-        if (!point) continue;
-
-        const previous = points[index - 1];
-        if (previous) travelledLength += Math.hypot(point.x - previous.x, point.z - previous.z);
+        const travelledLength = travelledLengths[index];
 
         const widthRatio = noise.sample(
             travelledLength / WATER_COURSE.widthWavelength,
@@ -844,8 +835,8 @@ function shapeCourseWidth(
         );
         const isFord = crossesCorridor(point, corridorPaths);
 
-        point.halfWidth = isFord ? openWidth * WATER_COURSE.fordHalfWidthRatio : openWidth;
-        point.bedRatio = isFord ? WATER_COURSE.fordBedRatio : 1;
+        point.halfWidth = isFord ? openWidth * WATER_COURSE.crossingHalfWidthRatio : openWidth;
+        point.bedRatio = isFord ? WATER_COURSE.crossingDepthRatio : 1;
     }
 }
 
@@ -855,27 +846,17 @@ const crossesCorridor = (point: IWaterPoint, corridorPaths: ICorridorPath[]): bo
     );
 
 function distanceToCorridorCentre(point: IWaterPoint, corridor: ICorridorPath): number {
-    const spanX = corridor.toX - corridor.fromX;
-    const spanZ = corridor.toZ - corridor.fromZ;
-    const spanLengthSquared = spanX * spanX + spanZ * spanZ;
-
-    if (spanLengthSquared === 0)
-        return Math.hypot(point.x - corridor.fromX, point.z - corridor.fromZ);
-
-    const travelRatio = clamp(
-        ((point.x - corridor.fromX) * spanX + (point.z - corridor.fromZ) * spanZ) /
-            spanLengthSquared,
-        0,
-        1
-    );
-
-    return Math.hypot(
-        point.x - corridor.fromX - spanX * travelRatio,
-        point.z - corridor.fromZ - spanZ * travelRatio
+    return distanceToSegment(
+        point.x,
+        point.z,
+        corridor.fromX,
+        corridor.fromZ,
+        corridor.toX,
+        corridor.toZ
     );
 }
 
-function trimToSolidGround(points: IWaterPoint[], ground: IGroundProbe): IWaterPoint[] {
+function trimToSolidGround(points: IWaterPoint[], ground: ISurfaceHeightProbe): IWaterPoint[] {
     let longestStart = 0;
     let longestLength = 0;
     let runStart = 0;
@@ -894,18 +875,18 @@ function trimToSolidGround(points: IWaterPoint[], ground: IGroundProbe): IWaterP
     return points.slice(longestStart, longestStart + longestLength);
 }
 
-function restsOnSolidGround(points: IWaterPoint[], index: number, ground: IGroundProbe): boolean {
+function restsOnSolidGround(
+    points: IWaterPoint[],
+    index: number,
+    ground: ISurfaceHeightProbe
+): boolean {
     const point = points[index];
     if (!point) return false;
 
-    const previous = points[index - 1] ?? point;
-    const next = points[index + 1] ?? point;
-    const travelX = next.x - previous.x;
-    const travelZ = next.z - previous.z;
-    const travelLength = Math.hypot(travelX, travelZ) || 1;
+    const direction = pathDirectionAt(points, index, scratchDirection);
     const reach = point.halfWidth + WATER_COURSE.shoreProbeMargin;
-    const acrossX = (travelZ / travelLength) * reach;
-    const acrossZ = -(travelX / travelLength) * reach;
+    const acrossX = direction.z * reach;
+    const acrossZ = -direction.x * reach;
 
     return (
         standsClearOfRim(point.x, point.z, ground) &&
@@ -914,27 +895,17 @@ function restsOnSolidGround(points: IWaterPoint[], index: number, ground: IGroun
     );
 }
 
-const standsClearOfRim = (x: number, z: number, ground: IGroundProbe): boolean =>
+const standsClearOfRim = (x: number, z: number, ground: ISurfaceHeightProbe): boolean =>
     ground.footprintDistanceAt(x, z) <= SOLID_GROUND_LIMIT;
 
 function taperCourseEnds(points: IWaterPoint[]): void {
     const lengthFromStart = new Float32Array(points.length);
-    let travelledLength = 0;
-
-    for (let index = 1; index < points.length; index += 1) {
-        const point = points[index];
-        const previous = points[index - 1];
-        if (!point || !previous) continue;
-
-        travelledLength += Math.hypot(point.x - previous.x, point.z - previous.z);
-        lengthFromStart[index] = travelledLength;
-    }
+    const travelledLength = accumulatePathLengths(points, lengthFromStart);
 
     for (let index = 0; index < points.length; index += 1) {
         const point = points[index];
-        if (!point) continue;
 
-        const fromStart = lengthFromStart[index] ?? 0;
+        const fromStart = lengthFromStart[index];
         const fromEnd = travelledLength - fromStart;
 
         const sourceWidthRatio = lerp(
@@ -948,17 +919,15 @@ function taperCourseEnds(points: IWaterPoint[]): void {
     }
 }
 
-function settleWaterline(points: IWaterPoint[], ground: IGroundProbe): void {
-    if (points.length === 0) return;
-
+function settleWaterline(points: IWaterPoint[], ground: ISurfaceHeightProbe): void {
     const groundElevations = points.map((point) => ground.elevationAt(point.x, point.z));
     let highestAllowed = Infinity;
 
     for (let index = 0; index < points.length; index += 1) {
-        const point = points[index]!;
-        const before = groundElevations[index - 1] ?? groundElevations[index]!;
-        const current = groundElevations[index]!;
-        const after = groundElevations[index + 1] ?? groundElevations[index]!;
+        const point = points[index];
+        const before = groundElevations[index - 1] ?? groundElevations[index];
+        const current = groundElevations[index];
+        const after = groundElevations[index + 1] ?? groundElevations[index];
         const smoothedGround = (before + current + after) / 3;
 
         const restingLevel = smoothedGround - WATER_COURSE.waterlineDropBelowGround;
@@ -973,4 +942,11 @@ export const shoreAllowanceAt = (distance: number, halfWidth: number): number =>
 
 export function createChannelReading(): IChannelReading {
     return { bankBlend: 0, bedProfile: 0, waterlineElevation: 0 };
+}
+
+export function isCliffCorridor(corridor: {
+    readonly fromElevation: number;
+    readonly toElevation: number;
+}): boolean {
+    return !(Math.abs(corridor.toElevation - corridor.fromElevation) <= TERRAIN.cliffCorridorRise);
 }
