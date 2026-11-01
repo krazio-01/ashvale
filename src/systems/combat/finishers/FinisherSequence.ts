@@ -1,55 +1,39 @@
 import { Vector3 } from "three";
-import { FINISHER_RULES } from "@/constants/combat";
-import { yawTowards, angleDelta, horizontalDistance, smoothstep } from "@/lib/helpers";
-import type { IFinisherDefinition, ICombatant } from "@/types/combat";
 import { CLIP } from "@/constants/characters";
+import { COMBAT_TIMING, FINISHER_RULES } from "@/constants/combat";
+import {
+    horizontalDistance,
+    horizontalDirection,
+    pointAtYaw,
+    smoothstep,
+    yawTowards,
+    lerpAngle,
+    forwardFromYaw,
+} from "@/lib/helpers";
+import type { ICombatant, IFinisherDefinition } from "@/types/combat";
 import type { IWorldContext } from "@/types/world";
 
-export type PairedRole = "attacker" | "victim";
+export type FinisherRole = "attacker" | "victim";
 
-export interface IPairedParticipant extends ICombatant {
+export interface IFinisherParticipant extends ICombatant {
     readonly yaw: number;
     readonly disposed: boolean;
-    beginPaired(role: PairedRole): void;
-    playPairedLoop(clip: string, yaw: number): void;
-    playPaired(clip: string, yaw: number, blendInSeconds?: number): void;
-    drivePaired(clipSeconds: number): void;
-    movePaired(delta: Vector3): void;
-    setPairedYaw(yaw: number): void;
-    endPaired(): void;
+    beginFinisher(role: FinisherRole): void;
+    playFinisherLoop(clip: string, yaw: number): void;
+    playFinisherClip(clip: string, yaw: number, blendInSeconds?: number): void;
+    setFinisherClipTime(clipSeconds: number): void;
+    moveInFinisher(delta: Vector3): void;
+    setFinisherYaw(yaw: number): void;
+    endFinisher(): void;
     finishOff(killer: ICombatant, deathClip?: string): void;
     clipDuration(clip: string): number;
 }
 
-type PairedServices = Pick<IWorldContext, "combatEvents">;
+type FinisherServices = Pick<IWorldContext, "events">;
 
 type FinisherPhase = "approach" | "perform";
 
-export class PairSlot {
-    attackerYaw = 0;
-    victimYaw = 0;
-    readonly victimPosition = new Vector3();
-
-    solve(
-        attacker: Vector3,
-        victim: Vector3,
-        finisher: IFinisherDefinition,
-        attackerRadius: number,
-        victimRadius: number
-    ): void {
-        const towardVictim = yawTowards(attacker, victim);
-        const centreDistance = pairCentreDistance(finisher.distance, attackerRadius, victimRadius);
-        this.attackerYaw = towardVictim - finisher.bearing;
-        this.victimYaw = this.attackerYaw + finisher.relativeYaw;
-        this.victimPosition.set(
-            attacker.x + Math.sin(towardVictim) * centreDistance,
-            victim.y,
-            attacker.z + Math.cos(towardVictim) * centreDistance
-        );
-    }
-}
-
-export class PairedAnimationDirector {
+export class FinisherSequence {
     private static readonly APPROACH_TIMEOUT_FACTOR = 1.5;
 
     private static readonly scratchStep = new Vector3();
@@ -62,13 +46,15 @@ export class PairedAnimationDirector {
 
     private static readonly scratchAttackerShift = new Vector3();
 
-    private readonly services: PairedServices;
-    private readonly slot = new PairSlot();
+    private readonly services: FinisherServices;
+    private readonly placementVictimPosition = new Vector3();
+    private placementAttackerYaw = 0;
+    private placementVictimYaw = 0;
     private readonly victimSyncFrom = new Vector3();
     private readonly victimSyncApplied = new Vector3();
     private readonly attackerLastPosition = new Vector3();
-    private attacker: IPairedParticipant | null = null;
-    private victim: IPairedParticipant | null = null;
+    private attacker: IFinisherParticipant | null = null;
+    private victim: IFinisherParticipant | null = null;
     private finisher: IFinisherDefinition | null = null;
     private phase: FinisherPhase = "approach";
     private centreDistance = 0;
@@ -83,7 +69,7 @@ export class PairedAnimationDirector {
     private killed = false;
     private impactsFired = 0;
 
-    constructor(services: PairedServices) {
+    constructor(services: FinisherServices) {
         this.services = services;
     }
 
@@ -99,11 +85,11 @@ export class PairedAnimationDirector {
         return (
             this.attacker !== null &&
             this.phase === "perform" &&
-            this.elapsed >= FINISHER_RULES.recoverAt * this.duration
+            this.elapsed >= FINISHER_RULES.recoverAtFraction * this.duration
         );
     }
 
-    pairMidpoint(out: Vector3): Vector3 {
+    finisherMidpoint(out: Vector3): Vector3 {
         if (this.attacker && this.victim)
             out.addVectors(
                 this.attacker.sceneObject.position,
@@ -113,22 +99,22 @@ export class PairedAnimationDirector {
     }
 
     start(
-        attacker: IPairedParticipant,
-        victim: IPairedParticipant,
+        attacker: IFinisherParticipant,
+        victim: IFinisherParticipant,
         finisher: IFinisherDefinition
     ): boolean {
         if (
             this.attacker ||
             attacker.isDead ||
             victim.isDead ||
-            attacker.isPaired ||
-            victim.isPaired
+            attacker.isInFinisher ||
+            victim.isInFinisher
         )
             return false;
 
-        attacker.beginPaired("attacker");
-        victim.beginPaired("victim");
-        victim.playPairedLoop(
+        attacker.beginFinisher("attacker");
+        victim.beginFinisher("victim");
+        victim.playFinisherLoop(
             CLIP.reactStagger,
             yawTowards(attacker.position, victim.position) + finisher.relativeYaw
         );
@@ -141,26 +127,23 @@ export class PairedAnimationDirector {
         this.elapsed = 0;
         this.approachElapsed = 0;
         this.victimClip = null;
-        this.centreDistance = pairCentreDistance(
+        this.centreDistance = finisherCentreDistance(
             finisher.distance,
             attacker.bodyRadius,
             victim.bodyRadius
         );
 
-        const travel = approachTravel(
-            horizontalDistance(attacker.position, victim.position),
-            this.centreDistance
-        );
-        if (travel > 0) {
+        const travel = horizontalDistance(attacker.position, victim.position) - this.centreDistance;
+        if (travel > FINISHER_RULES.syncMaxShift) {
             this.phase = "approach";
             this.approachSpeed = Math.max(
                 FINISHER_RULES.approachSpeed,
                 travel / FINISHER_RULES.approachMaxSeconds
             );
-            attacker.playPairedLoop(CLIP.sprint, yawTowards(attacker.position, victim.position));
+            attacker.playFinisherLoop(CLIP.sprint, yawTowards(attacker.position, victim.position));
         } else this.beginPerform(attacker, victim, finisher);
 
-        this.services.combatEvents.emit("finisherStarted", { attacker, victim, finisher });
+        this.services.events.emit("finisherStarted", { attacker, victim, finisher });
         return true;
     }
 
@@ -181,8 +164,8 @@ export class PairedAnimationDirector {
     }
 
     abort(): void {
-        this.attacker?.endPaired();
-        if (this.victim && !this.victim.disposed) this.victim.endPaired();
+        this.attacker?.endFinisher();
+        if (this.victim && !this.victim.disposed) this.victim.endFinisher();
         this.attacker = null;
         this.victim = null;
         this.finisher = null;
@@ -190,8 +173,8 @@ export class PairedAnimationDirector {
     }
 
     private tickApproach(
-        attacker: IPairedParticipant,
-        victim: IPairedParticipant,
+        attacker: IFinisherParticipant,
+        victim: IFinisherParticipant,
         finisher: IFinisherDefinition,
         deltaSeconds: number
     ): boolean {
@@ -205,7 +188,7 @@ export class PairedAnimationDirector {
         this.approachElapsed += deltaSeconds;
         if (
             this.approachElapsed >
-            FINISHER_RULES.approachMaxSeconds * PairedAnimationDirector.APPROACH_TIMEOUT_FACTOR
+            FINISHER_RULES.approachMaxSeconds * FinisherSequence.APPROACH_TIMEOUT_FACTOR
         ) {
             this.abort();
             return true;
@@ -213,29 +196,31 @@ export class PairedAnimationDirector {
 
         const heading = yawTowards(attacker.position, victim.position);
         const step = Math.min(remaining, this.approachSpeed * deltaSeconds);
-        attacker.movePaired(
-            PairedAnimationDirector.scratchStep.set(
-                Math.sin(heading) * step,
-                0,
-                Math.cos(heading) * step
-            )
-        );
-        attacker.setPairedYaw(heading);
-        victim.setPairedYaw(heading + finisher.relativeYaw);
+        attacker.moveInFinisher(forwardFromYaw(heading, FinisherSequence.scratchStep, step));
+        attacker.setFinisherYaw(heading);
+        victim.setFinisherYaw(heading + finisher.relativeYaw);
         return false;
     }
 
     private beginPerform(
-        attacker: IPairedParticipant,
-        victim: IPairedParticipant,
+        attacker: IFinisherParticipant,
+        victim: IFinisherParticipant,
         finisher: IFinisherDefinition
     ): void {
-        this.slot.solve(
-            attacker.position,
-            victim.position,
-            finisher,
+        const towardVictim = yawTowards(attacker.position, victim.position);
+        const centreDistance = finisherCentreDistance(
+            finisher.distance,
             attacker.bodyRadius,
             victim.bodyRadius
+        );
+        this.placementAttackerYaw = towardVictim - finisher.bearing;
+        this.placementVictimYaw = this.placementAttackerYaw + finisher.relativeYaw;
+        pointAtYaw(
+            attacker.position,
+            towardVictim,
+            centreDistance,
+            this.placementVictimPosition,
+            victim.position.y
         );
         this.victimSyncFrom.copy(victim.position);
         this.victimSyncApplied.copy(victim.position);
@@ -243,53 +228,57 @@ export class PairedAnimationDirector {
         this.attackerSyncFromYaw = attacker.yaw;
         this.victimSyncFromYaw = victim.yaw;
 
-        attacker.playPaired(finisher.attackerClip, attacker.yaw, finisher.blendInSeconds);
-        const pairedVictimClip = finisher.pairedVictimClip;
-        if (pairedVictimClip) victim.playPaired(pairedVictimClip, victim.yaw);
+        attacker.playFinisherClip(finisher.attackerClip, attacker.yaw, finisher.blendInSeconds);
+        const finisherVictimClip = finisher.finisherVictimClip;
+        if (finisherVictimClip) victim.playFinisherClip(finisherVictimClip, victim.yaw);
 
-        this.victimClip = pairedVictimClip;
-        this.victimClipDuration = pairedVictimClip ? victim.clipDuration(pairedVictimClip) : 0;
+        this.victimClip = finisherVictimClip;
+        this.victimClipDuration = finisherVictimClip ? victim.clipDuration(finisherVictimClip) : 0;
         this.duration = Math.max(attacker.clipDuration(finisher.attackerClip), 0.1);
         this.elapsed = 0;
         this.phase = "perform";
     }
 
     private tickPerform(
-        attacker: IPairedParticipant,
-        victim: IPairedParticipant,
+        attacker: IFinisherParticipant,
+        victim: IFinisherParticipant,
         finisher: IFinisherDefinition,
         deltaSeconds: number
     ): boolean {
         this.elapsed += deltaSeconds;
 
-        const attackerShift = PairedAnimationDirector.scratchAttackerShift.subVectors(
+        const attackerShift = FinisherSequence.scratchAttackerShift.subVectors(
             attacker.position,
             this.attackerLastPosition
         );
         if (!this.victimClip && attackerShift.lengthSq() > 0)
-            this.slot.victimPosition.add(attackerShift);
+            this.placementVictimPosition.add(attackerShift);
         this.attackerLastPosition.copy(attacker.position);
 
-        this.syncPair(attacker, victim);
+        this.blendIntoFinisherPlacement(attacker, victim);
 
         const attackerSeconds = Math.min(this.elapsed, this.duration);
-        attacker.drivePaired(attackerSeconds);
+        attacker.setFinisherClipTime(attackerSeconds);
         if (this.victimClip)
-            victim.drivePaired((attackerSeconds / this.duration) * this.victimClipDuration);
+            victim.setFinisherClipTime((attackerSeconds / this.duration) * this.victimClipDuration);
 
-        const minimum = attacker.bodyRadius + victim.bodyRadius + FINISHER_RULES.contactGap;
-        const push = enforceSeparation(
+        const minimum = contactDistance(attacker.bodyRadius, victim.bodyRadius);
+        const distance = horizontalDirection(
             attacker.position,
             victim.position,
-            minimum,
-            PairedAnimationDirector.scratchPush
+            FinisherSequence.scratchPush
         );
-        if (push.lengthSq() > 0) victim.movePaired(push);
+        if (distance < minimum)
+            victim.moveInFinisher(
+                distance < 1e-6
+                    ? FinisherSequence.scratchPush.set(0, 0, minimum)
+                    : FinisherSequence.scratchPush.multiplyScalar(minimum - distance)
+            );
 
         const nextImpactAt = finisher.impactAt?.[this.impactsFired];
         if (nextImpactAt !== undefined && this.elapsed >= nextImpactAt * this.duration) {
             this.impactsFired += 1;
-            this.services.combatEvents.emit("finisherImpact", { attacker, victim });
+            this.services.events.emit("finisherImpact", { attacker, victim });
         }
         if (!this.killed && this.elapsed >= finisher.killAt * this.duration)
             this.kill(attacker, victim);
@@ -299,61 +288,75 @@ export class PairedAnimationDirector {
         return true;
     }
 
-    private syncPair(attacker: IPairedParticipant, victim: IPairedParticipant): void {
+    private blendIntoFinisherPlacement(
+        attacker: IFinisherParticipant,
+        victim: IFinisherParticipant
+    ): void {
         const blend = smoothstep(0, FINISHER_RULES.syncSeconds, this.elapsed);
-        PairedAnimationDirector.scratchSyncTarget.lerpVectors(
+        FinisherSequence.scratchSyncTarget.lerpVectors(
             this.victimSyncFrom,
-            this.slot.victimPosition,
+            this.placementVictimPosition,
             blend
         );
-        PairedAnimationDirector.scratchSyncDelta
-            .subVectors(PairedAnimationDirector.scratchSyncTarget, this.victimSyncApplied)
+        FinisherSequence.scratchSyncDelta
+            .subVectors(FinisherSequence.scratchSyncTarget, this.victimSyncApplied)
             .setY(0);
-        if (PairedAnimationDirector.scratchSyncDelta.lengthSq() > 0)
-            victim.movePaired(PairedAnimationDirector.scratchSyncDelta);
-        this.victimSyncApplied.copy(PairedAnimationDirector.scratchSyncTarget);
+        if (FinisherSequence.scratchSyncDelta.lengthSq() > 0)
+            victim.moveInFinisher(FinisherSequence.scratchSyncDelta);
+        this.victimSyncApplied.copy(FinisherSequence.scratchSyncTarget);
 
-        attacker.setPairedYaw(
-            this.attackerSyncFromYaw +
-                angleDelta(this.attackerSyncFromYaw, this.slot.attackerYaw) * blend
+        attacker.setFinisherYaw(
+            lerpAngle(this.attackerSyncFromYaw, this.placementAttackerYaw, blend)
         );
-        victim.setPairedYaw(
-            this.victimSyncFromYaw + angleDelta(this.victimSyncFromYaw, this.slot.victimYaw) * blend
-        );
+        victim.setFinisherYaw(lerpAngle(this.victimSyncFromYaw, this.placementVictimYaw, blend));
     }
 
-    private kill(attacker: IPairedParticipant, victim: IPairedParticipant): void {
+    private kill(attacker: IFinisherParticipant, victim: IFinisherParticipant): void {
         this.killed = true;
         victim.finishOff(attacker, this.finisher?.victimDeath);
-        this.services.combatEvents.emit("finisherKill", { attacker, victim });
+        this.services.events.emit("finisherKill", { attacker, victim });
     }
 }
 
-export function pairCentreDistance(
+export class FinisherWindows {
+    private requestRemaining = 0;
+    private chainKillRemaining = 0;
+
+    get isRequested(): boolean {
+        return this.requestRemaining > 0;
+    }
+
+    get inChainKillWindow(): boolean {
+        return this.chainKillRemaining > 0;
+    }
+
+    press(): void {
+        this.requestRemaining = COMBAT_TIMING.inputBufferSeconds;
+    }
+
+    openChainKillWindow(): void {
+        this.chainKillRemaining = COMBAT_TIMING.chainKillWindowSeconds;
+    }
+
+    reset(): void {
+        this.requestRemaining = 0;
+        this.chainKillRemaining = 0;
+    }
+
+    tick(deltaSeconds: number): void {
+        this.requestRemaining = Math.max(0, this.requestRemaining - deltaSeconds);
+        this.chainKillRemaining = Math.max(0, this.chainKillRemaining - deltaSeconds);
+    }
+}
+
+function contactDistance(attackerRadius: number, victimRadius: number): number {
+    return attackerRadius + victimRadius + FINISHER_RULES.contactGap;
+}
+
+export function finisherCentreDistance(
     authoredDistance: number,
     attackerRadius: number,
     victimRadius: number
 ): number {
-    return Math.max(authoredDistance, attackerRadius + victimRadius + FINISHER_RULES.contactGap);
-}
-
-export function approachTravel(currentCentreDistance: number, slotCentreDistance: number): number {
-    const excess = currentCentreDistance - slotCentreDistance;
-    return excess > FINISHER_RULES.syncMaxShift ? excess : 0;
-}
-
-export function enforceSeparation(
-    attacker: Vector3,
-    victim: Vector3,
-    minimumCentreDistance: number,
-    out: Vector3
-): Vector3 {
-    const offsetX = victim.x - attacker.x;
-    const offsetZ = victim.z - attacker.z;
-    const distance = Math.hypot(offsetX, offsetZ);
-    if (distance >= minimumCentreDistance) return out.set(0, 0, 0);
-    if (distance < 1e-6) return out.set(0, 0, minimumCentreDistance);
-
-    const shortfall = minimumCentreDistance - distance;
-    return out.set((offsetX / distance) * shortfall, 0, (offsetZ / distance) * shortfall);
+    return Math.max(authoredDistance, contactDistance(attackerRadius, victimRadius));
 }

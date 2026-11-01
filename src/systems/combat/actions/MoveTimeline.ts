@@ -1,5 +1,5 @@
-import { PROJECTILES, TELEGRAPH } from "@/constants/combat";
-import type { IMoveDefinition, IMoveWindow, MoveTag, TelegraphDanger } from "@/types/combat";
+import { PROJECTILES, ATTACK_WARNING } from "@/constants/combat";
+import type { IMoveDefinition, IMoveWindow, MoveTag, AttackWarningDanger } from "@/types/combat";
 
 export function isWithin(window: IMoveWindow | undefined, time: number): boolean {
     return window !== undefined && time >= window.from && time <= window.to;
@@ -17,7 +17,7 @@ export function allowsCancel(
     move: IMoveDefinition,
     time: number,
     tag: MoveTag,
-    opensEarly = false
+    opensEarly: boolean
 ): boolean {
     for (const cancel of move.cancels)
         if (cancel.into.includes(tag) && (opensEarly ? time <= cancel.to : isWithin(cancel, time)))
@@ -39,15 +39,21 @@ export function firstStrikeAt(move: IMoveDefinition): number | null {
     return Number.isFinite(strikeAt) ? strikeAt : null;
 }
 
-export function telegraphTime(move: IMoveDefinition, windupUnitSeconds: number): number | null {
+export function attackWarningTime(
+    move: IMoveDefinition,
+    moveSecondsDuringWindup: number
+): number | null {
     const strikeAt = firstStrikeAt(move);
     if (strikeAt === null) return null;
-    return Math.max(0, strikeAt - TELEGRAPH.flashLeadSeconds / Math.max(windupUnitSeconds, 1e-3));
+    return Math.max(
+        0,
+        strikeAt - ATTACK_WARNING.flashLeadSeconds / Math.max(moveSecondsDuringWindup, 1e-3)
+    );
 }
 
-export function telegraphDanger(move: IMoveDefinition): TelegraphDanger {
-    const isPerilous =
-        move.hits.some((hit) => hit.perilous) ||
-        (move.projectile !== undefined && PROJECTILES[move.projectile.kind].perilous);
-    return isPerilous ? "perilous" : "parryable";
+export function attackWarningDanger(move: IMoveDefinition): AttackWarningDanger {
+    const isDodgeOnly =
+        move.hits.some((hit) => hit.dodgeOnly) ||
+        (move.projectile !== undefined && PROJECTILES[move.projectile.kind].dodgeOnly);
+    return isDodgeOnly ? "dodgeOnly" : "parryable";
 }
