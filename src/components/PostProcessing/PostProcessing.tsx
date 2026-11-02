@@ -20,8 +20,7 @@ import {
 } from "@/world/postProcessing/PostProcessPasses";
 import type { IThemeEnvironment } from "@/types/world";
 import { POST_PROCESSING, RENDER } from "@/constants/world";
-import { useStoreState } from "@/hooks/useStoreState";
-import { store } from "@/store/store";
+import { useGameStore } from "@/hooks/useGameStore";
 import { FOLIAGE_OUTLINE_MASK_SCALES } from "@/constants/ui";
 
 const FOLIAGE_MASK_RENDER_PRIORITY = 0;
@@ -67,7 +66,7 @@ const PostProcessing = ({ environment }: { environment: IThemeEnvironment }) => 
         antiAliasing,
         outlines,
         atmosphere: atmosphereEnabled,
-    } = useStoreState(store, (state) => state.settings.values);
+    } = useGameStore((state) => state.settings.values);
     const camera = useThree((state) => state.camera);
 
     const foliageMaskScale = FOLIAGE_OUTLINE_MASK_SCALES[outlines];

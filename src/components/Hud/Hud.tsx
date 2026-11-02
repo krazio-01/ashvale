@@ -1,6 +1,5 @@
 "use client";
-import { useStoreState } from "@/hooks/useStoreState";
-import { store } from "@/store/store";
+import { useGameStore } from "@/hooks/useGameStore";
 import { VitalBar } from "@/components/Hud/VitalBar/VitalBar";
 import { AlertMarkers } from "@/components/Hud/AlertMarkers/AlertMarkers";
 import { DamageVignette } from "@/components/Hud/DamageVignette/DamageVignette";
@@ -12,7 +11,7 @@ import { HUD_VITALS } from "@/constants/ui";
 import "./hud.scss";
 
 export const Hud = () => {
-    const isPlayerAlive = useStoreState(store, (state) => state.hud.isPlayerAlive);
+    const isPlayerAlive = useGameStore((state) => state.hud.isPlayerAlive);
 
     return (
         <div className="hud" data-dead={!isPlayerAlive}>

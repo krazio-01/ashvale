@@ -6,13 +6,12 @@ import { sunDirectionFromSky } from "@/themes/Themes";
 import { SCENE_LIGHT_LAYERS } from "@/world/postProcessing/PostProcessPasses";
 import type { IThemeEnvironment } from "@/types/world";
 import { LIGHT } from "@/constants/world";
-import { useStoreState } from "@/hooks/useStoreState";
-import { store } from "@/store/store";
+import { useGameStore } from "@/hooks/useGameStore";
 import { SHADOW_MAP_SIZES } from "@/constants/ui";
 
 const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
     const { sky, lighting } = environment;
-    const { shadows } = useStoreState(store, (state) => state.settings.values);
+    const { shadows } = useGameStore((state) => state.settings.values);
     const shadowsEnabled = shadows !== "off";
     const shadowMapResolution = shadowsEnabled ? SHADOW_MAP_SIZES[shadows] : LIGHT.shadowMapSize;
     const shadowTexelSize = (LIGHT.shadowExtent * 2) / shadowMapResolution;
