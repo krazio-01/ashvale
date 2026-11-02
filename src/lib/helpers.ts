@@ -395,6 +395,11 @@ export function asArray<T>(value: T | T[]): T[] {
     return Array.isArray(value) ? value : [value];
 }
 
+export function keysOf<Source extends object>(source: Source): Extract<keyof Source, string>[];
+export function keysOf(source: object): string[] {
+    return Object.keys(source);
+}
+
 export function mapFields<Source extends object, Key extends keyof Source>(
     source: Source,
     keys: readonly Key[],

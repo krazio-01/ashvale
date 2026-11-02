@@ -1,4 +1,5 @@
 import { Vector3 } from "three";
+import { keysOf } from "@/lib/helpers";
 import type { ICombatant, Team } from "@/types/combat";
 
 export class CombatRegistry {
@@ -52,7 +53,7 @@ export class CombatRegistry {
     }
 
     private rebuildTeamLists(): void {
-        for (const team of Object.keys(this.teammates) as Team[]) {
+        for (const team of keysOf(this.teammates)) {
             this.teammates[team] = this.combatants.filter((combatant) => combatant.team === team);
             this.opponents[team] = this.combatants.filter((combatant) => combatant.team !== team);
         }

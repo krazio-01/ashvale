@@ -1,4 +1,5 @@
 import { INPUT_BINDINGS, MOUSE_BINDINGS } from "@/constants/player";
+import { keysOf } from "@/lib/helpers";
 
 const ACTION_BY_KEY_CODE = new Map<string, KeyAction>();
 
@@ -178,8 +179,8 @@ export class PlayerInput {
     }
 }
 
-for (const action of Object.keys(INPUT_BINDINGS) as KeyAction[])
+for (const action of keysOf(INPUT_BINDINGS))
     for (const code of INPUT_BINDINGS[action]) ACTION_BY_KEY_CODE.set(code, action);
 
-for (const action of Object.keys(MOUSE_BINDINGS) as PointerAction[])
+for (const action of keysOf(MOUSE_BINDINGS))
     ACTION_BY_MOUSE_BUTTON.set(MOUSE_BINDINGS[action], action);
