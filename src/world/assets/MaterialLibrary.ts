@@ -1,15 +1,23 @@
 import { SHADING } from "@/constants/world";
+import type { IUnlitMaterialSpec } from "@/types/world";
 import {
+    AdditiveBlending,
+    Color,
     DataTexture,
+    Material,
+    MeshBasicMaterial,
     MeshStandardMaterial,
     MeshToonMaterial,
     NearestFilter,
+    NormalBlending,
     RedFormat,
+    Texture,
 } from "three";
 
 export class MaterialLibrary {
     private readonly gradientMap: DataTexture;
     private readonly materialsByKey = new Map<string, MeshToonMaterial>();
+    private readonly unlitMaterialsByKey = new Map<string, MeshBasicMaterial>();
     private vertexColorMaterial: MeshToonMaterial | null = null;
 
     constructor() {
@@ -55,9 +63,55 @@ export class MaterialLibrary {
         return material;
     }
 
+    getUnlitMaterial({
+        color,
+        opacity = 1,
+        isAdditive = false,
+        isToneMapped = true,
+    }: IUnlitMaterialSpec): MeshBasicMaterial {
+        const resolvedColor = new Color(color);
+        const cacheKey = [resolvedColor.getHexString(), opacity, isAdditive, isToneMapped].join(
+            "|"
+        );
+        const cachedMaterial = this.unlitMaterialsByKey.get(cacheKey);
+        if (cachedMaterial) return cachedMaterial;
+
+        const isTransparent = isAdditive || opacity < 1;
+        const material = new MeshBasicMaterial({
+            color: resolvedColor,
+            opacity,
+            transparent: isTransparent,
+            depthWrite: !isTransparent,
+            blending: isAdditive ? AdditiveBlending : NormalBlending,
+            toneMapped: isToneMapped,
+        });
+
+        this.unlitMaterialsByKey.set(cacheKey, material);
+        return material;
+    }
+
+    disposeUnused(materialsInUse: ReadonlySet<Material>): void {
+        const texturesInUse = new Set<Texture>();
+        for (const material of this.materialsByKey.values()) {
+            if (!materialsInUse.has(material)) continue;
+            if (material.map) texturesInUse.add(material.map);
+            if (material.normalMap) texturesInUse.add(material.normalMap);
+        }
+
+        for (const [cacheKey, material] of this.materialsByKey) {
+            if (materialsInUse.has(material)) continue;
+            material.dispose();
+            if (material.map && !texturesInUse.has(material.map)) material.map.dispose();
+            if (material.normalMap && !texturesInUse.has(material.normalMap))
+                material.normalMap.dispose();
+            this.materialsByKey.delete(cacheKey);
+        }
+    }
+
     dispose(): void {
-        for (const material of this.materialsByKey.values()) material.dispose();
-        this.materialsByKey.clear();
+        this.disposeUnused(new Set());
+        for (const material of this.unlitMaterialsByKey.values()) material.dispose();
+        this.unlitMaterialsByKey.clear();
         this.vertexColorMaterial?.dispose();
         this.gradientMap.dispose();
     }

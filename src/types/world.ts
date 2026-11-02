@@ -2,6 +2,7 @@ import type {
     AnimationClip,
     BufferGeometry,
     CanvasTexture,
+    ColorRepresentation,
     DataTexture,
     Group,
     KeyframeTrack,
@@ -13,6 +14,7 @@ import type {
 } from "three";
 import type { World as PhysicsWorld } from "@dimforge/rapier3d-compat";
 import type { AssetLibrary } from "@/world/assets/AssetLibrary";
+import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { WorldEnvironment } from "@/world/World";
 import type { AttackCoordinator } from "@/systems/combat/AttackCoordinator";
 import type { ProjectileSystem } from "@/systems/combat/ProjectileSystem";
@@ -80,15 +82,24 @@ export type EffectSpec =
     IMaterialFlashSpec | IParticleBurstSpec | IAttackWarningFlareSpec | IRibbonTrailSpec;
 
 export interface IEffectTarget {
+    readonly materialLibrary: MaterialLibrary;
     readonly meshes?: readonly Mesh[];
     readonly sceneRoot?: Object3D;
     readonly color?: string;
+}
+
+export interface IUnlitMaterialSpec {
+    color: ColorRepresentation;
+    opacity?: number;
+    isAdditive?: boolean;
+    isToneMapped?: boolean;
 }
 
 export interface IWorldContext {
     readonly physicsWorld: PhysicsWorld;
     readonly sceneRoot: Group;
     readonly assetLibrary: AssetLibrary;
+    readonly materialLibrary: MaterialLibrary;
     readonly combatRegistry: CombatRegistry;
     readonly events: GameEvents;
     readonly timeDilation: TimeDilation;

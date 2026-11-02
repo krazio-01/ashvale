@@ -103,17 +103,21 @@ export class World {
         this.physicsWorld = new RAPIER.World({ x: 0, y: WORLD.gravity, z: 0 });
         this.physicsWorld.timestep = WORLD.fixedTimestep;
         const combatRegistry = new CombatRegistry();
-        this.projectiles = new ProjectileSystem(combatRegistry, this.events, (from, to) =>
-            this.isProjectileBlocked(from, to)
+        this.projectiles = new ProjectileSystem(
+            combatRegistry,
+            this.events,
+            materialLibrary,
+            (from, to) => this.isProjectileBlocked(from, to)
         );
         this.sceneRoot.add(this.projectiles.sceneObject);
-        this.worldEffects = new WorldEffects(this.events);
+        this.worldEffects = new WorldEffects(this.events, materialLibrary);
         this.sceneRoot.add(this.worldEffects.sceneObject);
 
         this.worldContext = {
             physicsWorld: this.physicsWorld,
             sceneRoot: this.sceneRoot,
             assetLibrary: this.assetLibrary,
+            materialLibrary,
             combatRegistry,
             events: this.events,
             timeDilation: this.timeDilation,

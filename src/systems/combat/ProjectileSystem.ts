@@ -1,4 +1,6 @@
-import { Group, Mesh, MeshBasicMaterial, SphereGeometry, Vector3 } from "three";
+import { Group, Mesh, SphereGeometry, Vector3 } from "three";
+import type { MeshBasicMaterial } from "three";
+import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import { SweptHitDetector } from "@/systems/combat/hit/SweptHitDetector";
 import { createHitEvent, createHitPayload, emitHitLanded } from "@/events/CombatEvents";
 import type { ICombatEventMap } from "@/events/CombatEvents";
@@ -35,13 +37,18 @@ export class ProjectileSystem {
     private readonly hitDefenders: ICombatant[] = [];
     private hitEvent: ICombatEventMap["hitLanded"] | null = null;
 
-    constructor(registry: CombatRegistry, events: GameEvents, isWorldBlocked: WorldBlockTest) {
+    constructor(
+        registry: CombatRegistry,
+        events: GameEvents,
+        materialLibrary: MaterialLibrary,
+        isWorldBlocked: WorldBlockTest
+    ) {
         this.registry = registry;
         this.events = events;
         this.isWorldBlocked = isWorldBlocked;
         this.materials = {
-            bolt: new MeshBasicMaterial({ color: PROJECTILES.bolt.color }),
-            blast: new MeshBasicMaterial({ color: PROJECTILES.blast.color }),
+            bolt: materialLibrary.getUnlitMaterial({ color: PROJECTILES.bolt.color }),
+            blast: materialLibrary.getUnlitMaterial({ color: PROJECTILES.blast.color }),
         };
 
         for (let index = 0; index < PROJECTILE_POOL.size; index += 1) {
@@ -120,8 +127,6 @@ export class ProjectileSystem {
 
     dispose(): void {
         this.geometry.dispose();
-        this.materials.bolt.dispose();
-        this.materials.blast.dispose();
         this.sceneObject.clear();
     }
 

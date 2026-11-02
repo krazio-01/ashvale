@@ -9,7 +9,6 @@ import {
     InstancedBufferAttribute,
     InstancedBufferGeometry,
     Mesh,
-    MeshBasicMaterial,
     PlaneGeometry,
     ShaderMaterial,
     Sprite,
@@ -18,8 +17,9 @@ import {
 } from "three";
 import type { Material, Object3D } from "three";
 import { EFFECTS } from "@/constants/combat";
+import type { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import type { EffectId } from "@/constants/combat";
-import { lerp, metresToUnits, randomOffset, smoothCurveValue } from "@/lib/helpers";
+import { keysOf, lerp, metresToUnits, randomOffset, smoothCurveValue } from "@/lib/helpers";
 import {
     createGlowTexture,
     particleBurstVertexShader,
@@ -118,31 +118,25 @@ export abstract class Effect {
     readonly sceneObject: Object3D | null = null;
 
     abstract update(deltaSeconds: number): void;
+    abstract clear(): void;
     abstract dispose(): void;
 }
 
 class MaterialFlash extends Effect {
-    private static readonly flashMaterials = new Map<number, Material>();
-
-    private static flashMaterialFor(color: number): Material {
-        let material = MaterialFlash.flashMaterials.get(color);
-        if (!material) {
-            material = new MeshBasicMaterial({ color, toneMapped: false });
-            MaterialFlash.flashMaterials.set(color, material);
-        }
-        return material;
-    }
-
     private readonly material: Material;
     private remainingSeconds = 0;
     private isShowing = false;
 
     constructor(
         private readonly override: MaterialOverride,
-        private readonly spec: IMaterialFlashSpec
+        private readonly spec: IMaterialFlashSpec,
+        materialLibrary: MaterialLibrary
     ) {
         super();
-        this.material = MaterialFlash.flashMaterialFor(spec.color);
+        this.material = materialLibrary.getUnlitMaterial({
+            color: spec.color,
+            isToneMapped: false,
+        });
     }
 
     play(): void {
@@ -160,8 +154,13 @@ class MaterialFlash extends Effect {
         if (this.remainingSeconds === 0) this.release();
     }
 
-    dispose(): void {
+    clear(): void {
+        this.remainingSeconds = 0;
         this.release();
+    }
+
+    dispose(): void {
+        this.clear();
     }
 
     private release(): void {
@@ -173,6 +172,8 @@ class MaterialFlash extends Effect {
 }
 
 class ParticleBurst extends Effect {
+    private static readonly UNBORN = -1000;
+
     readonly sceneObject: Mesh;
 
     private readonly geometry = new InstancedBufferGeometry();
@@ -191,7 +192,10 @@ class ParticleBurst extends Effect {
         this.origins = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
         this.velocities = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
         this.tints = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
-        this.births = new InstancedBufferAttribute(new Float32Array(capacity).fill(-1000), 1);
+        this.births = new InstancedBufferAttribute(
+            new Float32Array(capacity).fill(ParticleBurst.UNBORN),
+            1
+        );
         this.colors = spec.colorCycle.map((hex) => new Color(hex));
 
         const quad = new PlaneGeometry(1, 1);
@@ -254,6 +258,12 @@ class ParticleBurst extends Effect {
     update(deltaSeconds: number): void {
         this.time += deltaSeconds;
         this.material.uniforms.time.value = this.time;
+    }
+
+    clear(): void {
+        this.births.array.fill(ParticleBurst.UNBORN);
+        this.births.clearUpdateRanges();
+        this.births.needsUpdate = true;
     }
 
     dispose(): void {
@@ -352,6 +362,10 @@ class AttackWarningFlares extends Effect {
             );
             slot.sprite.visible = true;
         }
+    }
+
+    clear(): void {
+        for (const slot of this.slots) this.release(slot);
     }
 
     dispose(): void {
@@ -517,6 +531,13 @@ class RibbonTrail extends Effect {
         this.geometry.setDrawRange(0, Math.max(0, point - 1) * 6);
     }
 
+    clear(): void {
+        this.sampleCount = 0;
+        this.intensity = 0;
+        this.isEmitting = false;
+        this.sceneObject.visible = false;
+    }
+
     dispose(): void {
         this.sceneObject.removeFromParent();
         this.geometry.dispose();
@@ -548,7 +569,7 @@ export class EffectSet {
     ): Effect {
         switch (spec.kind) {
             case "materialFlash":
-                return new MaterialFlash(override, spec);
+                return new MaterialFlash(override, spec, target.materialLibrary);
             case "particleBurst":
                 return new ParticleBurst(spec);
             case "attackWarningFlare":
@@ -579,6 +600,10 @@ export class EffectSet {
         for (const effect of this.effects) effect.update(deltaSeconds);
     }
 
+    clear(): void {
+        for (const effect of this.effects) effect.clear();
+    }
+
     dispose(): void {
         for (const effect of this.effects) effect.dispose();
     }
@@ -587,7 +612,7 @@ export class EffectSet {
 export class WorldEffects implements IWorldEntity {
     private static readonly scratchDirection = new Vector3();
 
-    private static readonly TRIGGERED_EFFECT_IDS = (Object.keys(EFFECTS) as EffectId[]).filter(
+    private static readonly TRIGGERED_EFFECT_IDS = keysOf(EFFECTS).filter(
         (id): id is TriggeredEffectId => "trigger" in EFFECTS[id]
     );
 
@@ -619,9 +644,10 @@ export class WorldEffects implements IWorldEntity {
     private readonly effects: EffectSet;
     private readonly unsubscribers: (() => void)[] = [];
 
-    constructor(events: GameEvents) {
+    constructor(events: GameEvents, materialLibrary: MaterialLibrary) {
         this.effects = new EffectSet(WorldEffects.TRIGGERED_EFFECT_IDS, {
             sceneRoot: this.sceneObject,
+            materialLibrary,
         });
         for (const id of WorldEffects.TRIGGERED_EFFECT_IDS)
             this.unsubscribers.push(
@@ -631,6 +657,10 @@ export class WorldEffects implements IWorldEntity {
 
     update(deltaSeconds: number): void {
         this.effects.update(deltaSeconds);
+    }
+
+    clear(): void {
+        this.effects.clear();
     }
 
     dispose(): void {

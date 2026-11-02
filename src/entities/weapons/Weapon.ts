@@ -13,7 +13,7 @@ import type {
     WeaponMount,
     WeaponDefinition,
 } from "@/types/combat";
-import type { IModelTemplate } from "@/types/world";
+import type { IModelTemplate, IWorldContext } from "@/types/world";
 import { ERRORS } from "@/constants/strings";
 
 interface IMountPose {
@@ -297,7 +297,7 @@ class MeleeWeapon extends Weapon<IMeleeWeaponSpec> {
         template: IModelTemplate,
         spec: IMeleeWeaponSpec,
         handRig: IHandRig,
-        effectsRoot: Object3D,
+        context: IWorldContext,
         carryRig?: ICarryRig
     ) {
         super(template, spec, handRig, carryRig);
@@ -306,7 +306,8 @@ class MeleeWeapon extends Weapon<IMeleeWeaponSpec> {
         this.axisPoint(this.coordinateAt(spec.guardFraction), this.localGuard);
 
         this.effects = new EffectSet(["slashTrail"], {
-            sceneRoot: effectsRoot,
+            sceneRoot: context.sceneRoot,
+            materialLibrary: context.materialLibrary,
             color: spec.trailColor,
         });
     }
@@ -340,11 +341,11 @@ export function createWeapon(
     definition: WeaponDefinition,
     template: IModelTemplate,
     handRig: IHandRig,
-    effectsRoot: Object3D,
+    context: IWorldContext,
     carryRig?: ICarryRig
 ): Weapon {
     switch (definition.kind) {
         case "melee":
-            return new MeleeWeapon(template, definition, handRig, effectsRoot, carryRig);
+            return new MeleeWeapon(template, definition, handRig, context, carryRig);
     }
 }

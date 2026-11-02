@@ -346,7 +346,10 @@ export abstract class CombatCharacter
             if (shared) object.skeleton = shared;
             else this.skeletons.push(own);
         });
-        this.effects = new EffectSet(config.hitEffect ? [config.hitEffect] : [], { meshes });
+        this.effects = new EffectSet(config.hitEffect ? [config.hitEffect] : [], {
+            meshes,
+            materialLibrary: config.context.materialLibrary,
+        });
         this.animator = new CharacterAnimator(
             this.modelInstance,
             config.model.animations,
@@ -621,7 +624,7 @@ export abstract class CombatCharacter
             : undefined;
 
         this.weapon?.dispose();
-        this.weapon = createWeapon(definition, template, handRig, this.context.sceneRoot, carryRig);
+        this.weapon = createWeapon(definition, template, handRig, this.context, carryRig);
     }
 
     onHitConfirmed(_defender: ICombatant, _outcome: IHitOutcome, move: IMoveDefinition): void {
