@@ -142,5 +142,6 @@ export class DamageNumberTracker extends HudTracker {
 
     dispose(): void {
         this.unsubscribe();
+        store.getState().hud.ageDamageNumbers(Number.POSITIVE_INFINITY);
     }
 }
