@@ -215,7 +215,7 @@ export const GROUND_DEPTH_SHADE = {
 };
 
 export const RENDER = {
-    pixelRatioRange: range(1, 1.5),
+    maximumPixelRatio: 1.5,
     multisampling: 0,
     maximumFrameDeltaSeconds: 0.1,
 };

@@ -1,11 +1,22 @@
 "use client";
+import { useEffect, useState } from "react";
 import { RENDER } from "@/constants/world";
-import { useStoreState } from "@/hooks/useStoreState";
-import { store } from "@/store/store";
-import { clamp } from "@/lib/helpers";
+import { useGameStore } from "@/hooks/useGameStore";
 
 export function useRenderPixelRatio(): number {
-    const { resolutionScale } = useStoreState(store, (state) => state.settings.values);
+    const resolutionScale = useGameStore((state) => state.settings.values.resolutionScale);
+    const [devicePixelRatio, setDevicePixelRatio] = useState(() => window.devicePixelRatio);
 
-    return clamp(window.devicePixelRatio * resolutionScale, ...RENDER.pixelRatioRange);
+    useEffect(() => {
+        const resolutionQuery = window.matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
+        const handleChange = () => setDevicePixelRatio(window.devicePixelRatio);
+
+        resolutionQuery.addEventListener("change", handleChange);
+        return () => resolutionQuery.removeEventListener("change", handleChange);
+    }, [devicePixelRatio]);
+
+    return Math.min(
+        Math.min(devicePixelRatio, RENDER.maximumPixelRatio) * resolutionScale,
+        RENDER.maximumPixelRatio
+    );
 }
