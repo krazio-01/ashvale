@@ -341,6 +341,9 @@
     },
     {
       "name": "Leaves_NormalTree",
+      "extras": {
+        "foliage": true
+      },
       "alphaMode": "MASK",
       "alphaCutoff": 0.20000000298023224,
       "doubleSided": true,
