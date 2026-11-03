@@ -289,6 +289,9 @@
     },
     {
       "name": "PineTree_Leaves",
+      "extras": {
+        "foliage": true
+      },
       "alphaMode": "BLEND",
       "doubleSided": true,
       "pbrMetallicRoughness": {
