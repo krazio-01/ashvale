@@ -466,6 +466,9 @@
     },
     {
       "name": "Leaf_Texture",
+      "extras": {
+        "foliage": true
+      },
       "doubleSided": true,
       "pbrMetallicRoughness": {
         "baseColorFactor": [

@@ -156,6 +156,9 @@
   "materials": [
     {
       "name": "Texture_Leaves",
+      "extras": {
+        "foliage": true
+      },
       "doubleSided": true,
       "pbrMetallicRoughness": {
         "baseColorFactor": [
