@@ -1,0 +1,364 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 65,
+      "max": [
+        2.350788116455078,
+        0.9438201785087585,
+        0.8258444666862488
+      ],
+      "min": [
+        -2.3464629650115967,
+        0,
+        -0.8258426785469055
+      ],
+      "bufferView": 0,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 65,
+      "bufferView": 0,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 65,
+      "bufferView": 0,
+      "byteOffset": 24
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 180,
+      "bufferView": 1,
+      "byteOffset": 0
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 336,
+      "bufferView": 1,
+      "byteOffset": 360
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 456,
+      "bufferView": 1,
+      "byteOffset": 1032
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 132,
+      "bufferView": 1,
+      "byteOffset": 1944
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 111,
+      "max": [
+        2.4775283336639404,
+        7.2976555824279785,
+        0.5898871421813965
+      ],
+      "min": [
+        -2.4775283336639404,
+        0,
+        -0.5898880362510681
+      ],
+      "bufferView": 2,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 111,
+      "bufferView": 2,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 111,
+      "bufferView": 2,
+      "byteOffset": 24
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 143,
+      "max": [
+        4.83707857131958,
+        7.415236473083496,
+        0.5898876190185547
+      ],
+      "min": [
+        -4.83707857131958,
+        0,
+        -0.5898876190185547
+      ],
+      "bufferView": 3,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 143,
+      "bufferView": 3,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 143,
+      "bufferView": 3,
+      "byteOffset": 24
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 49,
+      "max": [
+        1.179774284362793,
+        1.1797752380371094,
+        0.7078651785850525
+      ],
+      "min": [
+        -1.1797760725021362,
+        0,
+        -0.7078660130500793
+      ],
+      "bufferView": 4,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 49,
+      "bufferView": 4,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 49,
+      "bufferView": 4,
+      "byteOffset": 24
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 2080,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 2080,
+      "byteLength": 2208,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 4288,
+      "byteLength": 3552,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 7840,
+      "byteLength": 4576,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 12416,
+      "byteLength": 1568,
+      "byteStride": 32,
+      "target": 34962
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "source": 1,
+      "sampler": 0
+    },
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "normal",
+      "mimeType": "image/png",
+      "uri": "WoodlandRavine_normal.png"
+    },
+    {
+      "name": "albedo",
+      "mimeType": "image/png",
+      "uri": "WoodlandRavine_baseColor.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "WoodlandRavine.bin",
+      "byteLength": 13984
+    }
+  ],
+  "materials": [
+    {
+      "name": "baked",
+      "extras": {
+        "sharedMaterial": "rock"
+      },
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.8500000238418579,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      },
+      "normalTexture": {
+        "index": 1,
+        "scale": 0.30000001192092896
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "cap",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 3
+        }
+      ]
+    },
+    {
+      "name": "cliffPanel4",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 7,
+            "NORMAL": 8,
+            "TEXCOORD_0": 9
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 4
+        }
+      ]
+    },
+    {
+      "name": "cliffPanel8",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 10,
+            "NORMAL": 11,
+            "TEXCOORD_0": 12
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 5
+        }
+      ]
+    },
+    {
+      "name": "ledge",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 13,
+            "NORMAL": 14,
+            "TEXCOORD_0": 15
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 6
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "cap",
+      "extras": {
+        "role": "cliff",
+        "wallRunnable": false,
+        "sockets": []
+      },
+      "mesh": 0
+    },
+    {
+      "name": "cliffPanel4",
+      "extras": {
+        "role": "cliff",
+        "wallRunnable": true,
+        "sockets": []
+      },
+      "mesh": 1
+    },
+    {
+      "name": "cliffPanel8",
+      "extras": {
+        "role": "cliff",
+        "wallRunnable": true,
+        "sockets": []
+      },
+      "mesh": 2
+    },
+    {
+      "name": "ledge",
+      "extras": {
+        "role": "ledge",
+        "wallRunnable": false,
+        "sockets": []
+      },
+      "mesh": 3
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1,
+        2,
+        3
+      ]
+    }
+  ],
+  "scene": 0
+}
