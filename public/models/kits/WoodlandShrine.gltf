@@ -1,0 +1,407 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 2016,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 676,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 4056,
+      "normalized": false,
+      "byteOffset": 4032,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 1529,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 676,
+      "max": [
+        13621,
+        32767,
+        11893
+      ],
+      "min": [
+        -13621,
+        -32767,
+        -11893
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 676,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 1529,
+      "max": [
+        32755,
+        1236,
+        32767
+      ],
+      "min": [
+        -32755,
+        -1236,
+        -32767
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 1529,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 12144,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 2061,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 6072
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 12144,
+      "byteLength": 2704,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 2064,
+          "byteLength": 1425,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 676
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 14848,
+      "byteLength": 6116,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 3492,
+          "byteLength": 3163,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 1529
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 20964,
+      "byteLength": 5408,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 6656,
+          "byteLength": 3315,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 676
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 26372,
+      "byteLength": 2704,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 9972,
+          "byteLength": 2204,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 676
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 29076,
+      "byteLength": 12232,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 12176,
+          "byteLength": 7037,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 1529
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 41308,
+      "byteLength": 6116,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 19216,
+          "byteLength": 5202,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 1529
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 1
+        }
+      }
+    },
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "WoodlandShrine_normal.ktx2"
+    },
+    {
+      "mimeType": "image/ktx2",
+      "uri": "WoodlandShrine_baseColor.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "WoodlandShrine.bin",
+      "byteLength": 24420
+    },
+    {
+      "byteLength": 47424,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "baked",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.8500000238418579,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      },
+      "normalTexture": {
+        "index": 1,
+        "scale": 0.30000001192092896
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "lantern",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 4,
+            "TEXCOORD_0": 5
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    },
+    {
+      "name": "paving",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 6,
+            "TEXCOORD_0": 7
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "lantern",
+      "extras": {
+        "role": "light",
+        "wallRunnable": false,
+        "sockets": [
+          {
+            "name": "light",
+            "at": [
+              0,
+              1.1797752808988764,
+              -3.2745342018438606e-17
+            ]
+          }
+        ]
+      },
+      "translation": [
+        0,
+        0.920224666595459,
+        0
+      ],
+      "scale": [
+        0.920224666595459,
+        0.920224666595459,
+        0.920224666595459
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "paving",
+      "extras": {
+        "role": "floor",
+        "wallRunnable": false,
+        "sockets": [
+          {
+            "name": "core",
+            "at": [
+              -0.002119627683790015,
+              0.14157303370786517,
+              0.013956374661081752
+            ]
+          },
+          {
+            "name": "lanternLeft",
+            "at": [
+              -1.4768387288073854,
+              0.14157303370786517,
+              1.4886754757846772
+            ]
+          },
+          {
+            "name": "lanternRight",
+            "at": [
+              1.4725994734398056,
+              0.14157303370786517,
+              1.4886754757846772
+            ]
+          }
+        ]
+      },
+      "translation": [
+        0.0014986991882324219,
+        0.08493136614561081,
+        0.002023935317993164
+      ],
+      "scale": [
+        2.2522037029266357,
+        2.2522037029266357,
+        2.2522037029266357
+      ],
+      "mesh": 1
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}

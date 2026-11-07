@@ -1,0 +1,255 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 676,
+      "max": [
+        0.382523775100708,
+        1.840449333190918,
+        0.333952933549881
+      ],
+      "min": [
+        -0.382523775100708,
+        0,
+        -0.333952933549881
+      ],
+      "bufferView": 0,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 676,
+      "bufferView": 0,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 676,
+      "bufferView": 0,
+      "byteOffset": 24
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 2016,
+      "bufferView": 1,
+      "byteOffset": 0
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 4056,
+      "bufferView": 1,
+      "byteOffset": 4032
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 1529,
+      "max": [
+        2.2527756690979004,
+        0.16986273229122162,
+        2.254227638244629
+      ],
+      "min": [
+        -2.2497782707214355,
+        0,
+        -2.2501797676086426
+      ],
+      "bufferView": 2,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 1529,
+      "bufferView": 2,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 1529,
+      "bufferView": 2,
+      "byteOffset": 24
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 21632,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 21632,
+      "byteLength": 12144,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 33776,
+      "byteLength": 48928,
+      "byteStride": 32,
+      "target": 34962
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "source": 1,
+      "sampler": 0
+    },
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "normal",
+      "mimeType": "image/png",
+      "uri": "WoodlandShrine_normal.png"
+    },
+    {
+      "name": "albedo",
+      "mimeType": "image/png",
+      "uri": "WoodlandShrine_baseColor.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "WoodlandShrine.bin",
+      "byteLength": 82704
+    }
+  ],
+  "materials": [
+    {
+      "name": "baked",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.8500000238418579,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      },
+      "normalTexture": {
+        "index": 1,
+        "scale": 0.30000001192092896
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "lantern",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 3
+        }
+      ]
+    },
+    {
+      "name": "paving",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 4
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "lantern",
+      "extras": {
+        "role": "light",
+        "wallRunnable": false,
+        "sockets": [
+          {
+            "name": "light",
+            "at": [
+              0,
+              1.1797752808988764,
+              -3.2745342018438606e-17
+            ]
+          }
+        ]
+      },
+      "mesh": 0
+    },
+    {
+      "name": "paving",
+      "extras": {
+        "role": "floor",
+        "wallRunnable": false,
+        "sockets": [
+          {
+            "name": "core",
+            "at": [
+              -0.002119627683790015,
+              0.14157303370786517,
+              0.013956374661081752
+            ]
+          },
+          {
+            "name": "lanternLeft",
+            "at": [
+              -1.4768387288073854,
+              0.14157303370786517,
+              1.4886754757846772
+            ]
+          },
+          {
+            "name": "lanternRight",
+            "at": [
+              1.4725994734398056,
+              0.14157303370786517,
+              1.4886754757846772
+            ]
+          }
+        ]
+      },
+      "mesh": 1
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1
+      ]
+    }
+  ],
+  "scene": 0
+}
