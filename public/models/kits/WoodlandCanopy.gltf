@@ -1,0 +1,380 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 114,
+      "normalized": false,
+      "byteOffset": 0,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 76,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 1
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 48,
+      "normalized": false,
+      "byteOffset": 228,
+      "bufferView": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5120,
+      "count": 32,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 2
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 76,
+      "max": [
+        32767,
+        24767,
+        32475
+      ],
+      "min": [
+        -32767,
+        -24767,
+        -32475
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 3
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 76,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 4
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5122,
+      "count": 32,
+      "max": [
+        32767,
+        19866,
+        29331
+      ],
+      "min": [
+        -32767,
+        -19866,
+        -29331
+      ],
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 32,
+      "normalized": true,
+      "byteOffset": 0,
+      "bufferView": 6
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 1,
+      "byteOffset": 0,
+      "byteLength": 324,
+      "target": 34963,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 0,
+          "byteLength": 72,
+          "mode": "TRIANGLES",
+          "byteStride": 2,
+          "count": 162
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 324,
+      "byteLength": 304,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 72,
+          "byteLength": 112,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 76
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 628,
+      "byteLength": 128,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 184,
+          "byteLength": 64,
+          "mode": "ATTRIBUTES",
+          "filter": "OCTAHEDRAL",
+          "byteStride": 4,
+          "count": 32
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 756,
+      "byteLength": 608,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 248,
+          "byteLength": 521,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 76
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1364,
+      "byteLength": 304,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 772,
+          "byteLength": 121,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 76
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1668,
+      "byteLength": 256,
+      "target": 34962,
+      "byteStride": 8,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 896,
+          "byteLength": 228,
+          "mode": "ATTRIBUTES",
+          "byteStride": 8,
+          "count": 32
+        }
+      }
+    },
+    {
+      "buffer": 1,
+      "byteOffset": 1924,
+      "byteLength": 128,
+      "target": 34962,
+      "byteStride": 4,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "buffer": 0,
+          "byteOffset": 1124,
+          "byteLength": 69,
+          "mode": "ATTRIBUTES",
+          "byteStride": 4,
+          "count": 32
+        }
+      }
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "extensions": {
+        "KHR_texture_basisu": {
+          "source": 0
+        }
+      }
+    }
+  ],
+  "images": [
+    {
+      "mimeType": "image/ktx2",
+      "uri": "WoodlandCanopy_baseColor.ktx2"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "WoodlandCanopy.bin",
+      "byteLength": 1196
+    },
+    {
+      "byteLength": 2052,
+      "extensions": {
+        "EXT_meshopt_compression": {
+          "fallback": true
+        }
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "leaves",
+      "extras": {
+        "foliage": true
+      },
+      "alphaMode": "MASK",
+      "alphaCutoff": 0.20000000298023224,
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.5,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "clusterLarge",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 1,
+            "POSITION": 4,
+            "TEXCOORD_0": 5
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 0
+        }
+      ]
+    },
+    {
+      "name": "clusterSmall",
+      "primitives": [
+        {
+          "attributes": {
+            "NORMAL": 3,
+            "POSITION": 6,
+            "TEXCOORD_0": 7
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 2
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "clusterLarge",
+      "extras": {
+        "role": "foliage",
+        "wallRunnable": false,
+        "sockets": [
+          {
+            "name": "attach",
+            "at": [
+              0.015855259686020994,
+              0.5218038335058756,
+              -0.034140860891482515
+            ]
+          }
+        ]
+      },
+      "translation": [
+        0,
+        1.5449190139770508,
+        0
+      ],
+      "scale": [
+        2.0440635681152344,
+        2.0440635681152344,
+        2.0440635681152344
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "clusterSmall",
+      "extras": {
+        "role": "foliage",
+        "wallRunnable": false,
+        "sockets": [
+          {
+            "name": "attach",
+            "at": [
+              -0.029174249949390264,
+              0.3126098087980658,
+              -0.17712289491641864
+            ]
+          }
+        ]
+      },
+      "translation": [
+        1.1920928955078125e-7,
+        0.8077291250228882,
+        -1.1920928955078125e-7
+      ],
+      "scale": [
+        1.3321515321731567,
+        1.3321515321731567,
+        1.3321515321731567
+      ],
+      "mesh": 1
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1
+      ]
+    }
+  ],
+  "scene": 0,
+  "extensionsUsed": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ],
+  "extensionsRequired": [
+    "EXT_meshopt_compression",
+    "KHR_mesh_quantization",
+    "KHR_texture_basisu"
+  ]
+}
