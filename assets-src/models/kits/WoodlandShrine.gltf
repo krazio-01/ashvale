@@ -7,16 +7,16 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 676,
+      "count": 677,
       "max": [
-        0.382523775100708,
+        0.38252243399620056,
         1.840449333190918,
-        0.333952933549881
+        0.3339523673057556
       ],
       "min": [
-        -0.382523775100708,
+        -0.3825240731239319,
         0,
-        -0.333952933549881
+        -0.3339534103870392
       ],
       "bufferView": 0,
       "byteOffset": 0
@@ -24,14 +24,14 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 676,
+      "count": 677,
       "bufferView": 0,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
-      "count": 676,
+      "count": 677,
       "bufferView": 0,
       "byteOffset": 24
     },
@@ -50,16 +50,30 @@
       "byteOffset": 4032
     },
     {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1176,
+      "bufferView": 1,
+      "byteOffset": 12144
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1572,
+      "bufferView": 1,
+      "byteOffset": 14496
+    },
+    {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 1529,
+      "count": 1504,
       "max": [
-        2.2527756690979004,
+        2.252774953842163,
         0.16986273229122162,
-        2.254227638244629
+        2.254225730895996
       ],
       "min": [
-        -2.2497782707214355,
+        -2.2497785091400146,
         0,
         -2.2501797676086426
       ],
@@ -69,15 +83,77 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 1529,
+      "count": 1504,
       "bufferView": 2,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
-      "count": 1529,
+      "count": 1504,
       "bufferView": 2,
+      "byteOffset": 24
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 462,
+      "max": [
+        2.902247190475464,
+        3.081573009490967,
+        0.06732197105884552
+      ],
+      "min": [
+        -2.902247190475464,
+        0,
+        -0.06732197105884552
+      ],
+      "bufferView": 3,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 462,
+      "bufferView": 3,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 462,
+      "bufferView": 3,
+      "byteOffset": 24
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 649,
+      "max": [
+        2.288764238357544,
+        2.7016851902008057,
+        0.15708433091640472
+      ],
+      "min": [
+        -2.2887637615203857,
+        0,
+        -0.15708443522453308
+      ],
+      "bufferView": 4,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 649,
+      "bufferView": 4,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 649,
+      "bufferView": 4,
       "byteOffset": 24
     }
   ],
@@ -85,20 +161,34 @@
     {
       "buffer": 0,
       "byteOffset": 0,
-      "byteLength": 21632,
+      "byteLength": 21664,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 21632,
-      "byteLength": 12144,
+      "byteOffset": 21664,
+      "byteLength": 17640,
       "target": 34963
     },
     {
       "buffer": 0,
-      "byteOffset": 33776,
-      "byteLength": 48928,
+      "byteOffset": 39304,
+      "byteLength": 48128,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 87432,
+      "byteLength": 14784,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 102216,
+      "byteLength": 20768,
       "byteStride": 32,
       "target": 34962
     }
@@ -136,7 +226,7 @@
   "buffers": [
     {
       "uri": "WoodlandShrine.bin",
-      "byteLength": 82704
+      "byteLength": 122984
     }
   ],
   "materials": [
@@ -177,13 +267,43 @@
       "primitives": [
         {
           "attributes": {
-            "POSITION": 5,
-            "NORMAL": 6,
-            "TEXCOORD_0": 7
+            "POSITION": 7,
+            "NORMAL": 8,
+            "TEXCOORD_0": 9
           },
           "mode": 4,
           "material": 0,
           "indices": 4
+        }
+      ]
+    },
+    {
+      "name": "prayerFlags",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 10,
+            "NORMAL": 11,
+            "TEXCOORD_0": 12
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 5
+        }
+      ]
+    },
+    {
+      "name": "sacredRope",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 13,
+            "NORMAL": 14,
+            "TEXCOORD_0": 15
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 6
         }
       ]
     }
@@ -240,6 +360,24 @@
         ]
       },
       "mesh": 1
+    },
+    {
+      "name": "prayerFlags",
+      "extras": {
+        "role": "prop",
+        "wallRunnable": false,
+        "sockets": []
+      },
+      "mesh": 2
+    },
+    {
+      "name": "sacredRope",
+      "extras": {
+        "role": "prop",
+        "wallRunnable": false,
+        "sockets": []
+      },
+      "mesh": 3
     }
   ],
   "scenes": [
@@ -247,7 +385,9 @@
       "name": "Scene",
       "nodes": [
         0,
-        1
+        1,
+        2,
+        3
       ]
     }
   ],
