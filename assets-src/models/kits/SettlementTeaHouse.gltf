@@ -1,0 +1,510 @@
+{
+  "asset": {
+    "generator": "glTF-Transform v4.5.0",
+    "version": "2.0"
+  },
+  "accessors": [
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 126,
+      "max": [
+        2.536517381668091,
+        2.5719101428985596,
+        0.471910685300827
+      ],
+      "min": [
+        -2.536515235900879,
+        0,
+        -0.4719085991382599
+      ],
+      "bufferView": 0,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 126,
+      "bufferView": 0,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 126,
+      "bufferView": 0,
+      "byteOffset": 24
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 312,
+      "bufferView": 1,
+      "byteOffset": 0
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 888,
+      "bufferView": 1,
+      "byteOffset": 624
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 2952,
+      "bufferView": 1,
+      "byteOffset": 2400
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 1524,
+      "bufferView": 1,
+      "byteOffset": 8304
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 132,
+      "bufferView": 1,
+      "byteOffset": 11352
+    },
+    {
+      "type": "SCALAR",
+      "componentType": 5123,
+      "count": 12648,
+      "bufferView": 1,
+      "byteOffset": 11616
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 317,
+      "max": [
+        0.524998664855957,
+        2.9494380950927734,
+        0.21318459510803223
+      ],
+      "min": [
+        -0.5250006318092346,
+        0,
+        -0.21318688988685608
+      ],
+      "bufferView": 2,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 317,
+      "bufferView": 2,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 317,
+      "bufferView": 2,
+      "byteOffset": 24
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 932,
+      "max": [
+        3.63370943069458,
+        3.789438009262085,
+        0.21318714320659637
+      ],
+      "min": [
+        -3.6337082386016846,
+        0,
+        -0.2131865918636322
+      ],
+      "bufferView": 3,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 932,
+      "bufferView": 3,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 932,
+      "bufferView": 3,
+      "byteOffset": 24
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 579,
+      "max": [
+        0.7078657746315002,
+        0.7196629047393799,
+        1.1797749996185303
+      ],
+      "min": [
+        -0.7078653573989868,
+        0,
+        -1.1797754764556885
+      ],
+      "bufferView": 4,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 579,
+      "bufferView": 4,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 579,
+      "bufferView": 4,
+      "byteOffset": 24
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 48,
+      "max": [
+        2.595501184463501,
+        0.14157302677631378,
+        2.595501184463501
+      ],
+      "min": [
+        -2.5955028533935547,
+        0,
+        -2.5955028533935547
+      ],
+      "bufferView": 5,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 48,
+      "bufferView": 5,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 48,
+      "bufferView": 5,
+      "byteOffset": 24
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 5014,
+      "max": [
+        3.681570291519165,
+        10.253962516784668,
+        3.9643805027008057
+      ],
+      "min": [
+        -3.681570291519165,
+        0,
+        -3.9643805027008057
+      ],
+      "bufferView": 6,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 5014,
+      "bufferView": 6,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 5014,
+      "bufferView": 6,
+      "byteOffset": 24
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 4032,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 4032,
+      "byteLength": 36912,
+      "target": 34963
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 40944,
+      "byteLength": 10144,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 51088,
+      "byteLength": 29824,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 80912,
+      "byteLength": 18528,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 99440,
+      "byteLength": 1536,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 100976,
+      "byteLength": 160448,
+      "byteStride": 32,
+      "target": 34962
+    }
+  ],
+  "samplers": [
+    {
+      "magFilter": 9729,
+      "minFilter": 9987,
+      "wrapS": 10497,
+      "wrapT": 10497
+    }
+  ],
+  "textures": [
+    {
+      "source": 1,
+      "sampler": 0
+    },
+    {
+      "source": 0,
+      "sampler": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "normal",
+      "mimeType": "image/png",
+      "uri": "SettlementTeaHouse_normal.png"
+    },
+    {
+      "name": "albedo",
+      "mimeType": "image/png",
+      "uri": "SettlementTeaHouse_baseColor.png"
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "SettlementTeaHouse.bin",
+      "byteLength": 261424
+    }
+  ],
+  "materials": [
+    {
+      "name": "baked",
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "roughnessFactor": 0.8500000238418579,
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 0
+        }
+      },
+      "normalTexture": {
+        "index": 1,
+        "scale": 0.30000001192092896
+      }
+    }
+  ],
+  "meshes": [
+    {
+      "name": "courtyardWall",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 3
+        }
+      ]
+    },
+    {
+      "name": "lanternPost",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 9,
+            "NORMAL": 10,
+            "TEXCOORD_0": 11
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 4
+        }
+      ]
+    },
+    {
+      "name": "lanternString",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 12,
+            "NORMAL": 13,
+            "TEXCOORD_0": 14
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 5
+        }
+      ]
+    },
+    {
+      "name": "lowTable",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 15,
+            "NORMAL": 16,
+            "TEXCOORD_0": 17
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 6
+        }
+      ]
+    },
+    {
+      "name": "paving",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 18,
+            "NORMAL": 19,
+            "TEXCOORD_0": 20
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 7
+        }
+      ]
+    },
+    {
+      "name": "teaHouse",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 21,
+            "NORMAL": 22,
+            "TEXCOORD_0": 23
+          },
+          "mode": 4,
+          "material": 0,
+          "indices": 8
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "courtyardWall",
+      "extras": {
+        "role": "wall",
+        "wallRunnable": false,
+        "sockets": []
+      },
+      "mesh": 0
+    },
+    {
+      "name": "lanternPost",
+      "extras": {
+        "role": "prop",
+        "wallRunnable": false,
+        "sockets": [
+          {
+            "name": "light",
+            "at": [
+              0.30084269662921354,
+              2.359550561797753,
+              0
+            ]
+          }
+        ]
+      },
+      "mesh": 1
+    },
+    {
+      "name": "lanternString",
+      "extras": {
+        "role": "prop",
+        "wallRunnable": false,
+        "sockets": []
+      },
+      "mesh": 2
+    },
+    {
+      "name": "lowTable",
+      "extras": {
+        "role": "prop",
+        "wallRunnable": false,
+        "sockets": []
+      },
+      "mesh": 3
+    },
+    {
+      "name": "paving",
+      "extras": {
+        "role": "prop",
+        "wallRunnable": false,
+        "sockets": []
+      },
+      "mesh": 4
+    },
+    {
+      "name": "teaHouse",
+      "extras": {
+        "role": "prop",
+        "wallRunnable": false,
+        "sockets": []
+      },
+      "mesh": 5
+    }
+  ],
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    }
+  ],
+  "scene": 0
+}
