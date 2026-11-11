@@ -7,16 +7,16 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 4784,
+      "count": 4320,
       "max": [
-        1.2447006702423096,
-        2.0082833766937256,
-        1.349179744720459
+        1.97805655002594,
+        3.184843063354492,
+        2.142814874649048
       ],
       "min": [
-        -1.244631290435791,
-        -0.006629432551562786,
-        -1.3539577722549438
+        -1.9767673015594482,
+        -0.0019296423997730017,
+        -2.1504034996032715
       ],
       "bufferView": 0,
       "byteOffset": 0
@@ -24,14 +24,14 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 4784,
+      "count": 4320,
       "bufferView": 0,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
-      "count": 4784,
+      "count": 4320,
       "bufferView": 0,
       "byteOffset": 24
     },
@@ -47,13 +47,13 @@
     {
       "buffer": 0,
       "byteOffset": 0,
-      "byteLength": 153088,
+      "byteLength": 138240,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 153088,
+      "byteOffset": 138240,
       "byteLength": 24000,
       "target": 34963
     }
@@ -91,7 +91,7 @@
   "buffers": [
     {
       "uri": "CampTent.bin",
-      "byteLength": 177088
+      "byteLength": 162240
     }
   ],
   "materials": [
@@ -132,7 +132,8 @@
     {
       "name": "lo",
       "extras": {
-        "embedOnly": false
+        "embedOnly": false,
+        "sockets": []
       },
       "mesh": 0
     }

@@ -15,7 +15,7 @@
     {
       "type": "VEC3",
       "componentType": 5120,
-      "count": 4784,
+      "count": 4320,
       "normalized": true,
       "byteOffset": 0,
       "bufferView": 1
@@ -23,15 +23,15 @@
     {
       "type": "VEC3",
       "componentType": 5122,
-      "count": 4784,
+      "count": 4320,
       "max": [
-        30175,
-        24426,
+        30183,
+        24322,
         32767
       ],
       "min": [
-        -30175,
-        -24426,
+        -30183,
+        -24322,
         -32767
       ],
       "normalized": true,
@@ -41,7 +41,7 @@
     {
       "type": "VEC2",
       "componentType": 5123,
-      "count": 4784,
+      "count": 4320,
       "normalized": true,
       "byteOffset": 0,
       "bufferView": 3
@@ -57,7 +57,7 @@
         "EXT_meshopt_compression": {
           "buffer": 0,
           "byteOffset": 0,
-          "byteLength": 4257,
+          "byteLength": 4292,
           "mode": "TRIANGLES",
           "byteStride": 2,
           "count": 12000
@@ -67,52 +67,52 @@
     {
       "buffer": 1,
       "byteOffset": 24000,
-      "byteLength": 19136,
+      "byteLength": 17280,
       "target": 34962,
       "byteStride": 4,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 4260,
-          "byteLength": 9857,
+          "byteOffset": 4292,
+          "byteLength": 8893,
           "mode": "ATTRIBUTES",
           "filter": "OCTAHEDRAL",
           "byteStride": 4,
-          "count": 4784
+          "count": 4320
         }
       }
     },
     {
       "buffer": 1,
-      "byteOffset": 43136,
-      "byteLength": 38272,
+      "byteOffset": 41280,
+      "byteLength": 34560,
       "target": 34962,
       "byteStride": 8,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 14120,
-          "byteLength": 25110,
+          "byteOffset": 13188,
+          "byteLength": 22423,
           "mode": "ATTRIBUTES",
           "byteStride": 8,
-          "count": 4784
+          "count": 4320
         }
       }
     },
     {
       "buffer": 1,
-      "byteOffset": 81408,
-      "byteLength": 19136,
+      "byteOffset": 75840,
+      "byteLength": 17280,
       "target": 34962,
       "byteStride": 4,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 39232,
-          "byteLength": 16232,
+          "byteOffset": 35612,
+          "byteLength": 14569,
           "mode": "ATTRIBUTES",
           "byteStride": 4,
-          "count": 4784
+          "count": 4320
         }
       }
     }
@@ -156,10 +156,10 @@
   "buffers": [
     {
       "uri": "CampTent.bin",
-      "byteLength": 55464
+      "byteLength": 50184
     },
     {
-      "byteLength": 100544,
+      "byteLength": 93120,
       "extensions": {
         "EXT_meshopt_compression": {
           "fallback": true
@@ -205,17 +205,18 @@
     {
       "name": "lo",
       "extras": {
-        "embedOnly": false
+        "embedOnly": false,
+        "sockets": []
       },
       "translation": [
-        0.000034689903259277344,
-        1.0008269720710814,
-        -0.0023890137672424316
+        0.0006446242332458496,
+        1.5914567104773596,
+        -0.0037943124771118164
       ],
       "scale": [
-        1.3515687584877014,
-        1.3515687584877014,
-        1.3515687584877014
+        2.1466091871261597,
+        2.1466091871261597,
+        2.1466091871261597
       ],
       "mesh": 0
     }
