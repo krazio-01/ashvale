@@ -23,7 +23,7 @@
     {
       "type": "SCALAR",
       "componentType": 5123,
-      "count": 1320,
+      "count": 2100,
       "normalized": false,
       "byteOffset": 600,
       "bufferView": 0
@@ -31,26 +31,10 @@
     {
       "type": "VEC3",
       "componentType": 5120,
-      "count": 483,
+      "count": 804,
       "normalized": true,
       "byteOffset": 0,
       "bufferView": 2
-    },
-    {
-      "type": "SCALAR",
-      "componentType": 5123,
-      "count": 912,
-      "normalized": false,
-      "byteOffset": 3240,
-      "bufferView": 0
-    },
-    {
-      "type": "VEC3",
-      "componentType": 5120,
-      "count": 368,
-      "normalized": true,
-      "byteOffset": 0,
-      "bufferView": 3
     },
     {
       "type": "VEC3",
@@ -68,7 +52,7 @@
       ],
       "normalized": true,
       "byteOffset": 0,
-      "bufferView": 4
+      "bufferView": 3
     },
     {
       "type": "VEC2",
@@ -76,88 +60,62 @@
       "count": 170,
       "normalized": true,
       "byteOffset": 0,
-      "bufferView": 5
+      "bufferView": 4
     },
     {
       "type": "VEC3",
       "componentType": 5122,
-      "count": 483,
+      "count": 804,
       "max": [
-        8737,
-        23302,
+        13617,
+        16598,
         32767
       ],
       "min": [
-        -8737,
-        -23302,
+        -13617,
+        -16598,
         -32767
       ],
       "normalized": true,
       "byteOffset": 0,
+      "bufferView": 5
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5123,
+      "count": 804,
+      "normalized": true,
+      "byteOffset": 0,
       "bufferView": 6
-    },
-    {
-      "type": "VEC2",
-      "componentType": 5123,
-      "count": 483,
-      "normalized": true,
-      "byteOffset": 0,
-      "bufferView": 7
-    },
-    {
-      "type": "VEC3",
-      "componentType": 5122,
-      "count": 368,
-      "max": [
-        26887,
-        32767,
-        26887
-      ],
-      "min": [
-        -26887,
-        -32767,
-        -26887
-      ],
-      "normalized": true,
-      "byteOffset": 0,
-      "bufferView": 8
-    },
-    {
-      "type": "VEC2",
-      "componentType": 5123,
-      "count": 368,
-      "normalized": true,
-      "byteOffset": 0,
-      "bufferView": 9
     }
   ],
   "bufferViews": [
     {
       "buffer": 1,
       "byteOffset": 0,
-      "byteLength": 5064,
+      "byteLength": 4800,
       "target": 34963,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
           "byteOffset": 0,
-          "byteLength": 863,
+          "byteLength": 818,
           "mode": "TRIANGLES",
           "byteStride": 2,
-          "count": 2532
+          "count": 2400
         }
       }
     },
     {
       "buffer": 1,
-      "byteOffset": 5064,
+      "byteOffset": 4800,
       "byteLength": 680,
       "target": 34962,
       "byteStride": 4,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 864,
+          "byteOffset": 820,
           "byteLength": 390,
           "mode": "ATTRIBUTES",
           "filter": "OCTAHEDRAL",
@@ -168,50 +126,32 @@
     },
     {
       "buffer": 1,
-      "byteOffset": 5744,
-      "byteLength": 1932,
+      "byteOffset": 5480,
+      "byteLength": 3216,
       "target": 34962,
       "byteStride": 4,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 1256,
-          "byteLength": 1036,
+          "byteOffset": 1212,
+          "byteLength": 1654,
           "mode": "ATTRIBUTES",
           "filter": "OCTAHEDRAL",
           "byteStride": 4,
-          "count": 483
+          "count": 804
         }
       }
     },
     {
       "buffer": 1,
-      "byteOffset": 7676,
-      "byteLength": 1472,
-      "target": 34962,
-      "byteStride": 4,
-      "extensions": {
-        "EXT_meshopt_compression": {
-          "buffer": 0,
-          "byteOffset": 2292,
-          "byteLength": 759,
-          "mode": "ATTRIBUTES",
-          "filter": "OCTAHEDRAL",
-          "byteStride": 4,
-          "count": 368
-        }
-      }
-    },
-    {
-      "buffer": 1,
-      "byteOffset": 9148,
+      "byteOffset": 8696,
       "byteLength": 1360,
       "target": 34962,
       "byteStride": 8,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 3052,
+          "byteOffset": 2868,
           "byteLength": 841,
           "mode": "ATTRIBUTES",
           "byteStride": 8,
@@ -221,15 +161,15 @@
     },
     {
       "buffer": 1,
-      "byteOffset": 10508,
+      "byteOffset": 10056,
       "byteLength": 680,
       "target": 34962,
       "byteStride": 4,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 3896,
-          "byteLength": 644,
+          "byteOffset": 3712,
+          "byteLength": 624,
           "mode": "ATTRIBUTES",
           "byteStride": 4,
           "count": 170
@@ -238,69 +178,35 @@
     },
     {
       "buffer": 1,
-      "byteOffset": 11188,
-      "byteLength": 3864,
+      "byteOffset": 10736,
+      "byteLength": 6432,
       "target": 34962,
       "byteStride": 8,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 4540,
-          "byteLength": 2085,
+          "byteOffset": 4336,
+          "byteLength": 3454,
           "mode": "ATTRIBUTES",
           "byteStride": 8,
-          "count": 483
+          "count": 804
         }
       }
     },
     {
       "buffer": 1,
-      "byteOffset": 15052,
-      "byteLength": 1932,
+      "byteOffset": 17168,
+      "byteLength": 3216,
       "target": 34962,
       "byteStride": 4,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 6628,
-          "byteLength": 1676,
+          "byteOffset": 7792,
+          "byteLength": 2821,
           "mode": "ATTRIBUTES",
           "byteStride": 4,
-          "count": 483
-        }
-      }
-    },
-    {
-      "buffer": 1,
-      "byteOffset": 16984,
-      "byteLength": 2944,
-      "target": 34962,
-      "byteStride": 8,
-      "extensions": {
-        "EXT_meshopt_compression": {
-          "buffer": 0,
-          "byteOffset": 8304,
-          "byteLength": 1676,
-          "mode": "ATTRIBUTES",
-          "byteStride": 8,
-          "count": 368
-        }
-      }
-    },
-    {
-      "buffer": 1,
-      "byteOffset": 19928,
-      "byteLength": 1472,
-      "target": 34962,
-      "byteStride": 4,
-      "extensions": {
-        "EXT_meshopt_compression": {
-          "buffer": 0,
-          "byteOffset": 9980,
-          "byteLength": 1292,
-          "mode": "ATTRIBUTES",
-          "byteStride": 4,
-          "count": 368
+          "count": 804
         }
       }
     }
@@ -344,10 +250,10 @@
   "buffers": [
     {
       "uri": "WoodlandOutpost.bin",
-      "byteLength": 11272
+      "byteLength": 10616
     },
     {
-      "byteLength": 21400,
+      "byteLength": 20384,
       "extensions": {
         "EXT_meshopt_compression": {
           "fallback": true
@@ -379,8 +285,8 @@
         {
           "attributes": {
             "NORMAL": 1,
-            "POSITION": 6,
-            "TEXCOORD_0": 7
+            "POSITION": 4,
+            "TEXCOORD_0": 5
           },
           "mode": 4,
           "material": 0,
@@ -389,32 +295,17 @@
       ]
     },
     {
-      "name": "stairs",
-      "primitives": [
-        {
-          "attributes": {
-            "NORMAL": 3,
-            "POSITION": 8,
-            "TEXCOORD_0": 9
-          },
-          "mode": 4,
-          "material": 0,
-          "indices": 2
-        }
-      ]
-    },
-    {
       "name": "watchPlatform",
       "primitives": [
         {
           "attributes": {
-            "NORMAL": 5,
-            "POSITION": 10,
-            "TEXCOORD_0": 11
+            "NORMAL": 3,
+            "POSITION": 6,
+            "TEXCOORD_0": 7
           },
           "mode": 4,
           "material": 0,
-          "indices": 4
+          "indices": 2
         }
       ]
     }
@@ -440,25 +331,6 @@
       "mesh": 0
     },
     {
-      "name": "stairs",
-      "extras": {
-        "role": "stair",
-        "wallRunnable": false,
-        "sockets": []
-      },
-      "translation": [
-        3.2782554626464844e-7,
-        1.887640357017517,
-        4.76837158203125e-7
-      ],
-      "scale": [
-        2.654494285583496,
-        2.654494285583496,
-        2.654494285583496
-      ],
-      "mesh": 1
-    },
-    {
       "name": "watchPlatform",
       "extras": {
         "role": "floor",
@@ -466,16 +338,16 @@
         "sockets": []
       },
       "translation": [
-        -2.980232238769531e-7,
+        0,
         2.3005616664886475,
-        -2.980232238769531e-7
+        0
       ],
       "scale": [
-        2.3005616664886475,
-        2.3005616664886475,
-        2.3005616664886475
+        4.542135238647461,
+        4.542135238647461,
+        4.542135238647461
       ],
-      "mesh": 2
+      "mesh": 1
     }
   ],
   "scenes": [
@@ -483,8 +355,7 @@
       "name": "Scene",
       "nodes": [
         0,
-        1,
-        2
+        1
       ]
     }
   ],
