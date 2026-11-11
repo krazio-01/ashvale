@@ -95,6 +95,13 @@
       "byteOffset": 24
     },
     {
+      "type": "SCALAR",
+      "componentType": 5126,
+      "count": 462,
+      "bufferView": 3,
+      "byteOffset": 0
+    },
+    {
       "type": "VEC3",
       "componentType": 5126,
       "count": 462,
@@ -109,21 +116,21 @@
         -0.06732197105884552
       ],
       "bufferView": 3,
-      "byteOffset": 0
+      "byteOffset": 4
     },
     {
       "type": "VEC3",
       "componentType": 5126,
       "count": 462,
       "bufferView": 3,
-      "byteOffset": 12
+      "byteOffset": 16
     },
     {
       "type": "VEC2",
       "componentType": 5126,
       "count": 462,
       "bufferView": 3,
-      "byteOffset": 24
+      "byteOffset": 28
     },
     {
       "type": "VEC3",
@@ -181,13 +188,13 @@
     {
       "buffer": 0,
       "byteOffset": 87432,
-      "byteLength": 14784,
-      "byteStride": 32,
+      "byteLength": 16632,
+      "byteStride": 36,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 102216,
+      "byteOffset": 104064,
       "byteLength": 20768,
       "byteStride": 32,
       "target": 34962
@@ -226,7 +233,7 @@
   "buffers": [
     {
       "uri": "WoodlandShrine.bin",
-      "byteLength": 122984
+      "byteLength": 124832
     }
   ],
   "materials": [
@@ -282,9 +289,10 @@
       "primitives": [
         {
           "attributes": {
-            "POSITION": 10,
-            "NORMAL": 11,
-            "TEXCOORD_0": 12
+            "_SWAY": 10,
+            "POSITION": 11,
+            "NORMAL": 12,
+            "TEXCOORD_0": 13
           },
           "mode": 4,
           "material": 0,
@@ -297,9 +305,9 @@
       "primitives": [
         {
           "attributes": {
-            "POSITION": 13,
-            "NORMAL": 14,
-            "TEXCOORD_0": 15
+            "POSITION": 14,
+            "NORMAL": 15,
+            "TEXCOORD_0": 16
           },
           "mode": 4,
           "material": 0,
