@@ -7,16 +7,16 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 5468,
+      "count": 2226,
       "max": [
         2.9186952114105225,
-        4.201236248016357,
-        2.253466844558716
+        4.205029487609863,
+        2.2573904991149902
       ],
       "min": [
-        -2.91617751121521,
-        -0.0016656264197081327,
-        -2.2550666332244873
+        -2.9163320064544678,
+        -0.006245408672839403,
+        -2.2572524547576904
       ],
       "bufferView": 0,
       "byteOffset": 0
@@ -24,21 +24,21 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 5468,
+      "count": 2226,
       "bufferView": 0,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
-      "count": 5468,
+      "count": 2226,
       "bufferView": 0,
       "byteOffset": 24
     },
     {
       "type": "SCALAR",
       "componentType": 5123,
-      "count": 17997,
+      "count": 7800,
       "bufferView": 1,
       "byteOffset": 0
     }
@@ -47,14 +47,14 @@
     {
       "buffer": 0,
       "byteOffset": 0,
-      "byteLength": 174976,
+      "byteLength": 71232,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 174976,
-      "byteLength": 35996,
+      "byteOffset": 71232,
+      "byteLength": 15600,
       "target": 34963
     }
   ],
@@ -82,7 +82,7 @@
   "buffers": [
     {
       "uri": "OutcropLayered.bin",
-      "byteLength": 210972
+      "byteLength": 86832
     }
   ],
   "materials": [
@@ -94,9 +94,9 @@
       "doubleSided": true,
       "pbrMetallicRoughness": {
         "baseColorFactor": [
-          0.17762306332588196,
-          0.1373995542526245,
-          0.08348015695810318,
+          0.17968055605888367,
+          0.13887257874011993,
+          0.08446083217859268,
           1
         ],
         "roughnessFactor": 0.8500000238418579,
@@ -129,7 +129,8 @@
     {
       "name": "lo",
       "extras": {
-        "embedOnly": true
+        "embedOnly": true,
+        "sockets": []
       },
       "mesh": 0
     }

@@ -7,16 +7,16 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 5843,
+      "count": 1705,
       "max": [
-        1.5978983640670776,
+        1.599538803100586,
         2.9189815521240234,
-        1.2549469470977783
+        1.2533960342407227
       ],
       "min": [
         -1.599061131477356,
-        -0.0016535526374354959,
-        -1.2559338808059692
+        -0.007840755395591259,
+        -1.2522404193878174
       ],
       "bufferView": 0,
       "byteOffset": 0
@@ -24,21 +24,21 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 5843,
+      "count": 1705,
       "bufferView": 0,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
-      "count": 5843,
+      "count": 1705,
       "bufferView": 0,
       "byteOffset": 24
     },
     {
       "type": "SCALAR",
       "componentType": 5123,
-      "count": 18000,
+      "count": 5394,
       "bufferView": 1,
       "byteOffset": 0
     }
@@ -47,14 +47,14 @@
     {
       "buffer": 0,
       "byteOffset": 0,
-      "byteLength": 186976,
+      "byteLength": 54560,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 186976,
-      "byteLength": 36000,
+      "byteOffset": 54560,
+      "byteLength": 10788,
       "target": 34963
     }
   ],
@@ -82,7 +82,7 @@
   "buffers": [
     {
       "uri": "OutcropStepped.bin",
-      "byteLength": 222976
+      "byteLength": 65348
     }
   ],
   "materials": [
@@ -94,9 +94,9 @@
       "doubleSided": true,
       "pbrMetallicRoughness": {
         "baseColorFactor": [
-          0.197156623005867,
-          0.14794184267520905,
-          0.0765269547700882,
+          0.19843976199626923,
+          0.14921161532402039,
+          0.07812446355819702,
           1
         ],
         "roughnessFactor": 0.8500000238418579,
@@ -129,7 +129,8 @@
     {
       "name": "lo",
       "extras": {
-        "embedOnly": true
+        "embedOnly": true,
+        "sockets": []
       },
       "mesh": 0
     }
