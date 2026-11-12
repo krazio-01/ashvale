@@ -7,16 +7,16 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 2671,
+      "count": 1132,
       "max": [
         0.750262439250946,
-        1.175591230392456,
-        1.0739736557006836
+        1.1781551837921143,
+        1.0739850997924805
       ],
       "min": [
-        -0.7549563646316528,
-        0.005149128381162882,
-        -1.0775238275527954
+        -0.7477295398712158,
+        -0.0013308963971212506,
+        -1.0563461780548096
       ],
       "bufferView": 0,
       "byteOffset": 0
@@ -24,21 +24,21 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 2671,
+      "count": 1132,
       "bufferView": 0,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
-      "count": 2671,
+      "count": 1132,
       "bufferView": 0,
       "byteOffset": 24
     },
     {
       "type": "SCALAR",
       "componentType": 5123,
-      "count": 9000,
+      "count": 3900,
       "bufferView": 1,
       "byteOffset": 0
     }
@@ -47,14 +47,14 @@
     {
       "buffer": 0,
       "byteOffset": 0,
-      "byteLength": 85472,
+      "byteLength": 36224,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 85472,
-      "byteLength": 18000,
+      "byteOffset": 36224,
+      "byteLength": 7800,
       "target": 34963
     }
   ],
@@ -82,7 +82,7 @@
   "buffers": [
     {
       "uri": "BoulderJagged.bin",
-      "byteLength": 103472
+      "byteLength": 44024
     }
   ],
   "materials": [
@@ -94,9 +94,9 @@
       "doubleSided": true,
       "pbrMetallicRoughness": {
         "baseColorFactor": [
-          0.17584000527858734,
-          0.11608903855085373,
-          0.07413949072360992,
+          0.1736440360546112,
+          0.11472717672586441,
+          0.07336413860321045,
           1
         ],
         "roughnessFactor": 0.8500000238418579,
@@ -129,7 +129,8 @@
     {
       "name": "lo",
       "extras": {
-        "embedOnly": false
+        "embedOnly": false,
+        "sockets": []
       },
       "mesh": 0
     }

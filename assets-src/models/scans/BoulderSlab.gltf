@@ -7,16 +7,16 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 1956,
+      "count": 1084,
       "max": [
-        1.319065809249878,
-        1.733052134513855,
-        1.9844672679901123
+        1.3199827671051025,
+        1.7381956577301025,
+        1.9844255447387695
       ],
       "min": [
         -1.3134257793426514,
-        0.004640120547264814,
-        -1.974200963973999
+        -0.0056330072693526745,
+        -1.9715113639831543
       ],
       "bufferView": 0,
       "byteOffset": 0
@@ -24,21 +24,21 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 1956,
+      "count": 1084,
       "bufferView": 0,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
-      "count": 1956,
+      "count": 1084,
       "bufferView": 0,
       "byteOffset": 24
     },
     {
       "type": "SCALAR",
       "componentType": 5123,
-      "count": 9000,
+      "count": 4800,
       "bufferView": 1,
       "byteOffset": 0
     }
@@ -47,14 +47,14 @@
     {
       "buffer": 0,
       "byteOffset": 0,
-      "byteLength": 62592,
+      "byteLength": 34688,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 62592,
-      "byteLength": 18000,
+      "byteOffset": 34688,
+      "byteLength": 9600,
       "target": 34963
     }
   ],
@@ -82,7 +82,7 @@
   "buffers": [
     {
       "uri": "BoulderSlab.bin",
-      "byteLength": 80592
+      "byteLength": 44288
     }
   ],
   "materials": [
@@ -94,9 +94,9 @@
       "doubleSided": true,
       "pbrMetallicRoughness": {
         "baseColorFactor": [
-          0.12456223368644714,
-          0.07533323764801025,
-          0.030538225546479225,
+          0.12480483949184418,
+          0.0754641741514206,
+          0.03060532547533512,
           1
         ],
         "roughnessFactor": 0.8500000238418579,
@@ -129,7 +129,8 @@
     {
       "name": "lo",
       "extras": {
-        "embedOnly": false
+        "embedOnly": false,
+        "sockets": []
       },
       "mesh": 0
     }

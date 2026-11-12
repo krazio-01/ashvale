@@ -7,7 +7,7 @@
     {
       "type": "SCALAR",
       "componentType": 5123,
-      "count": 9000,
+      "count": 4800,
       "normalized": false,
       "byteOffset": 0,
       "bufferView": 0
@@ -15,7 +15,7 @@
     {
       "type": "VEC3",
       "componentType": 5120,
-      "count": 1956,
+      "count": 1084,
       "normalized": true,
       "byteOffset": 0,
       "bufferView": 1
@@ -23,15 +23,15 @@
     {
       "type": "VEC3",
       "componentType": 5122,
-      "count": 1956,
+      "count": 1084,
       "max": [
-        21790,
-        14305,
+        21814,
+        14445,
         32767
       ],
       "min": [
-        -21790,
-        -14305,
+        -21814,
+        -14445,
         -32767
       ],
       "normalized": true,
@@ -41,7 +41,7 @@
     {
       "type": "VEC2",
       "componentType": 5123,
-      "count": 1956,
+      "count": 1084,
       "normalized": true,
       "byteOffset": 0,
       "bufferView": 3
@@ -51,68 +51,68 @@
     {
       "buffer": 1,
       "byteOffset": 0,
-      "byteLength": 18000,
+      "byteLength": 9600,
       "target": 34963,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
           "byteOffset": 0,
-          "byteLength": 3381,
+          "byteLength": 1822,
           "mode": "TRIANGLES",
           "byteStride": 2,
-          "count": 9000
+          "count": 4800
         }
       }
     },
     {
       "buffer": 1,
-      "byteOffset": 18000,
-      "byteLength": 7824,
+      "byteOffset": 9600,
+      "byteLength": 4336,
       "target": 34962,
       "byteStride": 4,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 3384,
-          "byteLength": 4040,
+          "byteOffset": 1824,
+          "byteLength": 2254,
           "mode": "ATTRIBUTES",
           "filter": "OCTAHEDRAL",
           "byteStride": 4,
-          "count": 1956
+          "count": 1084
         }
       }
     },
     {
       "buffer": 1,
-      "byteOffset": 25824,
-      "byteLength": 15648,
+      "byteOffset": 13936,
+      "byteLength": 8672,
       "target": 34962,
       "byteStride": 8,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 7424,
-          "byteLength": 10339,
+          "byteOffset": 4080,
+          "byteLength": 6133,
           "mode": "ATTRIBUTES",
           "byteStride": 8,
-          "count": 1956
+          "count": 1084
         }
       }
     },
     {
       "buffer": 1,
-      "byteOffset": 41472,
-      "byteLength": 7824,
+      "byteOffset": 22608,
+      "byteLength": 4336,
       "target": 34962,
       "byteStride": 4,
       "extensions": {
         "EXT_meshopt_compression": {
           "buffer": 0,
-          "byteOffset": 17764,
-          "byteLength": 6510,
+          "byteOffset": 10216,
+          "byteLength": 3922,
           "mode": "ATTRIBUTES",
           "byteStride": 4,
-          "count": 1956
+          "count": 1084
         }
       }
     }
@@ -144,10 +144,10 @@
   "buffers": [
     {
       "uri": "BoulderSlab.bin",
-      "byteLength": 24276
+      "byteLength": 14140
     },
     {
-      "byteLength": 49296,
+      "byteLength": 26944,
       "extensions": {
         "EXT_meshopt_compression": {
           "fallback": true
@@ -164,9 +164,9 @@
       "doubleSided": true,
       "pbrMetallicRoughness": {
         "baseColorFactor": [
-          0.12456223368644714,
-          0.07533323764801025,
-          0.030538225546479225,
+          0.12480483949184418,
+          0.0754641741514206,
+          0.03060532547533512,
           1
         ],
         "roughnessFactor": 0.8500000238418579,
@@ -199,17 +199,18 @@
     {
       "name": "lo",
       "extras": {
-        "embedOnly": false
+        "embedOnly": false,
+        "sockets": []
       },
       "translation": [
-        0.0028200149536132812,
-        0.8688461275305599,
-        0.005133152008056641
+        0.003278493881225586,
+        0.8662813252303749,
+        0.006457090377807617
       ],
       "scale": [
-        1.9793341159820557,
-        1.9793341159820557,
-        1.9793341159820557
+        1.977968454360962,
+        1.977968454360962,
+        1.977968454360962
       ],
       "mesh": 0
     }
