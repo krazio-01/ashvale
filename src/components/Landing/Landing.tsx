@@ -23,7 +23,7 @@ import LandingIsland from "@/components/Landing/LandingIsland";
 import LandingMountains from "@/components/Landing/LandingMountains";
 import LandingClouds from "@/components/Landing/LandingClouds/LandingClouds";
 import LandingCameraRig from "@/components/Landing/LandingCameraRig/LandingCameraRig";
-import LandingHero from "@/components/Landing/LandingHero";
+import LandingHero from "@/components/Landing/LandingHero/LandingHero";
 import LandingHud from "@/components/Landing/LandingHud";
 import { useHotkey } from "@/hooks/useHotkey";
 import "generative-loaders/styles.css";
