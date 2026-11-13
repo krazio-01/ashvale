@@ -5,7 +5,7 @@ import { BufferGeometry, DoubleSide, Float32BufferAttribute } from "three";
 import { FractalNoise } from "@/lib/noise";
 import { FULL_TURN, lerp } from "@/lib/helpers";
 import { LANDING_MOUNTAINS } from "@/constants/ui";
-import { stitchRings } from "@/components/Landing/LandingIsland";
+import { stitchRings } from "@/components/Landing/LandingIsland/LandingIsland";
 import type { IVector3 } from "@/types/physics";
 
 type IMountainLayer = (typeof LANDING_MOUNTAINS.layers)[number];
