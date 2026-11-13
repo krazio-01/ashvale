@@ -21,7 +21,7 @@ import { clamp, parseRepoInput, pickRandom } from "@/lib/helpers";
 import { InlineLoader } from "generative-loaders";
 import LandingIsland from "@/components/Landing/LandingIsland";
 import LandingMountains from "@/components/Landing/LandingMountains";
-import LandingClouds from "@/components/Landing/LandingClouds";
+import LandingClouds from "@/components/Landing/LandingClouds/LandingClouds";
 import LandingCameraRig from "@/components/Landing/LandingCameraRig/LandingCameraRig";
 import LandingHero from "@/components/Landing/LandingHero";
 import LandingHud from "@/components/Landing/LandingHud";
