@@ -17,20 +17,8 @@ import { store } from "@/store/store";
 import { AnimationFrameLoop } from "@/components/AnimationFrameLoop/AnimationFrameLoop";
 import { Hud } from "@/components/Hud/Hud";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
-import dynamic from "next/dynamic";
 import { useHotkey } from "@/hooks/useHotkey";
 import "./scene.scss";
-
-const PhysicsTuner =
-    process.env.NODE_ENV === "development"
-        ? dynamic(
-              () =>
-                  import("@/components/PhysicsTuner/PhysicsTuner").then(
-                      (module) => module.PhysicsTuner
-                  ),
-              { ssr: false }
-          )
-        : () => null;
 
 const ACTIVE_CHAPTER_INDEX = 0;
 
@@ -184,7 +172,6 @@ const Scene = ({ owner, name }: { owner: string; name: string }) => {
                 />
             </RenderCanvas>
 
-            <PhysicsTuner />
             <AnimationFrameLoop>
                 <Hud />
             </AnimationFrameLoop>

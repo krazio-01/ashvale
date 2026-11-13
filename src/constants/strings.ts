@@ -189,36 +189,6 @@ export const CHAPTER_TEXT = {
     },
 };
 
-export const PHYSICS_TUNER_TEXT = {
-    title: "Cloth physics",
-    sliders: {
-        "cloth.damping": "Damping /s",
-        "cloth.bendSoftness": "Bend softness",
-        "cloth.stretchSoftness": "Stretch softness",
-        "cloth.gravityScale": "Gravity",
-        "cloth.windExposure": "Wind exposure",
-        "cloth.pinSlack": "Pin slack",
-        "cloth.maxDriftAtHem": "Drift at hem",
-        "cloth.driftCurve": "Drift curve",
-        "cloth.bodyGuardRadius": "Body guard radius",
-        "cloth.bodyGuardDepth": "Body guard depth",
-        "cloth.collisionThickness": "Collision thickness",
-        "cloth.targetClearance": "Target clearance",
-        "cloth.targetClearanceBlend": "Target clearance blend",
-        "cloth.friction": "Friction /s",
-        "reference.moveLag": "Move lag",
-        "reference.turnLag": "Turn lag",
-        "reference.turnFlingScale": "Turn fling",
-        "reference.maxLagMoveSpeed": "Speed cap",
-        "reference.maxLagTurnSpeed": "Turn cap",
-        "restart.dampingSeconds": "Restart damping s",
-        "restart.dampingScale": "Restart damping x",
-        "environment.wind.base": "Wind",
-        "environment.wind.gustAmplitude": "Wind gusts",
-        "step.substepsPerFrame": "Substeps / 60 Hz frame",
-    } as Record<string, string>,
-};
-
 export const API_MESSAGES = {
     success: "Success",
     realmForged: "Realm forged",
