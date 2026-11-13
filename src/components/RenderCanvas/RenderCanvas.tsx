@@ -8,7 +8,7 @@ import type { IThemeEnvironment } from "@/types/world";
 import { useRenderPixelRatio } from "@/hooks/useRenderPixelRatio";
 import { FrameLimiter } from "@/components/FrameLimiter/FrameLimiter";
 import { FrameRateMeter } from "@/components/FrameRateMeter/FrameRateMeter";
-import SkyDome from "@/components/SkyDome";
+import SkyDome from "@/components/SkyDome/SkyDome";
 import SceneLighting from "@/components/SceneLighting";
 import PostProcessing from "@/components/PostProcessing/PostProcessing";
 import PerformanceOverlay from "@/components/PerformanceOverlay/PerformanceOverlay";
