@@ -7,7 +7,7 @@ import {
     LandingFireflies,
     LandingStars,
 } from "@/components/Landing/LandingParticles";
-import type { IOrbitInput } from "@/components/Landing/LandingCameraRig";
+import type { IOrbitInput } from "@/components/Landing/LandingCameraRig/LandingCameraRig";
 import { RenderCanvas } from "@/components/RenderCanvas/RenderCanvas";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
 import { resolveTheme, withEnvironmentOverrides } from "@/themes/Themes";
@@ -22,7 +22,7 @@ import { InlineLoader } from "generative-loaders";
 import LandingIsland from "@/components/Landing/LandingIsland";
 import LandingMountains from "@/components/Landing/LandingMountains";
 import LandingClouds from "@/components/Landing/LandingClouds";
-import LandingCameraRig from "@/components/Landing/LandingCameraRig";
+import LandingCameraRig from "@/components/Landing/LandingCameraRig/LandingCameraRig";
 import LandingHero from "@/components/Landing/LandingHero";
 import LandingHud from "@/components/Landing/LandingHud";
 import { useHotkey } from "@/hooks/useHotkey";
