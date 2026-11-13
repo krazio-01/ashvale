@@ -1,4 +1,4 @@
-import LandingCanvas from "@/components/LandingCanvas";
+import LandingCanvas from "@/components/LandingCanvas/LandingCanvas";
 
 const HomePage = () => <LandingCanvas />;
 
