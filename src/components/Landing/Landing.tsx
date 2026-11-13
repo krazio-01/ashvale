@@ -6,7 +6,7 @@ import {
     LandingEmbers,
     LandingFireflies,
     LandingStars,
-} from "@/components/Landing/LandingParticles";
+} from "@/components/Landing/LandingParticles/LandingParticles";
 import type { IOrbitInput } from "@/components/Landing/LandingCameraRig/LandingCameraRig";
 import { RenderCanvas } from "@/components/RenderCanvas/RenderCanvas";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
