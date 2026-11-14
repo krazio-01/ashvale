@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
 import type { CanvasProps } from "@react-three/fiber";
 import { NoToneMapping } from "three";
-import { POST_PROCESSING } from "@/constants/world";
-import type { IThemeEnvironment } from "@/types/world";
+import { STYLE } from "@/constants/world";
+import type { IThemeEnvironment } from "@/types/themes";
 import { useRenderPixelRatio } from "@/hooks/useRenderPixelRatio";
 import { FrameLimiter } from "@/components/FrameLimiter/FrameLimiter";
 import { FrameRateMeter } from "@/components/FrameRateMeter/FrameRateMeter";
 import SkyDome from "@/components/SkyDome/SkyDome";
-import SceneLighting from "@/components/SceneLighting";
+import SceneLighting from "@/components/SceneLighting/SceneLighting";
 import PostProcessing from "@/components/PostProcessing/PostProcessing";
 import PerformanceOverlay from "@/components/PerformanceOverlay/PerformanceOverlay";
 
@@ -32,14 +32,14 @@ export function RenderCanvas({ environment, camera, children }: IRenderCanvasPro
                 gl={{
                     antialias: false,
                     toneMapping: NoToneMapping,
-                    toneMappingExposure: POST_PROCESSING.exposure,
+                    toneMappingExposure: STYLE.exposure,
                 }}
             >
                 <FrameLimiter />
                 <SkyDome environment={environment} />
                 <SceneLighting environment={environment} />
                 {children}
-                <PostProcessing environment={environment} />
+                <PostProcessing />
                 <PerformanceOverlay />
             </Canvas>
             <FrameRateMeter />

@@ -3,29 +3,32 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { DirectionalLight, Vector3Tuple } from "three";
 import { sunDirectionFromSky } from "@/themes/Themes";
-import { SCENE_LIGHT_LAYERS } from "@/world/postProcessing/PostProcessPasses";
-import type { IThemeEnvironment } from "@/types/world";
+import type { IThemeEnvironment } from "@/types/themes";
 import { LIGHT } from "@/constants/world";
 import { useGameStore } from "@/hooks/useGameStore";
 import { SHADOW_MAP_SIZES } from "@/constants/ui";
+import { worldTierOf } from "@/store/settingsSlice";
 
 const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
     const { sky, lighting } = environment;
-    const { shadows } = useGameStore((state) => state.settings.values);
+    const settings = useGameStore((state) => state.settings.values);
+    const { shadows } = settings;
+    const { shadowRange } = worldTierOf(settings);
     const shadowsEnabled = shadows !== "off";
     const shadowMapResolution = shadowsEnabled ? SHADOW_MAP_SIZES[shadows] : LIGHT.shadowMapSize;
-    const shadowTexelSize = (LIGHT.shadowExtent * 2) / shadowMapResolution;
+    const shadowTexelSize = (shadowRange * 2) / shadowMapResolution;
     const keyLightRef = useRef<DirectionalLight>(null);
 
     useEffect(() => {
         const shadow = keyLightRef.current?.shadow;
+        shadow?.camera.updateProjectionMatrix();
         return () => {
             if (shadow?.map) {
                 shadow.map.dispose();
                 shadow.map = null;
             }
         };
-    }, [shadows]);
+    }, [shadows, shadowRange]);
 
     const [keyDirection, rimPosition] = useMemo<[Vector3Tuple, Vector3Tuple]>(() => {
         const sunDirection = sunDirectionFromSky(sky);
@@ -61,7 +64,6 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
             <color attach="background" args={[sky.belowHorizonColor]} />
 
             <hemisphereLight
-                layers={SCENE_LIGHT_LAYERS}
                 args={[
                     lighting.hemisphereSkyColor,
                     lighting.hemisphereGroundColor,
@@ -72,25 +74,27 @@ const SceneLighting = ({ environment }: { environment: IThemeEnvironment }) => {
             <directionalLight
                 ref={keyLightRef}
                 castShadow={shadowsEnabled}
-                layers={SCENE_LIGHT_LAYERS}
                 color={lighting.sunLightColor}
                 intensity={lighting.sunLightIntensity}
                 shadow-bias={LIGHT.shadowBias}
+                shadow-normalBias={LIGHT.shadowNormalBias}
+                shadow-radius={LIGHT.shadowRadius}
                 shadow-mapSize-width={shadowMapResolution}
                 shadow-mapSize-height={shadowMapResolution}
-                shadow-camera-left={-LIGHT.shadowExtent}
-                shadow-camera-right={LIGHT.shadowExtent}
-                shadow-camera-top={LIGHT.shadowExtent}
-                shadow-camera-bottom={-LIGHT.shadowExtent}
+                shadow-camera-left={-shadowRange}
+                shadow-camera-right={shadowRange}
+                shadow-camera-top={shadowRange}
+                shadow-camera-bottom={-shadowRange}
                 shadow-camera-far={LIGHT.shadowFar}
             />
 
-            <directionalLight
-                layers={SCENE_LIGHT_LAYERS}
-                color={lighting.rimColor}
-                intensity={lighting.rimIntensity}
-                position={rimPosition}
-            />
+            {lighting.rim && (
+                <directionalLight
+                    color={lighting.rim.color}
+                    intensity={lighting.rim.intensity}
+                    position={rimPosition}
+                />
+            )}
         </>
     );
 };
