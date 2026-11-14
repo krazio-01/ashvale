@@ -4,18 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import type { IGameSettings, SettingSection } from "@/types/ui";
 import { DEFAULT_SETTINGS, getControlsForSection, SETTING_SECTIONS } from "@/constants/ui";
 import { areSettingsEqual, withQualityPreset, withSettingChange } from "@/store/settingsSlice";
-import { useStoreState } from "@/hooks/useStoreState";
+import { useGameStore } from "@/hooks/useGameStore";
 import { store } from "@/store/store";
 import { ControlsReference } from "./ControlsReference/ControlsReference";
-import { SettingControlRow } from "./SettingControls";
+import { LoreJournal } from "./LoreJournal/LoreJournal";
+import { SettingControlRow } from "./SettingControls/SettingControls";
 import "./pauseMenu.scss";
-import { PAUSE_TEXT } from "@/constants/strings";
+import { PAUSE_TEXT, QUALITY_TEXT, SETTINGS_TEXT } from "@/constants/strings";
 import { useHotkey } from "@/hooks/useHotkey";
 
 interface PauseMenuProps {
     onResume: () => void;
     onQuit?: () => void;
     realmTitle?: string;
+    realmKey?: string;
     title?: string;
     dismissLabel?: string;
     dismissKey?: string;
@@ -25,12 +27,14 @@ export const PauseMenu = ({
     onResume,
     onQuit,
     realmTitle,
+    realmKey,
     title = PAUSE_TEXT.title,
     dismissLabel = PAUSE_TEXT.resume,
     dismissKey,
 }: PauseMenuProps) => {
-    const committed = useStoreState(store, (state) => state.settings.values);
-    const [activeSection, setActiveSection] = useState<SettingSection>("Display");
+    const committed = useGameStore((state) => state.settings.values);
+    const qualityReport = useGameStore((state) => state.session.qualityReport);
+    const [activeSection, setActiveSection] = useState<SettingSection>("display");
     const [draft, setDraft] = useState<IGameSettings>(committed);
     const shellRef = useRef<HTMLDivElement>(null);
 
@@ -119,7 +123,9 @@ export const PauseMenu = ({
                 </header>
 
                 <nav className="pause-menu-tabs">
-                    {SETTING_SECTIONS.map((section) => (
+                    {SETTING_SECTIONS.filter(
+                        (section) => section !== "journal" || realmKey !== undefined
+                    ).map((section) => (
                         <button
                             key={section}
                             type="button"
@@ -127,14 +133,35 @@ export const PauseMenu = ({
                             className={`tab-item ${activeSection === section ? "active" : ""}`}
                             onClick={() => setActiveSection(section)}
                         >
-                            {section}
+                            {SETTINGS_TEXT.sections[section]}
                         </button>
                     ))}
                 </nav>
 
                 <div className="pause-menu-body">
                     <div className="settings-panel-list">
-                        {activeSection === "Controls" && <ControlsReference />}
+                        {activeSection === "controls" && <ControlsReference />}
+                        {activeSection === "journal" && realmKey && (
+                            <LoreJournal realmKey={realmKey} />
+                        )}
+                        {activeSection === "graphics" && qualityReport && (
+                            <div className="quality-report">
+                                <span>{QUALITY_TEXT.report(qualityReport)}</span>
+                                {navigator.clipboard && (
+                                    <button
+                                        type="button"
+                                        className="btn-quiet"
+                                        onClick={() =>
+                                            void navigator.clipboard.writeText(
+                                                JSON.stringify(qualityReport)
+                                            )
+                                        }
+                                    >
+                                        {QUALITY_TEXT.copy}
+                                    </button>
+                                )}
+                            </div>
+                        )}
                         {getControlsForSection(activeSection).map((descriptor) => (
                             <SettingControlRow
                                 key={String(descriptor.key)}
@@ -153,7 +180,7 @@ export const PauseMenu = ({
                             className="btn-quiet"
                             onClick={() => setDraft(DEFAULT_SETTINGS)}
                         >
-                            Reset to defaults
+                            {PAUSE_TEXT.resetDefaults}
                         </button>
                         {onQuit && (
                             <button
@@ -161,7 +188,7 @@ export const PauseMenu = ({
                                 className="btn-quiet"
                                 onClick={() => attemptClose(onQuit)}
                             >
-                                Quit to title
+                                {PAUSE_TEXT.quitToTitle}
                             </button>
                         )}
                     </div>
@@ -174,7 +201,7 @@ export const PauseMenu = ({
                             disabled={!isDirty}
                             onClick={handleSave}
                         >
-                            Save changes
+                            {PAUSE_TEXT.saveChanges}
                         </button>
                         <button
                             type="button"

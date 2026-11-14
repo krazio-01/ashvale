@@ -9,7 +9,7 @@ import type {
 } from "@/types/ui";
 import { PAUSE_TEXT } from "@/constants/strings";
 
-export type SettingChangeHandler = ISettingsSlice["update"];
+type SettingChangeHandler = ISettingsSlice["update"];
 
 interface ControlRowProps<K extends keyof IGameSettings> {
     descriptor: ISettingControlDescriptor<K>;
@@ -71,8 +71,7 @@ const ChoiceRow = <K extends keyof IGameSettings>({
         <RowHeader label={descriptor.label} description={descriptor.description} />
         <div className="segmented-control" role="group" aria-label={descriptor.label}>
             {descriptor.options.map((option) => {
-                const isDerivedOnly =
-                    descriptor.key === "qualityPreset" && option.value === "custom";
+                const isDerivedOnly = option.isDerivedOnly === true;
 
                 return (
                     <button
