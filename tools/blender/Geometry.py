@@ -56,9 +56,13 @@ def axis_distance(points, centre, axis):
     return np.linalg.norm(offset - np.outer(offset @ axis, axis), axis=1)
 
 
-def triangle_areas(positions, corners):
+def triangle_crosses(positions, corners):
     first, second, third = positions[corners[:, 0]], positions[corners[:, 1]], positions[corners[:, 2]]
-    return 0.5 * np.linalg.norm(np.cross(second - first, third - first), axis=1)
+    return np.cross(second - first, third - first)
+
+
+def triangle_areas(positions, corners):
+    return 0.5 * np.linalg.norm(triangle_crosses(positions, corners), axis=1)
 
 
 def smoothstep_unit(values):
@@ -71,6 +75,18 @@ def smoothstep(edge0, edge1, values):
 
 def face_edges(corners, pairs=((0, 1), (1, 2), (2, 0))):
     return np.concatenate([corners[:, list(pair)] for pair in pairs])
+
+
+def canonical_triangles(triangles):
+    shift = np.argmin(triangles, axis=1)
+    rolled = np.take_along_axis(triangles, (shift[:, None] + np.arange(3)) % 3, axis=1)
+    return rolled[np.lexsort(rolled.T[::-1])]
+
+
+def unique_edges(edges, with_counts=False):
+    edges, counts = np.unique(np.sort(edges, axis=1), axis=0, return_counts=True)
+    kept = edges[:, 0] != edges[:, 1]
+    return (edges[kept], counts[kept]) if with_counts else edges[kept]
 
 
 def rounded(values, decimals):

@@ -4,6 +4,34 @@ from pathlib import Path
 import numpy as np
 
 
+class WorkFiles:
+    LO_BLEND = "lo.blend"
+    NORMAL = "normal.png"
+    LO_SPLIT = "lo_split.npz"
+    HI_BLEND = "hi.blend"
+    PROPS = "props.npy"
+    THICKNESS = "thick.npy"
+    RIG = "rig.npz"
+    SKELETON = "skeleton.json"
+    DETECTION = "detection.json"
+    ATLAS = "atlas.npz"
+    REFERENCE_ARRAYS = "reference.npz"
+    JOINTS = "joints.json"
+    MODULES = "modules.json"
+    LO = "lo.npz"
+    ALBEDO = "albedo.png"
+    HI = "hi.npz"
+    FINAL = "final.npz"
+    SKIN = "skin.npy"
+    REFERENCE = "reference.json"
+    RAW = "raw.npz"
+    PIECES = "pieces.npy"
+    PHYSICS = "physics.json"
+    MEASUREMENTS = "measurements.json"
+    GARMENT = "garment.npz"
+    LATTICE_SKIN = "lattice_skin.npz"
+
+
 def bone_role(key, convert=None):
     return property(lambda self: self._bone(key) if convert is None else convert(self._bone(key)))
 
@@ -110,10 +138,6 @@ class HeightScale:
     def __init__(self, height, reference_height):
         self.scale = height / reference_height
 
-    @classmethod
-    def from_config(cls, config):
-        return cls(config["heightMetres"], config["referenceHeightMetres"])
-
     def length(self, metres):
         return metres * self.scale
 
@@ -140,22 +164,33 @@ class TuningSection:
 
 class ModelSettings:
     def __init__(self, descriptor, height_scale, tuning):
-        self.descriptor = descriptor
+        self._descriptor = descriptor
         self.height_scale = height_scale
         self.tuning = tuning
 
     @classmethod
     def from_config(cls, config):
-        return cls(SkeletonDescriptor.from_config(config), HeightScale.from_config(config), config["tuning"])
+        descriptor = SkeletonDescriptor.from_config(config) if "skeletonDescriptor" in config else None
+        return cls(descriptor, HeightScale(config["heightMetres"], config["referenceHeightMetres"]), config["tuning"])
+
+    @property
+    def descriptor(self):
+        if self._descriptor is None:
+            raise ValueError("this recipe has no skeleton")
+        return self._descriptor
 
     def section(self, name):
-        try:
-            return TuningSection(name, self.tuning[name])
-        except KeyError:
-            raise KeyError(f"tuning has no section {name}") from None
+        return tuning_section(self.tuning, name)
 
     def length(self, metres):
         return self.height_scale.length(metres)
+
+
+def tuning_section(tuning, name):
+    try:
+        return TuningSection(name, tuning[name])
+    except KeyError:
+        raise KeyError(f"tuning has no section {name}") from None
 
 
 def read_json(path):
@@ -167,8 +202,8 @@ def write_json(path, data, **dump_options):
 
 
 def read_detection(work):
-    return read_json(Path(work) / "detection.json")
+    return read_json(Path(work) / WorkFiles.DETECTION)
 
 
 def write_detection(work, detection):
-    write_json(Path(work) / "detection.json", detection, indent=2)
+    write_json(Path(work) / WorkFiles.DETECTION, detection, indent=2)

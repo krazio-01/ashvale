@@ -1,5 +1,6 @@
 import math
 
+import bmesh
 import bpy
 import numpy as np
 from mathutils import Vector
@@ -7,69 +8,20 @@ from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation
 
 from Geometry import SkinInfluences, compose, normalised, quaternion_matrix, to_blender
-from ModelConfig import read_json, write_json
+from ModelConfig import WorkFiles, read_json, write_json
 
 WELD_DECIMALS = 5
 TILE = 360
-
-
-def select_only(active, *others):
-    for obj in bpy.data.objects:
-        obj.select_set(False)
-    for obj in (active, *others):
-        obj.select_set(True)
-    bpy.context.view_layer.objects.active = active
-
-
-def read_attribute(items, name, columns, dtype):
-    values = np.zeros(len(items) * columns, dtype)
-    items.foreach_get(name, values)
-    return values.reshape(-1, columns)
-
-
-def read_image(path, colour_space=None):
-    image = bpy.data.images.load(str(path))
-    if colour_space is not None:
-        image.colorspace_settings.name = colour_space
-    width, height = image.size
-    pixels = np.empty(width * height * 4, np.float32)
-    image.pixels.foreach_get(pixels)
-    bpy.data.images.remove(image)
-    return pixels.reshape(height, width, 4)
-
-
-def save_png(image, path):
-    image.filepath_raw = str(path)
-    image.file_format = "PNG"
-    image.save()
-
-
-def mesh_positions(mesh):
-    return read_attribute(mesh.vertices, "co", 3, np.float32).astype(np.float64)
-
-
-def decimate(obj, ratio):
-    modifier = obj.modifiers.new("decimate", "DECIMATE")
-    modifier.ratio = ratio
-    modifier.use_collapse_triangulate = True
-    select_only(obj)
-    bpy.ops.object.modifier_apply(modifier="decimate")
-
-
-def mesh_corners(mesh):
-    return read_attribute(mesh.polygons, "vertices", 3, np.int32)
-
-
-def loop_vertex_indices(mesh):
-    return read_attribute(mesh.loops, "vertex_index", 1, np.int32).ravel()
-
-
-def write_positions(mesh, positions):
-    mesh.vertices.foreach_set("co", positions.astype(np.float32).ravel())
+ORTHO_VIEWS = {
+    "front": ((0.0, -1.0, 0.0), (math.pi / 2, 0.0, 0.0)),
+    "back": ((0.0, 1.0, 0.0), (math.pi / 2, 0.0, math.pi)),
+    "side": ((1.0, 0.0, 0.0), (math.pi / 2, 0.0, math.pi / 2)),
+    "left": ((-1.0, 0.0, 0.0), (math.pi / 2, 0.0, -math.pi / 2)),
+}
 
 
 class PhysicsWork:
-    DEFINITION_FILE = "physics.json"
+    DEFINITION_FILE = WorkFiles.PHYSICS
     WEIGHTS_FILE = "physics_weights.npz"
 
     def __init__(self, work):
@@ -100,18 +52,6 @@ class PhysicsWork:
         )
 
 
-def weld_labels(work):
-    props = np.load(work / "props.npy").astype(np.int64)
-    physics = PhysicsWork.optional(work)
-    return props * 16 + physics.weights["labels"].astype(np.int64) if physics else props
-
-
-def weld_ids(positions, objects):
-    keys = np.c_[np.round(positions, WELD_DECIMALS), objects]
-    _, first, welded = np.unique(keys, axis=0, return_index=True, return_inverse=True)
-    return welded.ravel(), first
-
-
 class Skeleton:
     UNIT_SCALE_TOLERANCE = 1e-4
 
@@ -132,7 +72,7 @@ class Skeleton:
 
     @classmethod
     def load(cls, work, descriptor):
-        data = read_json(work / "skeleton.json")
+        data = read_json(work / WorkFiles.SKELETON)
         physics = PhysicsWork.optional(work)
         if physics:
             data = Skeleton.with_lattice_bones(data, physics.definition)
@@ -368,6 +308,8 @@ class ReferenceAlignment:
 
 
 class TextureBaker:
+    MATERIAL_NAME = "baked"
+
     def __init__(self, high, low, size, settings):
         self.settings = settings
         self.tuning = settings.section("bake")
@@ -382,7 +324,7 @@ class TextureBaker:
         scene.cycles.device = "CPU"
         scene.cycles.samples = self.tuning.samples
         scene.cycles.use_denoising = False
-        material = bpy.data.materials.new("baked")
+        material = bpy.data.materials.new(self.MATERIAL_NAME)
         material.use_nodes = True
         self.low.data.materials.append(material)
         self.target = material.node_tree.nodes.new("ShaderNodeTexImage")
@@ -400,7 +342,7 @@ class TextureBaker:
             if slot.material is None or not slot.material.use_nodes:
                 continue
             tree = slot.material.node_tree
-            bsdf = next((node for node in tree.nodes if node.type == "BSDF_PRINCIPLED"), None)
+            bsdf = principled_node(slot.material)
             output = next((node for node in tree.nodes if node.type == "OUTPUT_MATERIAL"), None)
             if bsdf is None or output is None:
                 continue
@@ -457,33 +399,9 @@ class TextureBaker:
         tree.links.new(bsdf.outputs[0], output.inputs["Surface"])
 
 
-ORTHO_VIEWS = {
-    "front": ((0.0, -1.0, 0.0), (math.pi / 2, 0.0, 0.0)),
-    "back": ((0.0, 1.0, 0.0), (math.pi / 2, 0.0, math.pi)),
-    "side": ((1.0, 0.0, 0.0), (math.pi / 2, 0.0, math.pi / 2)),
-}
-
-
-def ortho_pose(view, centre, distance):
-    direction, rotation = ORTHO_VIEWS[view]
-    return tuple(centre[axis] + distance * direction[axis] for axis in range(3)), rotation
-
-
-def add_ortho_camera(name, scale=None):
-    data = bpy.data.cameras.new(name)
-    data.type = "ORTHO"
-    if scale is not None:
-        data.ortho_scale = scale
-    camera = bpy.data.objects.new(name, data)
-    bpy.context.scene.collection.objects.link(camera)
-    bpy.context.scene.camera = camera
-    return camera
-
-
 class Studio:
-    CAMERA_DISTANCE = 5.0
+    DISTANCE_PER_DIAGONAL = 2.0
     SAMPLES = 12
-
 
     def __init__(self, engine="CYCLES"):
         scene = bpy.context.scene
@@ -500,13 +418,23 @@ class Studio:
             light.rotation_euler = (math.radians(tilt), 0.0, math.radians(turn))
             scene.collection.objects.link(light)
         self.camera = add_ortho_camera("qa_camera")
+        corners = np.array(
+            [
+                tuple(obj.matrix_world @ Vector(corner))
+                for obj in scene.objects
+                if obj.type == "MESH"
+                for corner in obj.bound_box
+            ]
+        )
+        self.distance = self.DISTANCE_PER_DIAGONAL * float(np.linalg.norm(np.ptp(corners, axis=0)))
+        self.camera.data.clip_end = self.distance * 2
 
     def shot(self, centre, scale, view, path, size):
         scene = bpy.context.scene
         scene.render.resolution_x = size
         scene.render.resolution_y = size
         self.camera.data.ortho_scale = scale
-        self.camera.location, self.camera.rotation_euler = ortho_pose(view, centre, self.CAMERA_DISTANCE)
+        self.camera.location, self.camera.rotation_euler = ortho_pose(view, centre, self.distance)
         scene.render.filepath = str(path)
         bpy.ops.render.render(write_still=True)
 
@@ -533,35 +461,21 @@ class ContactSheet:
         bpy.data.images.remove(image)
 
 
-def body_regions(descriptor, length, joint):
-    left_hand, right_hand = (descriptor.arm(side)[-1] for side in descriptor.SIDES)
-    head = joint(descriptor.head) + Vector((0.0, 0.0, length(0.08)))
-    return {
-        "face": (head, length(0.36), "front"),
-        "face_side": (head, length(0.36), "side"),
-        "hand_l": (joint(left_hand) + Vector((0.0, 0.0, length(-0.08))), length(0.34), "front"),
-        "hand_r": (joint(right_hand) + Vector((0.0, 0.0, length(-0.08))), length(0.34), "front"),
-        "back": (joint(descriptor.chest) + Vector((0.0, 0.0, length(0.05))), length(1.0), "back"),
-        "chest": (joint(descriptor.chest) + Vector((0.0, 0.0, length(0.02))), length(0.62), "front"),
-        "legs": (joint(descriptor.pelvis) * 0.3 + Vector((0.0, 0.0, length(0.22))), length(0.95), "front"),
-    }
-
-
 class SkinnedPreview:
     def __init__(self, work, settings):
         self.descriptor = settings.descriptor
         self.height_scale = settings.height_scale
-        bpy.ops.wm.open_mainfile(filepath=str(work / "lo.blend"))
+        bpy.ops.wm.open_mainfile(filepath=str(work / WorkFiles.LO_BLEND))
         bpy.data.objects.remove(bpy.data.objects["hi"])
         self.mesh = bpy.data.objects["lo"].data
-        final = np.load(work / "final.npz")
-        rig = np.load(work / "rig.npz")
+        final = np.load(work / WorkFiles.FINAL)
+        rig = np.load(work / WorkFiles.RIG)
         self.skeleton = Skeleton.load(work, self.descriptor)
         self.poses = ClipSampler(self.skeleton, rig["rest_translations"])
         self.bind_inverse = np.linalg.inv(rig["bind_world"])
         self.influences = SkinInfluences(np.arange(len(self.bind_inverse)), final["joints"], final["weights"])
         self.rest = mesh_positions(self.mesh)
-        self.rest_normals = np.load(work / "lo_split.npz")["normals"]
+        self.rest_normals = np.load(work / WorkFiles.LO_SPLIT)["normals"]
         self.loop_vertices = loop_vertex_indices(self.mesh)
         self.world = rig["bind_world"]
         welded, first = weld_ids(self.rest, weld_labels(work))
@@ -589,3 +503,120 @@ class SkinnedPreview:
 
     def region_centres(self):
         return body_regions(self.descriptor, self.height_scale.length, self.joint)
+
+
+def principled_node(material):
+    return next((node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED"), None)
+
+
+def select_only(active, *others):
+    for obj in bpy.data.objects:
+        obj.select_set(False)
+    for obj in (active, *others):
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = active
+
+
+def read_attribute(items, name, columns, dtype):
+    values = np.zeros(len(items) * columns, dtype)
+    items.foreach_get(name, values)
+    return values.reshape(-1, columns)
+
+
+def read_image(path, colour_space=None):
+    image = bpy.data.images.load(str(path))
+    if colour_space is not None:
+        image.colorspace_settings.name = colour_space
+    width, height = image.size
+    pixels = np.empty(width * height * 4, np.float32)
+    image.pixels.foreach_get(pixels)
+    bpy.data.images.remove(image)
+    return pixels.reshape(height, width, 4)
+
+
+def sample_image(pixels, uvs):
+    height, width = pixels.shape[:2]
+    rows = np.clip((uvs[..., 1] * height).astype(int), 0, height - 1)
+    columns = np.clip((uvs[..., 0] * width).astype(int), 0, width - 1)
+    return pixels[rows, columns]
+
+
+def save_png(image, path):
+    image.filepath_raw = str(path)
+    image.file_format = "PNG"
+    image.save()
+
+
+def mesh_positions(mesh):
+    return read_attribute(mesh.vertices, "co", 3, np.float32).astype(np.float64)
+
+
+def decimate(obj, triangles):
+    obj.data.calc_loop_triangles()
+    current = len(obj.data.loop_triangles)
+    if current <= triangles:
+        triangulated = bmesh.new()
+        triangulated.from_mesh(obj.data)
+        bmesh.ops.triangulate(triangulated, faces=triangulated.faces)
+        triangulated.to_mesh(obj.data)
+        triangulated.free()
+        return
+    modifier = obj.modifiers.new("decimate", "DECIMATE")
+    modifier.ratio = triangles / current
+    modifier.use_collapse_triangulate = True
+    select_only(obj)
+    bpy.ops.object.modifier_apply(modifier="decimate")
+
+
+def mesh_corners(mesh):
+    return read_attribute(mesh.polygons, "vertices", 3, np.int32)
+
+
+def loop_vertex_indices(mesh):
+    return read_attribute(mesh.loops, "vertex_index", 1, np.int32).ravel()
+
+
+def write_positions(mesh, positions):
+    mesh.vertices.foreach_set("co", positions.astype(np.float32).ravel())
+
+
+def weld_labels(work):
+    props = np.load(work / WorkFiles.PROPS).astype(np.int64)
+    physics = PhysicsWork.optional(work)
+    return props * 16 + physics.weights["labels"].astype(np.int64) if physics else props
+
+
+def weld_ids(positions, objects):
+    keys = np.c_[np.round(positions, WELD_DECIMALS), objects]
+    _, first, welded = np.unique(keys, axis=0, return_index=True, return_inverse=True)
+    return welded.ravel(), first
+
+
+def ortho_pose(view, centre, distance):
+    direction, rotation = ORTHO_VIEWS[view]
+    return tuple(centre[axis] + distance * direction[axis] for axis in range(3)), rotation
+
+
+def add_ortho_camera(name, scale=None):
+    data = bpy.data.cameras.new(name)
+    data.type = "ORTHO"
+    if scale is not None:
+        data.ortho_scale = scale
+    camera = bpy.data.objects.new(name, data)
+    bpy.context.scene.collection.objects.link(camera)
+    bpy.context.scene.camera = camera
+    return camera
+
+
+def body_regions(descriptor, length, joint):
+    left_hand, right_hand = (descriptor.arm(side)[-1] for side in descriptor.SIDES)
+    head = joint(descriptor.head) + Vector((0.0, 0.0, length(0.08)))
+    return {
+        "face": (head, length(0.36), "front"),
+        "face_side": (head, length(0.36), "side"),
+        "hand_l": (joint(left_hand) + Vector((0.0, 0.0, length(-0.08))), length(0.34), "front"),
+        "hand_r": (joint(right_hand) + Vector((0.0, 0.0, length(-0.08))), length(0.34), "front"),
+        "back": (joint(descriptor.chest) + Vector((0.0, 0.0, length(0.05))), length(1.0), "back"),
+        "chest": (joint(descriptor.chest) + Vector((0.0, 0.0, length(0.02))), length(0.62), "front"),
+        "legs": (joint(descriptor.pelvis) * 0.3 + Vector((0.0, 0.0, length(0.22))), length(0.95), "front"),
+    }
