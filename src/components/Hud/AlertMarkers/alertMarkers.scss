@@ -18,7 +18,8 @@
         will-change: transform, opacity;
 
         &[data-kind="suspicious"],
-        &[data-kind="alert"] {
+        &[data-kind="alert"],
+        &[data-kind="marked"] {
             opacity: 1;
         }
 
@@ -38,6 +39,10 @@
             font-weight: 700;
             color: var(--hud-alert-suspicious);
             text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+        }
+
+        &[data-kind="marked"] .alert-glyph {
+            color: var(--hud-fill);
         }
 
         &[data-kind="alert"] {

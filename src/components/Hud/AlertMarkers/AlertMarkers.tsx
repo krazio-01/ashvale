@@ -6,7 +6,7 @@ import { roundForCss, screenPositionTransform, hudWriter } from "@/lib/hud";
 import type { AlertMarkerKind } from "@/types/ui";
 import "./alertMarkers.scss";
 
-const GLYPHS: Record<AlertMarkerKind, string> = { suspicious: "?", alert: "!" };
+const GLYPHS: Record<AlertMarkerKind, string> = { suspicious: "?", alert: "!", marked: "\u25BE" };
 
 export const AlertMarkers = () => {
     const markers = useRef<(HTMLSpanElement | null)[]>([]);
