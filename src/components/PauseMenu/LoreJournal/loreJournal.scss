@@ -1,0 +1,45 @@
+.lore-journal {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.15rem 0;
+
+    .journal-group-title {
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-muted);
+        margin-bottom: 0.6rem;
+    }
+
+    .journal-entry {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding: 0.65rem 0;
+
+        &:not(:last-child) {
+            border-bottom: 1px solid var(--ink-line);
+        }
+    }
+
+    .journal-entry-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--ink-text);
+    }
+
+    .journal-line {
+        font-size: 0.8rem;
+        line-height: 1.5;
+        color: var(--ink-muted);
+        overflow-wrap: anywhere;
+    }
+}
+
+.lore-journal-empty {
+    padding: 1.15rem 0;
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+}

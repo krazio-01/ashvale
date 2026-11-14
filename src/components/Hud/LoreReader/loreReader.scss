@@ -1,0 +1,45 @@
+@use "../../../styles/mixins" as *;
+
+.lore-reader {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: min(34rem, calc(100% - 2rem));
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 1.4rem 1.6rem;
+    border-radius: var(--radius-md);
+    color: var(--hud-readout);
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 220ms var(--ease);
+    @include hud-glass-surface;
+
+    &[data-visible="true"] {
+        opacity: 1;
+    }
+
+    .lore-title {
+        margin: 0;
+        font-size: 0.68rem;
+        font-weight: 500;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+    }
+
+    .lore-line {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.55;
+        color: var(--hud-fill);
+        overflow-wrap: anywhere;
+    }
+
+    .lore-dismiss {
+        font-size: 0.58rem;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        opacity: 0.6;
+    }
+}

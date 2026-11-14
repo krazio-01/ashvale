@@ -1,0 +1,40 @@
+@use "../../styles/mixins" as *;
+
+.interlude {
+    position: absolute;
+    inset: 0;
+    z-index: 80;
+    padding: 2rem;
+    background: rgb(5, 6, 8);
+    color: var(--ink-text);
+    @include status-screen;
+
+    &.interlude-waiting {
+        cursor: pointer;
+    }
+
+    .interlude-title {
+        font-size: 2rem;
+        letter-spacing: 0.06em;
+    }
+
+    .interlude-paragraph {
+        font-size: 1.1rem;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .interlude-stage {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    .interlude-hint {
+        font-family: var(--font-numeric);
+        font-size: 0.8rem;
+        letter-spacing: 0.08em;
+        color: rgba(255, 255, 255, 0.55);
+    }
+}
