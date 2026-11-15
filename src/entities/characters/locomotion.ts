@@ -27,18 +27,6 @@ const STRAFE_DIRECTIONS: readonly IDirectionalClip[] = [
     { clip: CLIP.strafeForwardLeft, angle: -EIGHTH_TURN },
 ];
 
-function freeLocomotion(
-    idle: string,
-    gaits: IFreeLocomotion["gaits"],
-    idleVariation?: IFreeLocomotion["idleVariation"]
-): IFreeLocomotion {
-    return { kind: "free", idle, idleVariation, gaits };
-}
-
-function strafeLocomotion(speed: number): IStrafeLocomotion {
-    return { kind: "strafe", idle: CLIP.combatIdle, speed, directions: STRAFE_DIRECTIONS };
-}
-
 export const PLAYER_FREE_LOCOMOTION = freeLocomotion(CLIP.idle, PLAYER_GAITS, {
     clips: PLAYER_RELAXED_FIDGETS,
     afterSeconds: IDLE_VARIATION.relaxedDelaySeconds,
@@ -69,4 +57,16 @@ export function enemyRelaxedLocomotion(height: number, idleDelaySeconds: number)
 
 export function enemyCombatLocomotion(height: number): IStrafeLocomotion {
     return strafeLocomotion(height * GAIT_SPEED_PER_HEIGHT.strafe);
+}
+
+function freeLocomotion(
+    idle: string,
+    gaits: IFreeLocomotion["gaits"],
+    idleVariation?: IFreeLocomotion["idleVariation"]
+): IFreeLocomotion {
+    return { kind: "free", idle, idleVariation, gaits };
+}
+
+function strafeLocomotion(speed: number): IStrafeLocomotion {
+    return { kind: "strafe", idle: CLIP.combatIdle, speed, directions: STRAFE_DIRECTIONS };
 }

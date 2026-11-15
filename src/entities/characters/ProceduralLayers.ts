@@ -7,6 +7,7 @@ import {
     SKELETON_BONES,
 } from "@/constants/characters";
 import type { ImpactProfileName } from "@/constants/characters";
+import { WORLD } from "@/constants/world";
 import { BoneMath } from "@/lib/boneMath";
 import {
     clamp,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/helpers";
 import type {
     IBladeSource,
-    IGroundProbe,
+    ISurfaceProbe,
     ILimb,
     IProceduralFrame,
     ProceduralDetail,
@@ -127,7 +128,7 @@ export class ImpactSpringLayer extends ProceduralLayer {
         this.areSpringsAtRest = true;
     }
 
-    addImpulse(push: Vector3, profileName: ImpactProfileName): void {
+    addImpulse(push: Vector3, profileName: ImpactProfileName, scale = 1): void {
         const profile = PROCEDURAL_ANIMATION.impacts[profileName];
         const { impulseAxis } = ImpactSpringLayer.scratch;
         impulseAxis.crossVectors(BoneMath.UP, push);
@@ -141,7 +142,7 @@ export class ImpactSpringLayer extends ProceduralLayer {
             this.delayedImpulses.push({
                 spring,
                 delaySeconds: index * PROCEDURAL_ANIMATION.springs.linkDelaySeconds,
-                impulse: impulseAxis.clone().multiplyScalar(profile.strength * link.weight),
+                impulse: impulseAxis.clone().multiplyScalar(profile.strength * link.weight * scale),
                 stiffness: profile.stiffness,
                 damping: profile.damping,
             });
@@ -214,6 +215,8 @@ export class BreathingAndLookLayer extends ProceduralLayer {
     private readonly torso: ITorsoBone[];
     private readonly lookBones: ILookBone[];
     private readonly head: Object3D | null;
+    private readonly pelvis: Object3D | null;
+    private readonly tilt = new Vector3();
     private readonly previousPosition = new Vector3();
     private readonly previousVelocity = new Vector3();
     private readonly lean = new Vector3();
@@ -255,12 +258,14 @@ export class BreathingAndLookLayer extends ProceduralLayer {
             return bone ? [{ bone, share }] : [];
         });
         this.head = model.getObjectByName(SKELETON_BONES.head) ?? null;
+        this.pelvis = model.getObjectByName(SKELETON_BONES.pelvis) ?? null;
     }
 
     reset(): void {
         this.hasPreviousPosition = false;
         this.hasPreviousVelocity = false;
         this.lean.set(0, 0, 0);
+        this.tilt.set(0, 0, 0);
         this.lookYaw = 0;
         this.lookPitch = 0;
     }
@@ -275,9 +280,15 @@ export class BreathingAndLookLayer extends ProceduralLayer {
 
         if (step > 0) {
             this.trackLean(step);
+            this.tilt.lerp(
+                frame.surfaceTilt,
+                smoothingFactor(PROCEDURAL_ANIMATION.surfaceTilt.response, step)
+            );
             this.breathPhase =
                 (this.breathPhase + step * settings.breathHz * FULL_TURN) % FULL_TURN;
         }
+        if (this.pelvis && this.tilt.lengthSq() > 0)
+            BoneMath.rotateByRotationVector(this.pelvis, this.tilt);
         const breath = Math.sin(this.breathPhase) * settings.breathRadians;
         for (const { bone, leanShare, breathPitchShare, breathRollShare } of this.torso) {
             boneTurn
@@ -361,13 +372,14 @@ export class FootPlantingLayer extends ProceduralLayer {
         footTarget: new Vector3(),
         pelvis: new Vector3(),
         drift: new Vector3(),
+        probeOrigin: new Vector3(),
     };
     private readonly model: Object3D;
-    private readonly probe: IGroundProbe;
+    private readonly probe: ISurfaceProbe;
     private readonly pelvis: Object3D;
     private readonly feet: IFootState[];
 
-    private constructor(model: Object3D, probe: IGroundProbe, pelvis: Object3D, legs: ILimb[]) {
+    private constructor(model: Object3D, probe: ISurfaceProbe, pelvis: Object3D, legs: ILimb[]) {
         super();
         const { modelOrigin, footTarget } = FootPlantingLayer.scratch;
         this.model = model;
@@ -391,7 +403,7 @@ export class FootPlantingLayer extends ProceduralLayer {
         });
     }
 
-    static create(model: Object3D, probe: IGroundProbe): FootPlantingLayer | null {
+    static create(model: Object3D, probe: ISurfaceProbe): FootPlantingLayer | null {
         const pelvis = model.getObjectByName(SKELETON_BONES.pelvis);
         const legs = BoneMath.findLimbs(model, SKELETON_BONES.legs);
         return pelvis && legs
@@ -428,11 +440,12 @@ export class FootPlantingLayer extends ProceduralLayer {
                 foot.lowestAnimatedHeight + settings.floorRise * step,
                 height
             );
-            const ground = this.probe.groundHeightAt(
+            const probeOrigin = FootPlantingLayer.scratch.probeOrigin.set(
                 foot.animatedPosition.x,
-                foot.animatedPosition.z,
-                modelHeight + settings.probeAbove
+                modelHeight + settings.probeAbove,
+                foot.animatedPosition.z
             );
+            const ground = this.probe.surfaceAlong(probeOrigin, WORLD.down)?.point.y ?? null;
             const targetCorrection = frame.plantFeet
                 ? clamp(
                       (ground ?? modelHeight) -

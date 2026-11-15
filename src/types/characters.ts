@@ -1,11 +1,17 @@
 import type { Object3D, Vector3 } from "three";
-import type { PhysicsDetail } from "@/types/physics";
+import type { ISurfaceHit, IVector3, PhysicsDetail } from "@/types/physics";
 import type { Handedness } from "@/types/combat";
 
 export type ProceduralDetail = "full" | "impact" | "none";
 
-export interface IGroundProbe {
-    groundHeightAt(x: number, z: number, fromY: number): number | null;
+export type PoseMode = "live" | "dead" | "finisher";
+
+export interface ISurfaceProbe {
+    surfaceAlong(
+        origin: IVector3,
+        direction: IVector3,
+        maxDistance?: number
+    ): Readonly<ISurfaceHit> | null;
 }
 
 export interface IBladeSource {
@@ -21,6 +27,7 @@ export interface IProceduralFrame {
     grounded: boolean;
     plantFeet: boolean;
     lookTarget: Vector3 | null;
+    readonly surfaceTilt: Vector3;
 }
 
 export interface ILimb {
@@ -51,6 +58,7 @@ export interface ISkeletonDescriptor {
         arms: Record<SkeletonSide, readonly string[]>;
         legs: Record<SkeletonSide, readonly string[]>;
         feet: Record<SkeletonSide, readonly string[]>;
+        hands: Record<SkeletonSide, string>;
         handTips: Record<SkeletonSide, string>;
     };
     chains: Record<string, string>;
