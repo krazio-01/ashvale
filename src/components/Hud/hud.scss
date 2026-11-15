@@ -1,3 +1,18 @@
+.screen-fade {
+    position: fixed;
+    inset: 0;
+    z-index: 89;
+    pointer-events: none;
+    background: var(--ink-void);
+    opacity: 0;
+    transition: opacity 450ms var(--ease);
+
+    &[data-shown="true"] {
+        opacity: 1;
+        transition-duration: 250ms;
+    }
+}
+
 .hud {
     position: fixed;
     inset: 0;

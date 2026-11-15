@@ -1,14 +1,18 @@
 import { HUD } from "@/constants/ui";
-import type { IHudAlertMarker, IHudSlice } from "@/types/ui";
+import { keysOf } from "@/lib/helpers";
+import type { IActionPrompt, IHudAlertMarker, IHudSlice, PromptAction } from "@/types/ui";
 import type { GetState, IStoreState, SetState } from "@/types/store";
 
 export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreState>): IHudSlice {
     let damageCursor = 0;
     let damageSerial = 0;
+    const promptOffers: Partial<Record<PromptAction, string>> = {};
 
     return {
         isPlayerAlive: true,
+        isFadedOut: false,
         prompt: null,
+        reading: null,
         frame: {
             meters: {
                 health: { current: 0, maximum: 0 },
@@ -38,10 +42,31 @@ export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreS
                 screenY: 0,
             })),
             activeAlertMarkers: 0,
+            renderedFrames: 0,
         },
 
         setHudValue(key, value) {
             if (get().hud[key] !== value) set((state) => ({ hud: { ...state.hud, [key]: value } }));
+        },
+
+        offerPrompt(action, label) {
+            if (promptOffers[action] === (label ?? undefined)) return;
+            if (label === null) delete promptOffers[action];
+            else promptOffers[action] = label;
+
+            let prompt: IActionPrompt | null = null;
+            for (const candidate of keysOf(promptOffers)) {
+                const candidateLabel = promptOffers[candidate];
+                if (
+                    candidateLabel !== undefined &&
+                    (!prompt || HUD.promptPriority[candidate] > HUD.promptPriority[prompt.action])
+                )
+                    prompt = { action: candidate, label: candidateLabel };
+            }
+
+            const current = get().hud.prompt;
+            if (current?.action !== prompt?.action || current?.label !== prompt?.label)
+                set((state) => ({ hud: { ...state.hud, prompt } }));
         },
 
         setMeter(id, current, maximum) {
