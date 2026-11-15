@@ -15,14 +15,14 @@ import type { AnimationAction } from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import {
-    flattenForInstancing,
-    prepareSkinnedModel,
     createGltfLoader,
     disposeModelTemplate,
     disposeSkinnedModel,
 } from "@/world/assets/AssetLibrary";
+import { flattenForInstancing, prepareSkinnedModel } from "@/world/assets/ModelPreparation";
 import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
-import { FOLIAGE_LAYER } from "@/constants/world";
+import { store } from "@/store/store";
+import { worldTierOf } from "@/store/settingsSlice";
 import { FractalNoise } from "@/lib/noise";
 import {
     blendColors,
@@ -35,7 +35,8 @@ import {
 import { LANDING_ISLAND, LANDING_CHARACTER, LANDING_PROPS } from "@/constants/ui";
 import { PLAYER_ASSETS, CLIP } from "@/constants/characters";
 import { PLAYER } from "@/constants/player";
-import type { IThemeEnvironment, IModelTemplate, ISkinnedModel } from "@/types/world";
+import type { IModelTemplate, ISkinnedModel } from "@/types/world";
+import type { IThemeEnvironment } from "@/types/themes";
 import type { IVector3 } from "@/types/physics";
 
 interface IPropSlot {
@@ -51,7 +52,7 @@ interface IIslandScene {
     characterPosition: [number, number, number];
 }
 
-export interface ILandingRing {
+interface ILandingRing {
     points: readonly IVector3[];
     color?: Color;
 }
@@ -60,6 +61,14 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
     const renderer = useThree((state) => state.gl);
     const islandScene = useMemo(() => buildIslandScene(environment), [environment]);
     const [materialLibrary] = useState(() => new MaterialLibrary());
+    useEffect(
+        () =>
+            materialLibrary.applyEnvironment(
+                environment,
+                worldTierOf(store.getState().settings.values).specular
+            ),
+        [materialLibrary, environment]
+    );
     const [propTemplates, setPropTemplates] = useState<Map<string, IModelTemplate> | null>(null);
     const [characterModel, setCharacterModel] = useState<ISkinnedModel | null>(null);
 
@@ -109,7 +118,7 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
         <group>
             <mesh
                 geometry={islandScene.geometry}
-                material={materialLibrary.getVertexColorToonMaterial()}
+                material={materialLibrary.getVertexColorMaterial()}
                 castShadow
                 receiveShadow
             />
@@ -145,9 +154,6 @@ const PropInstance = ({ slot, template }: { slot: IPropSlot; template: IModelTem
                 material={part.material}
                 castShadow
                 receiveShadow
-                ref={(mesh) => {
-                    if (part.isFoliage) mesh?.layers.enable(FOLIAGE_LAYER);
-                }}
             />
         ))}
     </group>

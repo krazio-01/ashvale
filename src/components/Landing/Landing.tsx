@@ -1,4 +1,5 @@
 "use client";
+import type { IRepoReference } from "@/types/realm";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -10,14 +11,13 @@ import {
 import type { IOrbitInput } from "@/components/Landing/LandingCameraRig/LandingCameraRig";
 import { RenderCanvas } from "@/components/RenderCanvas/RenderCanvas";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
-import { resolveTheme, withEnvironmentOverrides } from "@/themes/Themes";
+import { LANDING_LOOK, resolveTheme, withEnvironmentOverrides } from "@/themes/Themes";
 import { isRequestCancellation, useRequest } from "@/hooks/useRequest";
 import { LANDING_TEXT } from "@/constants/strings";
 import { QUICK_PLAY_FALLBACK_REPOS } from "@/constants/realm";
 import { LANDING_CAMERA, LANDING_ENVIRONMENT } from "@/constants/ui";
-import { ChapterSeason, ChapterTheme } from "@/types/realm";
 import type { FeaturedRealmResponse } from "@/responses/realm/RealmResponse";
-import { clamp, parseRepoInput, pickRandom } from "@/lib/helpers";
+import { clamp, pickRandom } from "@/lib/helpers";
 import { InlineLoader } from "generative-loaders";
 import LandingIsland from "@/components/Landing/LandingIsland/LandingIsland";
 import LandingMountains from "@/components/Landing/LandingMountains/LandingMountains";
@@ -29,10 +29,13 @@ import { useHotkey } from "@/hooks/useHotkey";
 import "generative-loaders/styles.css";
 import "./landing.scss";
 
-const LANDING_MANIFEST = withEnvironmentOverrides(
-    resolveTheme(ChapterTheme.Woodland, ChapterSeason.Summer),
-    LANDING_ENVIRONMENT
-);
+const REPO_URL_PATTERN = /^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s]+)\/([^/\s#?]+)/i;
+
+const SHORTHAND_PATTERN = /^([^/\s]+)\/([^/\s]+)$/;
+
+const GIT_SUFFIX_PATTERN = /\.git$/i;
+
+const LANDING_MANIFEST = withEnvironmentOverrides(resolveTheme(LANDING_LOOK), LANDING_ENVIRONMENT);
 
 const Landing = () => {
     const router = useRouter();
@@ -115,7 +118,8 @@ const Landing = () => {
 
         const handlePointerDown = (event: PointerEvent) => {
             if (
-                (event.target as HTMLElement).closest(
+                event.target instanceof Element &&
+                event.target.closest(
                     ".landing-hero, .landing-settings-trigger, .pause-menu-backdrop"
                 )
             )
@@ -236,3 +240,17 @@ const Landing = () => {
 };
 
 export default Landing;
+
+function parseRepoInput(rawInput: string): IRepoReference | null {
+    const trimmed = rawInput.trim().replace(/\/+$/, "");
+    if (!trimmed) return null;
+
+    const match = trimmed.match(REPO_URL_PATTERN) ?? trimmed.match(SHORTHAND_PATTERN);
+    const [, owner, rawName] = match ?? [];
+    if (!owner || !rawName) return null;
+
+    const name = rawName.replace(GIT_SUFFIX_PATTERN, "");
+    if (!name) return null;
+
+    return { owner, name };
+}
