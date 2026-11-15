@@ -295,10 +295,7 @@ export class EngageBehaviour extends EnemyBehaviour<IEnemyCombatBody> {
                 ringRadius,
                 EngageBehaviour.scratchRingPoint
             );
-            const slotError = Math.hypot(
-                slotPoint.x - body.position.x,
-                slotPoint.z - body.position.z
-            );
+            const slotError = horizontalDistance(body.position, slotPoint);
             if (slotError > ENGAGE_TACTICS.ringDeadZone) this.isRepositioning = true;
             else if (slotError <= ENGAGE_TACTICS.ringSettleDistance) this.isRepositioning = false;
             if (!this.isRepositioning) {

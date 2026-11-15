@@ -1,7 +1,6 @@
 import type { Vector3 } from "three";
 import type { AwarenessMeter } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
 import type { IEnemyArchetype, AlertPhase } from "@/types/combat";
-import { LOOK_AROUND } from "@/constants/enemies";
 import { valueInRange, randomOffset } from "@/lib/helpers";
 import type { RandomSource } from "@/lib/helpers";
 
@@ -46,7 +45,8 @@ export abstract class EnemyBehaviour<Body extends IEnemyBody = IEnemyBody> {
 export class LookAround {
     private readonly body: IEnemyBody;
     private readonly random: RandomSource;
-    private secondsUntilGlance = 0;
+    private secondsUntilTurn = 0;
+    private isGlancing = false;
     private baseYaw = 0;
 
     constructor(body: IEnemyBody, random: RandomSource) {
@@ -55,16 +55,24 @@ export class LookAround {
     }
 
     reset(): void {
-        this.secondsUntilGlance = 0;
+        this.isGlancing = false;
+        this.secondsUntilTurn = valueInRange(this.body.archetype.look.restSeconds, this.random());
         this.baseYaw = this.body.yaw;
     }
 
     tick(deltaSeconds: number): void {
-        this.secondsUntilGlance -= deltaSeconds;
-        if (this.secondsUntilGlance > 0) return;
+        this.secondsUntilTurn -= deltaSeconds;
+        if (this.secondsUntilTurn > 0) return;
 
-        this.secondsUntilGlance = valueInRange(LOOK_AROUND.glanceSeconds, this.random());
-        this.body.setFacingYaw(this.baseYaw + randomOffset(this.random, LOOK_AROUND.maxTurn));
+        const { restSeconds, glanceSeconds, maxTurn } = this.body.archetype.look;
+        this.isGlancing = !this.isGlancing;
+        this.secondsUntilTurn = valueInRange(
+            this.isGlancing ? glanceSeconds : restSeconds,
+            this.random()
+        );
+        this.body.setFacingYaw(
+            this.isGlancing ? this.baseYaw + randomOffset(this.random, maxTurn) : this.baseYaw
+        );
     }
 }
 

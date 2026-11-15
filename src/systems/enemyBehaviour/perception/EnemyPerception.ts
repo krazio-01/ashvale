@@ -42,16 +42,22 @@ class SightSensor {
         if (distance > SIGHT.farRange) return 0;
 
         const bearing = Math.abs(shortestAngleBetween(facingYaw, yawTowards(eye, target)));
+        const lookUp = Math.atan2(target.y - eye.y, Math.hypot(target.x - eye.x, target.z - eye.z));
+        const upward = 1 - smoothstep(SIGHT.upwardFade[0], SIGHT.upwardFade[1], lookUp);
 
         if (distance <= SIGHT.nearRange && bearing <= SIGHT.nearHalfAngle)
-            return lerp(
-                1,
-                SIGHT.nearEdgeStrength,
-                smoothstep(SIGHT.nearRange * 0.4, SIGHT.nearRange, distance)
+            return (
+                upward *
+                lerp(
+                    1,
+                    SIGHT.nearEdgeStrength,
+                    smoothstep(SIGHT.nearRange * 0.4, SIGHT.nearRange, distance)
+                )
             );
 
         if (bearing <= SIGHT.farHalfAngle)
             return (
+                upward *
                 SIGHT.farStrength *
                 (1 - (distance - SIGHT.nearRange) / (SIGHT.farRange - SIGHT.nearRange))
             );

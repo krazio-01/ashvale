@@ -21,7 +21,7 @@ export class CombatNoiseEmitter implements IWorldEntity {
                 this.emit(event.defender.sceneObject.position, HEARING.combatRadius)
             ),
             events.on("finisherStarted", (event) => {
-                if (event.finisher.kind === "backstab") this.silentVictims.add(event.victim);
+                if (event.finisher.isSilent) this.silentVictims.add(event.victim);
             }),
             events.on("killed", (event) => {
                 if (this.silentVictims.has(event.combatant)) return;
@@ -29,8 +29,6 @@ export class CombatNoiseEmitter implements IWorldEntity {
             }),
         ];
     }
-
-    update(): void {}
 
     dispose(): void {
         for (const unsubscribe of this.unsubscribers) unsubscribe();
