@@ -2,12 +2,11 @@ import "server-only";
 import { Model, Schema, model, models } from "mongoose";
 import type { IFeaturedRealm, IResolvedRealm } from "@/types/realm";
 
-export const CACHE_BUST_COUNTER = 1;
+export const CACHE_BUST_COUNTER = 9;
 
-const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
+export const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 interface IRealm extends IResolvedRealm, IFeaturedRealm {
-    headCommitSha: string;
     cacheBustCounter: number;
     isFeatured: boolean;
     createdAt: Date;
