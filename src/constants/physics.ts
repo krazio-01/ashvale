@@ -1,15 +1,23 @@
-import { degreesToRadians, metresToUnits } from "@/lib/helpers";
-import type { IClothTuning } from "@/types/physics";
+import { WORLD, metresToUnits } from "@/constants/world";
+import { degreesToRadians } from "@/lib/helpers";
+import type { IClothTuning, MotorTuning } from "@/types/physics";
+
+export const MOTOR_BASE_TUNING = {
+    colliderOffset: 0.02,
+    terminalVelocity: -45,
+    airAccelerationPerHeight: 6,
+} satisfies Partial<MotorTuning>;
 
 export const PHYSICS = {
     dataKey: "physics",
     dataVersion: 3,
+    hullSupportDirections: 64,
     boneNamePrefix: "phys_",
     capsuleSlots: { carriedWeapon: 0 },
     epsilon: { geometry: 1e-12, motion: 1e-9 },
     step: {
         substepsPerFrame: 12,
-        referenceFrameSeconds: 1 / 60,
+        referenceFrameSeconds: WORLD.fixedTimestep,
         maxSubsteps: 24,
         maxFrameSeconds: 1 / 30,
         reducedSubstepShare: 1 / 3,
@@ -34,21 +42,21 @@ export const PHYSICS = {
     },
     restart: { holdSeconds: 0.18, dampingSeconds: 1.5, dampingScale: 10 },
     environment: {
-        gravity: metresToUnits(9.81),
+        gravity: Math.abs(WORLD.gravity),
         wind: {
             direction: [0.6, 0, 0.8],
             base: metresToUnits(0.02),
             gustAmplitude: metresToUnits(0.04),
             gustHertz: 0.35,
+            gustMix: { primary: 0.6, secondary: 0.4, secondaryRate: 2.3, secondaryPhase: 1.3 },
         },
     },
     impulse: { speedPerStrength: metresToUnits(0.35), minimumPushLengthSquared: 1e-8 },
-    lod: { fullMetres: metresToUnits(15), reducedMetres: metresToUnits(40) },
     cloth: {
         damping: 1.2,
         stretchSoftness: 1e-7,
         bendSoftness: 1e-5,
-        gravityScale: 1,
+        gravityScale: 0.89,
         windExposure: 1,
         pinSlack: 1.03,
         maxDriftAtHem: metresToUnits(1),

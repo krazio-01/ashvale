@@ -1,6 +1,19 @@
-import type { Quaternion, Vector3 } from "three";
+import type { Quaternion, Vector3, Vector3Tuple } from "three";
 
-export type PhysicsBodyKind = "sheet";
+type PhysicsBodyKind = "sheet";
+
+export interface ITriangleMesh {
+    positions: Float32Array;
+    indices: Uint32Array;
+}
+
+export type StaticColliderShape =
+    | ({ kind: "trimesh"; fixesInternalEdges: boolean } & ITriangleMesh)
+    | { kind: "cuboid"; halfExtents: Vector3Tuple; at: Vector3Tuple; yaw: number }
+    | { kind: "cylinder"; halfHeight: number; radius: number; at: Vector3Tuple }
+    | { kind: "hull"; points: Float32Array };
+
+export type StaticCollider = StaticColliderShape & { wallRunnable: boolean };
 
 export type PhysicsDetail = "full" | "reduced" | "frozen";
 
@@ -12,6 +25,55 @@ export interface IVector3 {
     x: number;
     y: number;
     z: number;
+}
+
+export interface ISurfaceHit {
+    distance: number;
+    point: IVector3;
+    normal: IVector3;
+    groups: number;
+}
+
+export type ContactKind = "ground" | "wall" | "runnableWall" | "ledge" | "none";
+
+export interface ILedgeProbe {
+    reach: number;
+    turns: readonly number[];
+    minimum: number;
+    maximum: number;
+    requiresWallTouch: boolean;
+    flatTopNormalY: number;
+    steepFaceNormalY: number;
+    levelTolerance: number;
+    levelSpread: number;
+}
+
+export interface IRunnableWallProbe {
+    reachSeconds: number;
+    entryGraceSeconds: number;
+    seekReach: number;
+    minimumAlongSpeed: number;
+    turns: readonly number[];
+}
+
+export interface ILedgeReach {
+    readonly stand: Vector3;
+    readonly normal: Vector3;
+    height: number;
+}
+
+export interface IMotorStepRequest {
+    desiredVelocity: Vector3;
+    displacement: Vector3 | null;
+    followGround: boolean;
+    gravityScale: number;
+}
+
+export interface IMotorLaunch {
+    up?: number;
+    maxUp?: number;
+    away?: number;
+    along?: number;
 }
 
 export interface IClothTuning {
@@ -51,8 +113,8 @@ export interface IPhysicsBodyDefinition {
 
 interface IPhysicsCollider {
     bone: string;
-    start: [number, number, number];
-    end: [number, number, number];
+    start: Vector3Tuple;
+    end: Vector3Tuple;
     radius: number;
 }
 
@@ -89,8 +151,8 @@ export interface IMotorSpec {
     autostepMinWidth: number;
     snapToGroundDistance: number;
     terminalVelocity: number;
-    groundAcceleration: number;
-    airAcceleration: number;
+    groundResponse: number;
+    airAccelerationPerHeight: number;
     pushesDynamicBodies: boolean;
 }
 

@@ -1,12 +1,13 @@
 import { Quaternion, Vector3 } from "three";
 import type { Object3D } from "three";
 import { PHYSICS } from "@/constants/physics";
+import { WORLD } from "@/constants/world";
 import { FULL_TURN, lerp } from "@/lib/helpers";
 import { ClothSheet } from "@/systems/physics/ClothBody";
 import { ParticleSolver } from "@/systems/physics/ParticleSolver";
 import type { ICarriedMotion, ISolverEnvironment } from "@/systems/physics/ParticleSolver";
 import { SkeletonBinding } from "@/systems/physics/SkeletonBinding";
-import type { IGroundProbe } from "@/types/characters";
+import type { ISurfaceProbe } from "@/types/characters";
 import type {
     ICapsuleSource,
     IPhysicsBinding,
@@ -16,20 +17,21 @@ import type {
 import { ERRORS } from "@/constants/strings";
 
 const DEGENERATE = PHYSICS.epsilon.motion;
-const scratchStart = new Vector3();
-const scratchEnd = new Vector3();
-const scratchMove = new Vector3();
-const scratchAxis = new Vector3();
-const scratchTurn = new Quaternion();
-const scratchOrigin = new Vector3();
-const scratchPush = new Vector3();
 
 export class ClothSimulation {
+    private static readonly scratchStart = new Vector3();
+    private static readonly scratchEnd = new Vector3();
+    private static readonly scratchMove = new Vector3();
+    private static readonly scratchAxis = new Vector3();
+    private static readonly scratchTurn = new Quaternion();
+    private static readonly scratchOrigin = new Vector3();
+    private static readonly scratchPush = new Vector3();
+
     readonly solver: ParticleSolver;
     private readonly bodies: ClothSheet[];
     private readonly binding: IPhysicsBinding;
     private readonly character: Object3D;
-    private readonly groundProbe: IGroundProbe;
+    private readonly groundProbe: ISurfaceProbe;
     private readonly colliderCount: number;
     private readonly capsuleSources: (ICapsuleSource | null)[] = Object.values(
         PHYSICS.capsuleSlots
@@ -75,13 +77,12 @@ export class ClothSimulation {
     private constructor(
         model: Object3D,
         character: Object3D,
-        probe: IGroundProbe,
+        probe: ISurfaceProbe,
         definition: IPhysicsDefinition
     ) {
-        const binding = new SkeletonBinding(model, definition);
         if (definition.version !== PHYSICS.dataVersion)
             throw new Error(ERRORS.physicsDataVersion(definition.version, PHYSICS.dataVersion));
-        this.binding = binding;
+        this.binding = new SkeletonBinding(model, definition);
         this.character = character;
         this.groundProbe = probe;
         this.colliderCount = definition.colliders.length;
@@ -99,8 +100,8 @@ export class ClothSimulation {
             ...totals,
             colliders: this.colliderCount + this.capsuleSources.length,
         });
-        binding.prepareFrame();
-        for (const body of this.bodies) body.build(this.solver, binding);
+        this.binding.prepareFrame();
+        for (const body of this.bodies) body.build(this.solver, this.binding);
         this.updateColliders();
         this.solver.syncPreviousFrame();
         this.writeAnimatedPose();
@@ -109,7 +110,7 @@ export class ClothSimulation {
     static create(
         model: Object3D,
         character: Object3D,
-        probe: IGroundProbe
+        probe: ISurfaceProbe
     ): ClothSimulation | null {
         const definition = model.userData[PHYSICS.dataKey] as IPhysicsDefinition | undefined;
         return definition ? new ClothSimulation(model, character, probe, definition) : null;
@@ -165,7 +166,7 @@ export class ClothSimulation {
     applyHitImpulse(push: Vector3, strength: number): void {
         if (push.lengthSq() < PHYSICS.impulse.minimumPushLengthSquared) return;
         const speed = strength * PHYSICS.impulse.speedPerStrength;
-        const scaled = scratchPush.copy(push).normalize().multiplyScalar(speed);
+        const scaled = ClothSimulation.scratchPush.copy(push).normalize().multiplyScalar(speed);
         this.solver.addImpulse(scaled.x, scaled.y, scaled.z);
     }
 
@@ -185,18 +186,29 @@ export class ClothSimulation {
 
     private updateColliders(): void {
         for (let collider = 0; collider < this.colliderCount; collider++) {
-            const radius = this.binding.colliderWorld(collider, scratchStart, scratchEnd);
-            this.solver.setCollider(collider, scratchStart, scratchEnd, radius);
+            const radius = this.binding.colliderWorld(
+                collider,
+                ClothSimulation.scratchStart,
+                ClothSimulation.scratchEnd
+            );
+            this.solver.setCollider(
+                collider,
+                ClothSimulation.scratchStart,
+                ClothSimulation.scratchEnd,
+                radius
+            );
         }
         for (let slot = 0; slot < this.capsuleSources.length; slot++) {
             const source = this.capsuleSources[slot];
-            const radius = source ? source.worldCapsule(scratchStart, scratchEnd) : null;
+            const radius = source
+                ? source.worldCapsule(ClothSimulation.scratchStart, ClothSimulation.scratchEnd)
+                : null;
             if (radius === null) this.solver.disableCollider(this.colliderCount + slot);
             else
                 this.solver.setCollider(
                     this.colliderCount + slot,
-                    scratchStart,
-                    scratchEnd,
+                    ClothSimulation.scratchStart,
+                    ClothSimulation.scratchEnd,
                     radius
                 );
         }
@@ -216,8 +228,11 @@ export class ClothSimulation {
     private carryClothWithCharacter(seconds: number): void {
         const { moveLag, turnLag, turnFlingScale, maxLagMoveSpeed, maxLagTurnSpeed } =
             PHYSICS.reference;
-        const move = scratchMove.subVectors(this.nextPosition, this.referencePosition);
-        const turn = scratchTurn
+        const move = ClothSimulation.scratchMove.subVectors(
+            this.nextPosition,
+            this.referencePosition
+        );
+        const turn = ClothSimulation.scratchTurn
             .copy(this.referenceRotation)
             .invert()
             .premultiply(this.nextRotation);
@@ -226,8 +241,8 @@ export class ClothSimulation {
         const sine = Math.sqrt(Math.max(1 - turn.w * turn.w, 0));
         const axis =
             sine > DEGENERATE
-                ? scratchAxis.set(turn.x / sine, turn.y / sine, turn.z / sine)
-                : scratchAxis.set(0, 1, 0);
+                ? ClothSimulation.scratchAxis.set(turn.x / sine, turn.y / sine, turn.z / sine)
+                : ClothSimulation.scratchAxis.set(0, 1, 0);
         this.motion.referenceMoveX = move.x;
         this.motion.referenceMoveY = move.y;
         this.motion.referenceMoveZ = move.z;
@@ -272,10 +287,14 @@ export class ClothSimulation {
     }
 
     private updateWind(): void {
-        const { direction, base, gustAmplitude, gustHertz } = PHYSICS.environment.wind;
+        const { direction, base, gustAmplitude, gustHertz, gustMix } = PHYSICS.environment.wind;
         const gust =
-            0.6 * Math.sin(FULL_TURN * gustHertz * this.windTime) +
-            0.4 * Math.sin(FULL_TURN * gustHertz * 2.3 * this.windTime + 1.3);
+            gustMix.primary * Math.sin(FULL_TURN * gustHertz * this.windTime) +
+            gustMix.secondary *
+                Math.sin(
+                    FULL_TURN * gustHertz * gustMix.secondaryRate * this.windTime +
+                        gustMix.secondaryPhase
+                );
         const strength = Math.max(0, base + gustAmplitude * gust);
         this.environment.windX = direction[0] * strength;
         this.environment.windY = direction[1] * strength;
@@ -283,7 +302,7 @@ export class ClothSimulation {
     }
 
     private floorHeightBelowCharacter(): number | null {
-        const origin = this.character.getWorldPosition(scratchOrigin);
-        return this.groundProbe.groundHeightAt(origin.x, origin.z, origin.y);
+        const origin = this.character.getWorldPosition(ClothSimulation.scratchOrigin);
+        return this.groundProbe.surfaceAlong(origin, WORLD.down)?.point.y ?? null;
     }
 }
