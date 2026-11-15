@@ -5,6 +5,7 @@ import type {
     HitShape,
     IHitWindow,
     IMoveDefinition,
+    IMoveWindow,
     IReactionClips,
 } from "@/types/combat";
 import { ERRORS } from "@/constants/strings";
@@ -37,6 +38,10 @@ export function clipGripWindow(clip: string): { from: number; to: number } {
     return grip;
 }
 
+export function progressAtClipShare(window: IMoveWindow, share: number): number {
+    return (share - window.from) / (window.to - window.from);
+}
+
 export function hitWindow(
     from: number,
     to: number,
@@ -53,6 +58,8 @@ export function hitWindow(
         parryable: true,
         dodgeOnly: false,
         swing: "side",
+        forcesStagger: false,
+        nonLethalTo: null,
         ...overrides,
     };
 }

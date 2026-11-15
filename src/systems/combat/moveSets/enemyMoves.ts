@@ -1,5 +1,5 @@
-import { CLIP } from "@/constants/characters";
-import { metresToUnits } from "@/lib/helpers";
+import { metresToUnits } from "@/constants/world";
+import { CLIP, SKELETON_BONES } from "@/constants/characters";
 import {
     enemyMoveSet,
     strike,
@@ -32,7 +32,7 @@ export const GOLEM_MOVES = enemyMoveSet([
         id: GOLEM_MOVE_IDS.backhand,
         clip: CLIP.enemyBackhand,
         window: [0.21, 0.3],
-        shape: { kind: "socket", bone: "hand_l", radius: metresToUnits(0.45) },
+        shape: { kind: "socket", bone: SKELETON_BONES.hands.left, radius: metresToUnits(0.45) },
         damageScale: 1,
         poiseDamage: 25,
         impact: "light",
@@ -80,7 +80,7 @@ export const GREMLIN_MOVES = enemyMoveSet(
             clip: CLIP.enemyJab,
             playbackRate: 1.2,
             window: [0.16, 0.24],
-            shape: { kind: "socket", bone: "hand_l", radius: metresToUnits(0.3) },
+            shape: { kind: "socket", bone: SKELETON_BONES.hands.left, radius: metresToUnits(0.3) },
             damageScale: 0.8,
             poiseDamage: 8,
             impact: "light",
@@ -133,11 +133,11 @@ export const GREMLIN_MOVES = enemyMoveSet(
             impact: "light",
             knockback: 4,
             swing: "side",
-            gapClose: {
+            warp: {
                 from: 0,
                 to: 0.17,
                 maxDistance: metresToUnits(2.5),
-                strikeDistance: metresToUnits(0.5),
+                stopDistance: metresToUnits(0.5),
             },
         }),
     ],
@@ -222,11 +222,11 @@ export const SENTINEL_MOVES = enemyMoveSet([
         impact: "light",
         knockback: 5,
         swing: "side",
-        gapClose: {
+        warp: {
             from: 0,
             to: 0.17,
             maxDistance: metresToUnits(3),
-            strikeDistance: metresToUnits(0.6),
+            stopDistance: metresToUnits(0.6),
         },
     }),
     strike({
@@ -254,27 +254,27 @@ export const WRAITH_MOVES = enemyMoveSet([
         id: WRAITH_MOVE_IDS.bolt,
         clip: CLIP.enemyHurl,
         playbackRate: 1.2,
-        projectile: { at: WRAITH_LAUNCH_AT, kind: "bolt", socket: "hand_r" },
+        projectile: { at: WRAITH_LAUNCH_AT, kind: "bolt", socket: SKELETON_BONES.hands.right },
         chainAt: 0.5,
     }),
     projectileMove({
         id: WRAITH_MOVE_IDS.followUpBolt,
         clip: CLIP.enemyHurl,
         playbackRate: 1.2,
-        projectile: { at: WRAITH_LAUNCH_AT, kind: "bolt", socket: "hand_r" },
+        projectile: { at: WRAITH_LAUNCH_AT, kind: "bolt", socket: SKELETON_BONES.hands.right },
     }),
     projectileMove({
         id: WRAITH_MOVE_IDS.blast,
         clip: CLIP.enemyHurl,
         playbackRate: 0.75,
-        projectile: { at: WRAITH_LAUNCH_AT, kind: "blast", socket: "hand_r" },
+        projectile: { at: WRAITH_LAUNCH_AT, kind: "blast", socket: SKELETON_BONES.hands.right },
     }),
     strike({
         id: WRAITH_MOVE_IDS.scratch,
         clip: CLIP.enemyScratch,
         playbackRate: 1.2,
         window: [0.3, 0.39],
-        shape: { kind: "socket", bone: "hand_r", radius: metresToUnits(0.35) },
+        shape: { kind: "socket", bone: SKELETON_BONES.hands.right, radius: metresToUnits(0.35) },
         damageScale: 1,
         poiseDamage: 12,
         impact: "light",

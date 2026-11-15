@@ -14,7 +14,7 @@ import type {
     IMoveWindow,
     ImpactTier,
     IProjectileLaunch,
-    IGapCloseWindow,
+    IWarpWindow,
     SwingDirection,
 } from "@/types/combat";
 
@@ -43,7 +43,7 @@ interface IStrikeSpec {
     armor?: IMoveWindow;
     chainAt?: number;
     followedBy?: string;
-    gapClose?: IGapCloseWindow;
+    warp?: IWarpWindow;
 }
 
 interface IProjectileMoveSpec {
@@ -82,7 +82,7 @@ export function strike(spec: IStrikeSpec): IMoveDefinition {
     return {
         ...baseMove(spec.id, spec.clip, spec.playbackRate ?? 1),
         armor: spec.armor,
-        gapClose: spec.gapClose,
+        warp: spec.warp,
         followedBy: spec.followedBy,
         tracking: { from: 0, to: from, turnRate: TRACKING_TURN_RATE },
         hits: [
@@ -152,8 +152,6 @@ export function enemyMoveSet(
     return {
         moves: byId,
         entry: {},
-        sprintEntry: {},
-        airEntry: {},
         reactions: {
             flinch: [CLIP.reactFlinch],
             knockback: [CLIP.reactKnockback],

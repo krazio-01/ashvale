@@ -9,6 +9,11 @@ export function overlapsInterval(window: IMoveWindow, from: number, to: number):
     return window.from <= to && window.to >= from;
 }
 
+export function clipShareAt(move: IMoveDefinition, progress: number): number {
+    const window = move.clipWindow;
+    return window ? window.from + progress * (window.to - window.from) : progress;
+}
+
 export function hasCrossed(mark: number | undefined, previous: number, current: number): boolean {
     return mark !== undefined && previous < mark && current >= mark;
 }
