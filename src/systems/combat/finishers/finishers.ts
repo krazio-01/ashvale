@@ -1,8 +1,10 @@
+import { SCALE, metresToUnits } from "@/constants/world";
 import { CLIP } from "@/constants/characters";
-import { metresToUnits } from "@/lib/helpers";
 import type { IFinisherDefinition } from "@/types/combat";
 
-const MOCAP_TO_PLAYER_SCALE = 2.1 / 1.83;
+const MOCAP_ACTOR_HEIGHT_METRES = 1.83;
+
+const MOCAP_TO_PLAYER_SCALE = SCALE.heroHeightMetres / MOCAP_ACTOR_HEIGHT_METRES;
 
 const KICKDOWN_FINISHER_PLACEMENT = {
     distance: metresToUnits(0.902 * MOCAP_TO_PLAYER_SCALE),
@@ -76,5 +78,6 @@ export const FINISHERS: readonly IFinisherDefinition[] = [
         distance: metresToUnits(0.8),
         ...BEHIND_VICTIM,
         killAt: 0.5,
+        isSilent: true,
     },
 ];

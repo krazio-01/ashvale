@@ -36,6 +36,7 @@ export interface ICombatEventMap {
         shape: HitShape;
     };
     noise: { position: Vector3; radius: number };
+    weaponSwept: { attacker: ICombatant; segment: ICapsule; swingId: number };
     alarmRaised: { raiser: ICombatant; position: Vector3 };
 }
 
@@ -51,6 +52,8 @@ export function createHitPayload(attacker: ICombatant, isRanged: boolean): IHitP
         dodgeOnly: false,
         ranged: isRanged,
         swing: "side",
+        forcesStagger: false,
+        nonLethalTo: null,
         origin: new Vector3(),
     };
 }

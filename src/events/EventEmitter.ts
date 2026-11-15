@@ -1,8 +1,9 @@
 import type { ICombatEventMap } from "@/events/CombatEvents";
+import type { IWorldEventMap } from "@/events/WorldEvents";
 
 type Listener<Event> = (event: Event) => void;
 
-export type GameEventMap = ICombatEventMap;
+export type GameEventMap = ICombatEventMap & IWorldEventMap;
 
 export type GameEvents = EventEmitter<GameEventMap>;
 
