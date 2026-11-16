@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { NodeIO, type Document } from "@gltf-transform/core";
+import { Buffer, Node, NodeIO, type Document, type Property } from "@gltf-transform/core";
 import {
     Box3,
     Euler,
@@ -15,7 +15,13 @@ import {
     VectorKeyframeTrack,
 } from "three";
 import { EXTMeshoptCompression } from "@gltf-transform/extensions";
-import { dedup, prune, resample } from "@gltf-transform/functions";
+import {
+    copyToDocument,
+    createDefaultPropertyResolver,
+    dedup,
+    prune,
+    resample,
+} from "@gltf-transform/functions";
 import { CLIP, SKELETON_BONES } from "@/constants/characters";
 import { PLAYER, PLAYER_STARTING_WEAPON } from "@/constants/player";
 import {
@@ -99,21 +105,27 @@ export class ClipCooker extends PipelineCommand {
         typeof value === "number" ? roundTo(value, ClipCooker.CLIP_MARK_PRECISION) : value;
 
     readonly name = "cook-clips";
-    readonly usage = "[--only <ClipName,ClipName> --out <file.glb>]";
+    readonly usage = "[--only <ClipName,ClipName> --out <file.glb>] [--merge <ClipName,ClipName>]";
     readonly summary =
-        "Bake every manifest clip in Blender into CombatClips.glb (source + public); --only bakes a subset to --out without publishing";
+        "Bake every manifest clip in Blender into CombatClips.glb (source + public); --only bakes a subset to --out without publishing; --merge bakes a subset into the published file";
 
     async run(args: readonly string[]): Promise<void> {
         const { values } = parseArgs({
             args: [...args],
-            options: { only: { type: "string" }, out: { type: "string" } },
+            options: {
+                only: { type: "string" },
+                out: { type: "string" },
+                merge: { type: "string" },
+            },
         });
         if (Boolean(values.only) !== Boolean(values.out))
             throw new Error(`--only and --out go together; usage: ${this.usage}`);
-        const only = values.only?.split(",");
-        const jobs = only ? CLIP_JOBS.filter((job) => only.includes(job.output)) : CLIP_JOBS;
-        if (only && jobs.length !== only.length)
-            throw new Error(`--only names clips with no manifest job: ${only.join(", ")}`);
+        if (values.merge && values.only)
+            throw new Error(`--merge and --only are exclusive; usage: ${this.usage}`);
+        const subset = (values.only ?? values.merge)?.split(",");
+        const jobs = subset ? CLIP_JOBS.filter((job) => subset.includes(job.output)) : CLIP_JOBS;
+        if (subset && jobs.length !== subset.length)
+            throw new Error(`the subset names clips with no manifest job: ${subset.join(", ")}`);
 
         const io = await createGltfIo([EXTMeshoptCompression], true);
         const workDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "combat-clips-"));
@@ -125,6 +137,7 @@ export class ClipCooker extends PipelineCommand {
             fs.writeFileSync(
                 jobsPath,
                 JSON.stringify({
+                    fps: OUTPUT_FPS,
                     target: path.resolve(CLIP_BAKE_FILES.target),
                     jobs,
                     game: await gameFit(io),
@@ -144,9 +157,13 @@ export class ClipCooker extends PipelineCommand {
                 return;
             }
 
+            const missingBefore = values.merge
+                ? await ClipCooker.mergeIntoPublished(io, stagedPath)
+                : new Set<string>();
+
             const animations = (await io.read(stagedPath)).getRoot().listAnimations();
             const names = new Set(animations.map((animation) => animation.getName()));
-            this.verifyCatalogue(names);
+            this.verifyCatalogue(names, missingBefore);
             const durations = new Map<string, number>();
             for (const animation of animations) {
                 const seconds = Math.max(
@@ -165,6 +182,53 @@ export class ClipCooker extends PipelineCommand {
         } finally {
             fs.rmSync(workDirectory, { recursive: true, force: true });
         }
+    }
+
+    private static async mergeIntoPublished(io: NodeIO, stagedPath: string): Promise<Set<string>> {
+        const published = await io.read(CLIP_BAKE_FILES.output);
+        const publishedNames = new Set(
+            published
+                .getRoot()
+                .listAnimations()
+                .map((animation) => animation.getName())
+        );
+        const baked = await io.read(stagedPath);
+        const bakedAnimations = baked.getRoot().listAnimations();
+        const replaced = new Set(bakedAnimations.map((animation) => animation.getName()));
+        const catalogue = new Set<string>(Object.values(CLIP));
+        for (const animation of published.getRoot().listAnimations()) {
+            const name = animation.getName();
+            if (!catalogue.has(name)) console.log(`dropped ${name} (no longer in CLIP)`);
+            if (replaced.has(name) || !catalogue.has(name)) animation.dispose();
+        }
+
+        const nodesByName = new Map(
+            published
+                .getRoot()
+                .listNodes()
+                .map((node) => [node.getName(), node])
+        );
+        const [publishedBuffer] = published.getRoot().listBuffers();
+        const resolveDefault = createDefaultPropertyResolver(published, baked);
+        copyToDocument(published, baked, bakedAnimations, (property: Property) => {
+            if (property instanceof Buffer) return publishedBuffer;
+            if (!(property instanceof Node)) return resolveDefault(property);
+            const existing = nodesByName.get(property.getName());
+            if (!existing)
+                throw new Error(
+                    `merged clip targets a node the published file lacks: ${property.getName()}`
+                );
+            return existing;
+        });
+
+        await published.transform(dedup(), prune());
+        published
+            .createExtension(EXTMeshoptCompression)
+            .setRequired(true)
+            .setEncoderOptions({ method: EXTMeshoptCompression.EncoderMethod.QUANTIZE });
+        await io.write(stagedPath, published);
+        console.log(`merged ${replaced.size} clips into ${CLIP_BAKE_FILES.output}`);
+        return new Set(Object.values(CLIP).filter((name) => !publishedNames.has(name)));
     }
 
     private async stripResampleAndCompress(
@@ -253,12 +317,18 @@ export class ClipCooker extends PipelineCommand {
         console.log("CLIP_MARKS match the baked clips");
     }
 
-    private verifyCatalogue(names: Set<string>): void {
+    private verifyCatalogue(names: Set<string>, missingBefore: Set<string>): void {
         const missing = Object.values(CLIP).filter(
             (name) => !names.has(name) && !CLIPS_PROVIDED_BY_CHARACTER_MODEL.includes(name)
         );
-        if (missing.length > 0)
-            throw new Error(`CombatClips.glb is missing clips: ${missing.join(", ")}`);
+        const stillMissing = missing.filter((name) => missingBefore.has(name));
+        const newlyMissing = missing.filter((name) => !missingBefore.has(name));
+        if (stillMissing.length > 0)
+            console.log(
+                `still missing (already absent before the merge): ${stillMissing.join(", ")}`
+            );
+        if (newlyMissing.length > 0)
+            throw new Error(`CombatClips.glb is missing clips: ${newlyMissing.join(", ")}`);
     }
 
     private enforceBudget(stagedPath: string, clipCount: number): void {
@@ -341,6 +411,7 @@ export class ClipAudition extends PipelineCommand {
         fs.writeFileSync(
             jobPath,
             JSON.stringify({
+                fps: OUTPUT_FPS,
                 target: path.resolve(CLIP_BAKE_FILES.target),
                 jobs,
                 game: await gameFit(await createGltfIo([EXTMeshoptCompression])),
