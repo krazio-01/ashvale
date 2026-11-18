@@ -9,6 +9,8 @@ import { clamp, createSeededRandom, lerp } from "@/lib/helpers";
 
 const RANDOM_TABLE_SIZE = 256;
 
+const RANDOM_TABLE_MASK = RANDOM_TABLE_SIZE - 1;
+
 interface ITileableNoise {
     size: number;
     tileCounts: readonly number[];
@@ -18,14 +20,14 @@ interface ITileableNoise {
 }
 
 export class FractalNoise {
-    private readonly randomTable: number[];
+    private readonly randomTable: Uint8Array;
 
     constructor(seed: number) {
         const nextRandom = createSeededRandom(seed);
-        this.randomTable = [];
+        this.randomTable = new Uint8Array(RANDOM_TABLE_SIZE);
 
         for (let index = 0; index < RANDOM_TABLE_SIZE; index += 1)
-            this.randomTable.push(Math.floor(nextRandom() * RANDOM_TABLE_SIZE));
+            this.randomTable[index] = Math.floor(nextRandom() * RANDOM_TABLE_SIZE);
     }
 
     sample(x: number, z: number, octaves: number, gain: number): number {
@@ -80,22 +82,27 @@ export class FractalNoise {
         const smoothX = fractionX * fractionX * (3 - 2 * fractionX);
         const smoothZ = fractionZ * fractionZ * (3 - 2 * fractionZ);
 
-        const corner00 = this.randomValueAtCorner(cellX, cellZ, period);
-        const corner10 = this.randomValueAtCorner(cellX + 1, cellZ, period);
-        const corner01 = this.randomValueAtCorner(cellX, cellZ + 1, period);
-        const corner11 = this.randomValueAtCorner(cellX + 1, cellZ + 1, period);
+        const nearX = MathUtils.euclideanModulo(cellX, period);
+        const nearZ = MathUtils.euclideanModulo(cellZ, period);
+        const farX = nearX + 1 === period ? 0 : nearX + 1;
+        const farZ = nearZ + 1 === period ? 0 : nearZ + 1;
+        const table = this.randomTable;
+        const nearHash = table[nearX & RANDOM_TABLE_MASK];
+        const farHash = table[farX & RANDOM_TABLE_MASK];
 
-        return lerp(lerp(corner00, corner10, smoothX), lerp(corner01, corner11, smoothX), smoothZ);
-    }
-
-    private randomValueAtCorner(cellX: number, cellZ: number, period: number): number {
-        const wrappedX = MathUtils.euclideanModulo(cellX, period);
-        const wrappedZ = MathUtils.euclideanModulo(cellZ, period);
-
-        const hashX = this.randomTable[wrappedX % RANDOM_TABLE_SIZE];
-        const hash = this.randomTable[(hashX + wrappedZ) % RANDOM_TABLE_SIZE];
-
-        return hash / 255;
+        return lerp(
+            lerp(
+                table[(nearHash + nearZ) & RANDOM_TABLE_MASK] / 255,
+                table[(farHash + nearZ) & RANDOM_TABLE_MASK] / 255,
+                smoothX
+            ),
+            lerp(
+                table[(nearHash + farZ) & RANDOM_TABLE_MASK] / 255,
+                table[(farHash + farZ) & RANDOM_TABLE_MASK] / 255,
+                smoothX
+            ),
+            smoothZ
+        );
     }
 }
 

@@ -75,11 +75,12 @@ export class CellIndex {
         const box: ICellBox = { minX: 0, minZ: 0, maxX: 0, maxZ: 0 };
         const cellStarts = new Int32Array(this.grid.cellCount + 1);
 
+        const countItem = (cell: number) => {
+            cellStarts[cell + 1] += 1;
+        };
         for (let item = 0; item < itemCount; item += 1) {
             fillItemBox(item, box);
-            this.grid.someCell(box, (cell) => {
-                cellStarts[cell + 1] += 1;
-            });
+            this.grid.someCell(box, countItem);
         }
 
         for (let cell = 0; cell < cellStarts.length - 1; cell += 1)
@@ -88,12 +89,15 @@ export class CellIndex {
         const cellItems = new Int32Array(cellStarts[cellStarts.length - 1]);
         const fillCursor = Int32Array.from(cellStarts.subarray(0, cellStarts.length - 1));
 
+        let placedItem = 0;
+        const placeItem = (cell: number) => {
+            cellItems[fillCursor[cell]] = placedItem;
+            fillCursor[cell] += 1;
+        };
         for (let item = 0; item < itemCount; item += 1) {
+            placedItem = item;
             fillItemBox(item, box);
-            this.grid.someCell(box, (cell) => {
-                cellItems[fillCursor[cell]] = item;
-                fillCursor[cell] += 1;
-            });
+            this.grid.someCell(box, placeItem);
         }
 
         this.cellStarts = cellStarts;
