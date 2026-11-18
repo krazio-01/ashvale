@@ -34,6 +34,7 @@ const LandingCameraRig = ({
     const smoothedHeight = useRef(LANDING_CAMERA.orbitHeight);
     const diveElapsed = useRef(0);
     const hasDiveCompleted = useRef(false);
+    const shownDegrees = useRef(-1);
 
     useFrame(({ camera }, deltaSeconds) => {
         const input = orbitInputRef.current;
@@ -85,10 +86,12 @@ const LandingCameraRig = ({
             360
         );
 
-        if (bearingLabelRef.current)
-            bearingLabelRef.current.textContent = `${degrees.toString().padStart(3, "0")}°`;
-        if (compassRingRef.current)
-            compassRingRef.current.style.transform = `rotate(${degrees}deg)`;
+        const label = bearingLabelRef.current;
+        const ring = compassRingRef.current;
+        if (degrees === shownDegrees.current || !label || !ring) return;
+        shownDegrees.current = degrees;
+        label.textContent = `${degrees.toString().padStart(3, "0")}°`;
+        ring.style.transform = `rotate(${degrees}deg)`;
     });
 
     return null;

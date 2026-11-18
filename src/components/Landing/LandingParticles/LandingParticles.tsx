@@ -45,8 +45,8 @@ interface IParticleFieldProps<T> {
 }
 
 interface IEmberParticle {
-    angle: number;
-    orbitRadius: number;
+    orbitX: number;
+    orbitZ: number;
     riseSpeed: number;
     driftPhase: number;
     initialHeight: number;
@@ -177,13 +177,17 @@ export const LandingStars = () => {
 function buildEmbers(): IEmberParticle[] {
     const nextRandom = createSeededRandom(LANDING_EMBERS.seed);
 
-    return Array.from({ length: LANDING_EMBERS.count }, () => ({
-        angle: nextRandom() * FULL_TURN,
-        orbitRadius: Math.sqrt(nextRandom()) * LANDING_EMBERS.radius,
-        riseSpeed: LANDING_EMBERS.riseSpeed * (0.6 + nextRandom() * 0.8),
-        driftPhase: nextRandom() * FULL_TURN,
-        initialHeight: lerp(LANDING_EMBERS.minHeight, LANDING_EMBERS.maxHeight, nextRandom()),
-    }));
+    return Array.from({ length: LANDING_EMBERS.count }, () => {
+        const angle = nextRandom() * FULL_TURN;
+        const orbitRadius = Math.sqrt(nextRandom()) * LANDING_EMBERS.radius;
+        return {
+            orbitX: Math.cos(angle) * orbitRadius,
+            orbitZ: Math.sin(angle) * orbitRadius,
+            riseSpeed: LANDING_EMBERS.riseSpeed * (0.6 + nextRandom() * 0.8),
+            driftPhase: nextRandom() * FULL_TURN,
+            initialHeight: lerp(LANDING_EMBERS.minHeight, LANDING_EMBERS.maxHeight, nextRandom()),
+        };
+    });
 }
 
 const updateEmber: IUpdateParticle<IEmberParticle> = (
@@ -201,12 +205,7 @@ const updateEmber: IUpdateParticle<IEmberParticle> = (
         Math.sin(particle.driftPhase + elapsedSeconds * LANDING_EMBERS.driftSpeed) *
         LANDING_EMBERS.driftAmplitude;
 
-    positionAttribute.setXYZ(
-        index,
-        Math.cos(particle.angle) * particle.orbitRadius + sway,
-        height,
-        Math.sin(particle.angle) * particle.orbitRadius
-    );
+    positionAttribute.setXYZ(index, particle.orbitX + sway, height, particle.orbitZ);
 };
 
 function buildFireflies(): IFirefly[] {
