@@ -23,6 +23,7 @@ export interface ICombatEventMap {
         outcome: IHitOutcome;
         impact: ImpactTier;
         point: Vector3;
+        direction: Vector3;
     };
     parried: { attacker: ICombatant; defender: ICombatant };
     killed: { combatant: ICombatant; killer: ICombatant | null };
@@ -65,6 +66,7 @@ export function createHitEvent(attacker: ICombatant): ICombatEventMap["hitLanded
         outcome: { kind: "damaged", reaction: "none", damageDealt: 0 },
         impact: "light",
         point: new Vector3(),
+        direction: new Vector3(),
     };
 }
 
@@ -80,5 +82,7 @@ export function emitHitLanded(
     event.outcome = outcome;
     event.impact = impact;
     event.point.copy(point);
+    event.direction.subVectors(point, event.attacker.sceneObject.position).setY(0);
+    if (event.direction.lengthSq() > 1e-8) event.direction.normalize();
     events.emit("hitLanded", event);
 }

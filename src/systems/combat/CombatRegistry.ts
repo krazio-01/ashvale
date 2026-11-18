@@ -3,7 +3,7 @@ import { keysOf } from "@/lib/helpers";
 import type { ICombatant, Team } from "@/types/combat";
 
 export class CombatRegistry {
-    private static collectLivingWithin(
+    static collectLivingWithin(
         candidates: readonly ICombatant[],
         center: Vector3,
         radius: number,
@@ -24,9 +24,16 @@ export class CombatRegistry {
     }
 
     readonly detailCentre = new Vector3();
+    frameIndex = 0;
     private readonly combatants: ICombatant[] = [];
-    private teammates: Record<Team, ICombatant[]> = { player: [], enemy: [] };
-    private opponents: Record<Team, ICombatant[]> = { player: [], enemy: [] };
+    private readonly teammates: Record<Team, ICombatant[]> = { player: [], enemy: [] };
+    private readonly opponents: Record<Team, ICombatant[]> = { player: [], enemy: [] };
+    private readonly teams = keysOf(this.teammates);
+
+    beginFrame(centre: Vector3): void {
+        this.detailCentre.copy(centre);
+        this.frameIndex += 1;
+    }
 
     register(combatant: ICombatant): void {
         if (this.combatants.includes(combatant)) return;
@@ -53,9 +60,20 @@ export class CombatRegistry {
     }
 
     private rebuildTeamLists(): void {
-        for (const team of keysOf(this.teammates)) {
-            this.teammates[team] = this.combatants.filter((combatant) => combatant.team === team);
-            this.opponents[team] = this.combatants.filter((combatant) => combatant.team !== team);
+        const combatants = this.combatants;
+        for (let teamIndex = 0; teamIndex < this.teams.length; teamIndex += 1) {
+            const team = this.teams[teamIndex];
+            const teammates = this.teammates[team];
+            const opponents = this.opponents[team];
+            let teammateCount = 0;
+            let opponentCount = 0;
+            for (let index = 0; index < combatants.length; index += 1) {
+                const combatant = combatants[index];
+                if (combatant.team === team) teammates[teammateCount++] = combatant;
+                else opponents[opponentCount++] = combatant;
+            }
+            teammates.length = teammateCount;
+            opponents.length = opponentCount;
         }
     }
 }
