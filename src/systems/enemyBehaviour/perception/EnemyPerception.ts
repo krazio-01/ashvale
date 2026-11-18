@@ -42,10 +42,12 @@ class SightSensor {
         if (distance > SIGHT.farRange) return 0;
 
         const bearing = Math.abs(shortestAngleBetween(facingYaw, yawTowards(eye, target)));
-        const lookUp = Math.atan2(target.y - eye.y, Math.hypot(target.x - eye.x, target.z - eye.z));
-        const upward = 1 - smoothstep(SIGHT.upwardFade[0], SIGHT.upwardFade[1], lookUp);
+        const isNear = distance <= SIGHT.nearRange && bearing <= SIGHT.nearHalfAngle;
+        if (!isNear && bearing > SIGHT.farHalfAngle) return 0;
 
-        if (distance <= SIGHT.nearRange && bearing <= SIGHT.nearHalfAngle)
+        const lookUp = Math.atan2(target.y - eye.y, distance);
+        const upward = 1 - smoothstep(SIGHT.upwardFade[0], SIGHT.upwardFade[1], lookUp);
+        if (isNear)
             return (
                 upward *
                 lerp(
@@ -55,14 +57,11 @@ class SightSensor {
                 )
             );
 
-        if (bearing <= SIGHT.farHalfAngle)
-            return (
-                upward *
-                SIGHT.farStrength *
-                (1 - (distance - SIGHT.nearRange) / (SIGHT.farRange - SIGHT.nearRange))
-            );
-
-        return 0;
+        return (
+            upward *
+            SIGHT.farStrength *
+            (1 - (distance - SIGHT.nearRange) / (SIGHT.farRange - SIGHT.nearRange))
+        );
     }
 
     private static proximitySenseStrength(distance: number, visibility: number): number {
@@ -142,7 +141,10 @@ class HearingSensor {
     private hear(noise: ICombatEventMap["noise"]): void {
         if (noise.radius <= 0) return;
 
-        const loudness = 1 - this.listenerPosition.distanceTo(noise.position) / noise.radius;
+        const distanceSquared = this.listenerPosition.distanceToSquared(noise.position);
+        if (distanceSquared >= noise.radius * noise.radius) return;
+
+        const loudness = 1 - Math.sqrt(distanceSquared) / noise.radius;
         if (loudness <= this.loudest) return;
 
         this.loudest = loudness;
@@ -152,6 +154,8 @@ class HearingSensor {
 
 export class EnemyPerception {
     private static readonly scratchEye = new Vector3();
+
+    private static readonly ALARM_RADIUS_SQUARED = AWARENESS.alarmRadius ** 2;
 
     private static readonly scratchTargetPoint = new Vector3();
 
@@ -230,8 +234,11 @@ export class EnemyPerception {
     private hearAlarm(event: ICombatEventMap["alarmRaised"]): void {
         if (event.raiser === this.body || this.target.isDead) return;
 
-        const raiserDistance = this.body.position.distanceTo(event.raiser.sceneObject.position);
-        if (raiserDistance > AWARENESS.alarmRadius) return;
+        if (
+            this.body.position.distanceToSquared(event.raiser.sceneObject.position) >
+            EnemyPerception.ALARM_RADIUS_SQUARED
+        )
+            return;
 
         this.awareness.raiseAlarm(event.position, false);
     }

@@ -173,16 +173,13 @@ export abstract class Weapon<Spec extends IWeaponSpec = IWeaponSpec> {
     abstract getStrikeCapsule(segment: ICapsule): boolean;
 
     worldCapsule(pommel: Vector3, tip: Vector3): number {
-        this.model.updateWorldMatrix(true, false);
-        const matrix = this.model.matrixWorld;
-        this.axisPoint(this.pommelCoordinate, pommel).applyMatrix4(matrix);
-        this.axisPoint(this.tipCoordinate, tip).applyMatrix4(matrix);
-        return this.halfThickness * matrix.getMaxScaleOnAxis();
+        this.writeBladeEnds(pommel, tip);
+        return this.halfThickness * this.model.matrixWorld.getMaxScaleOnAxis();
     }
 
     getBladeSegment(pommel: Vector3, tip: Vector3): boolean {
         if (this.mountedOn !== "hand") return false;
-        this.worldCapsule(pommel, tip);
+        this.writeBladeEnds(pommel, tip);
         return true;
     }
 
@@ -200,6 +197,13 @@ export abstract class Weapon<Spec extends IWeaponSpec = IWeaponSpec> {
         out.set(0, 0, 0);
         out[this.axes.lengthAxis] = coordinate;
         return out;
+    }
+
+    private writeBladeEnds(pommel: Vector3, tip: Vector3): void {
+        this.model.updateWorldMatrix(true, false);
+        const matrix = this.model.matrixWorld;
+        this.axisPoint(this.pommelCoordinate, pommel).applyMatrix4(matrix);
+        this.axisPoint(this.tipCoordinate, tip).applyMatrix4(matrix);
     }
 
     private mountScale(boneScale: number): number {
