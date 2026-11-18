@@ -2,7 +2,7 @@
 import { useRef } from "react";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
 import { HUD } from "@/constants/ui";
-import { roundForCss, screenPositionTransform, hudWriter } from "@/lib/hud";
+import { roundForCss, hudWriter } from "@/lib/hud";
 import "./damageNumbers.scss";
 
 export const DamageNumbers = () => {
@@ -26,10 +26,7 @@ export const DamageNumbers = () => {
 
             hudWriter.text(element, number.value);
             hudWriter.data(element, "emphasis", number.emphasis);
-            hudWriter.transform(
-                element,
-                screenPositionTransform(number.screenX, number.screenY, "-50%, -50%")
-            );
+            hudWriter.position(element, number.screenX, number.screenY, "-50%, -50%");
         }
     });
 

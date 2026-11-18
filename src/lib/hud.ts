@@ -9,6 +9,10 @@ class HudWriter {
 
     private static readonly TEXT = Symbol("text");
 
+    private static readonly SCREEN_X = Symbol("screenX");
+
+    private static readonly SCREEN_Y = Symbol("screenY");
+
     private readonly written = new WeakMap<HTMLElement, Record<string | symbol, unknown>>();
 
     scale(element: HTMLElement | null, axis: "X" | "Y", value: number): void {
@@ -19,6 +23,14 @@ class HudWriter {
     transform(element: HTMLElement | null, value: string): void {
         if (element && this.hasChanged(element, HudWriter.TRANSFORM, value))
             element.style.transform = value;
+    }
+
+    position(element: HTMLElement | null, screenX: number, screenY: number, anchor: string): void {
+        if (!element) return;
+        const hasMovedX = this.hasChanged(element, HudWriter.SCREEN_X, screenX);
+        const hasMovedY = this.hasChanged(element, HudWriter.SCREEN_Y, screenY);
+        if (hasMovedX || hasMovedY)
+            this.transform(element, screenPositionTransform(screenX, screenY, anchor));
     }
 
     opacity(element: HTMLElement | null, value: number): void {
@@ -54,7 +66,7 @@ export function meterFillRatio(meter: IHudMeter): number {
 
 export const roundForCss = (value: number): number => roundTo(value, HUD.styleRoundingSteps);
 
-export function screenPositionTransform(screenX: number, screenY: number, anchor: string): string {
+function screenPositionTransform(screenX: number, screenY: number, anchor: string): string {
     return `translate3d(${(screenX * 100).toFixed(2)}vw, ${(screenY * 100).toFixed(2)}vh, 0) translate(${anchor})`;
 }
 

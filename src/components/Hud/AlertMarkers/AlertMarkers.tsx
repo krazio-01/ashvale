@@ -2,7 +2,7 @@
 import { useRef } from "react";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
 import { HUD } from "@/constants/ui";
-import { roundForCss, screenPositionTransform, hudWriter } from "@/lib/hud";
+import { roundForCss, hudWriter } from "@/lib/hud";
 import type { AlertMarkerKind } from "@/types/ui";
 import "./alertMarkers.scss";
 
@@ -27,10 +27,7 @@ export const AlertMarkers = () => {
             if (!kind) continue;
 
             hudWriter.text(glyphs.current[index], GLYPHS[kind]);
-            hudWriter.transform(
-                element,
-                screenPositionTransform(marker.screenX, marker.screenY, "-50%, -100%")
-            );
+            hudWriter.position(element, marker.screenX, marker.screenY, "-50%, -100%");
             hudWriter.scale(fills.current[index], "Y", roundForCss(marker.fill));
         }
     });
