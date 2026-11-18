@@ -1,6 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Group, IcosahedronGeometry, MeshBasicMaterial } from "three";
+import {
+    Camera,
+    Group,
+    IcosahedronGeometry,
+    InstancedMesh,
+    Matrix4,
+    MeshBasicMaterial,
+    Vector3,
+} from "three";
 import { useFrame } from "@react-three/fiber";
 import { createSeededRandom, FULL_TURN, lerp, randomOffset } from "@/lib/helpers";
 import { LANDING_CLOUDS } from "@/constants/ui";
@@ -9,6 +17,16 @@ interface ICloudPuff {
     y: number;
     z: number;
     scale: number;
+}
+
+interface ICloudField {
+    mesh: InstancedMesh<IcosahedronGeometry, MeshBasicMaterial>;
+    matrices: Float32Array;
+    depths: Float64Array;
+    order: number[];
+    shown: Int32Array;
+    byDepth: (first: number, second: number) => number;
+    forward: Vector3;
 }
 
 function buildPuffs(): ICloudPuff[] {
@@ -58,36 +76,88 @@ function buildPuffs(): ICloudPuff[] {
 const LandingClouds = () => {
     const groupRef = useRef<Group>(null);
     const [puffs] = useState(() => buildPuffs());
-    const [geometry] = useState(() => new IcosahedronGeometry(1, 0));
-    const [material] = useState(
-        () =>
-            new MeshBasicMaterial({
-                color: LANDING_CLOUDS.color,
-                transparent: true,
-                opacity: LANDING_CLOUDS.opacity,
-            })
+    const [field] = useState(() => buildCloudField(puffs));
+
+    useEffect(
+        () => () => {
+            field.mesh.geometry.dispose();
+            field.mesh.material.dispose();
+            field.mesh.dispose();
+        },
+        [field]
     );
 
-    useEffect(() => () => geometry.dispose(), [geometry]);
-    useEffect(() => () => material.dispose(), [material]);
-
-    useFrame((_, deltaSeconds) => {
-        groupRef.current!.rotation.y += LANDING_CLOUDS.driftSpeed * deltaSeconds;
+    useFrame(({ camera }, deltaSeconds) => {
+        const group = groupRef.current!;
+        group.rotation.y += LANDING_CLOUDS.driftSpeed * deltaSeconds;
+        reorderPuffs(field, puffs, group.rotation.y, camera);
     });
 
     return (
         <group ref={groupRef}>
-            {puffs.map((puff, index) => (
-                <mesh
-                    key={index}
-                    position={[puff.x, puff.y, puff.z]}
-                    scale={puff.scale}
-                    geometry={geometry}
-                    material={material}
-                />
-            ))}
+            <primitive object={field.mesh} />
         </group>
     );
 };
+
+function reorderPuffs(
+    field: ICloudField,
+    puffs: readonly ICloudPuff[],
+    yaw: number,
+    camera: Camera
+): void {
+    const cosine = Math.cos(yaw);
+    const sine = Math.sin(yaw);
+    const forward = field.forward.set(0, 0, -1).applyQuaternion(camera.quaternion);
+    const { position } = camera;
+    for (let index = 0; index < puffs.length; index += 1) {
+        const { x, y, z } = puffs[index];
+        field.depths[index] =
+            (x * cosine + z * sine - position.x) * forward.x +
+            (y - position.y) * forward.y +
+            (-x * sine + z * cosine - position.z) * forward.z;
+    }
+    field.order.sort(field.byDepth);
+    let changed = false;
+    for (let slot = 0; slot < field.order.length; slot += 1) {
+        if (field.shown[slot] === field.order[slot]) continue;
+        field.shown[slot] = field.order[slot];
+        field.mesh.instanceMatrix.array.set(
+            field.matrices.subarray(field.order[slot] * 16, field.order[slot] * 16 + 16),
+            slot * 16
+        );
+        changed = true;
+    }
+    if (changed) field.mesh.instanceMatrix.needsUpdate = true;
+}
+
+function buildCloudField(puffs: readonly ICloudPuff[]): ICloudField {
+    const mesh = new InstancedMesh(
+        new IcosahedronGeometry(1, 0),
+        new MeshBasicMaterial({
+            color: LANDING_CLOUDS.color,
+            transparent: true,
+            opacity: LANDING_CLOUDS.opacity,
+        }),
+        puffs.length
+    );
+    const matrices = new Float32Array(puffs.length * 16);
+    const matrix = new Matrix4();
+    for (const [index, puff] of puffs.entries()) {
+        matrix.makeScale(puff.scale, puff.scale, puff.scale).setPosition(puff.x, puff.y, puff.z);
+        matrix.toArray(matrices, index * 16);
+        mesh.setMatrixAt(index, matrix);
+    }
+    const depths = new Float64Array(puffs.length);
+    return {
+        mesh,
+        matrices,
+        depths,
+        order: puffs.map((_, index) => index),
+        shown: Int32Array.from(puffs, (_, index) => index),
+        byDepth: (first, second) => depths[second] - depths[first] || first - second,
+        forward: new Vector3(),
+    };
+}
 
 export default LandingClouds;
