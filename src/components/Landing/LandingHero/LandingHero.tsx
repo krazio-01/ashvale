@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import type { FormEvent } from "react";
 import { InlineLoader } from "generative-loaders";
 import { APP_TEXT, LANDING_TEXT } from "@/constants/strings";
@@ -28,22 +29,24 @@ const DiceIcon = () => (
 );
 
 const LandingHero = ({
-    repoInputValue,
-    onRepoInputChange,
     validationError,
     isInteractionLocked,
     isLoadingFeatured,
     onRepoSubmit,
     onQuickPlay,
 }: {
-    repoInputValue: string;
-    onRepoInputChange: (value: string) => void;
     validationError: string | null;
     isInteractionLocked: boolean;
     isLoadingFeatured: boolean;
-    onRepoSubmit: (event: FormEvent) => void;
+    onRepoSubmit: (rawInput: string) => void;
     onQuickPlay: () => void;
 }) => {
+    const [repoInputValue, setRepoInputValue] = useState("");
+    const handleSubmit = (event: FormEvent) => {
+        event.preventDefault();
+        onRepoSubmit(repoInputValue);
+    };
+
     return (
         <div className="landing-hero">
             <div className="landing-heading">
@@ -51,13 +54,13 @@ const LandingHero = ({
                 <p>{LANDING_TEXT.tagline}</p>
             </div>
 
-            <form className="landing-repo-form" onSubmit={onRepoSubmit}>
+            <form className="landing-repo-form" onSubmit={handleSubmit}>
                 <div className="landing-repo-field">
                     <span className="landing-repo-prefix">{LANDING_TEXT.repoPrefix}</span>
                     <input
                         type="text"
                         value={repoInputValue}
-                        onChange={(event) => onRepoInputChange(event.target.value)}
+                        onChange={(event) => setRepoInputValue(event.target.value)}
                         placeholder={LANDING_TEXT.repoPlaceholder}
                         disabled={isInteractionLocked}
                         aria-label={LANDING_TEXT.repoInputLabel}

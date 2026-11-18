@@ -1,7 +1,6 @@
 "use client";
 import type { IRepoReference } from "@/types/realm";
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
     LandingEmbers,
@@ -40,7 +39,6 @@ const LANDING_MANIFEST = withEnvironmentOverrides(resolveTheme(LANDING_LOOK), LA
 const Landing = () => {
     const router = useRouter();
     const { isPending: isLoadingFeatured, sendRequest } = useRequest();
-    const [repoInputValue, setRepoInputValue] = useState("");
     const [validationError, setValidationError] = useState<string | null>(null);
     const [pendingRealm, setPendingRealm] = useState<{ owner: string; name: string } | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -73,10 +71,8 @@ const Landing = () => {
         if (pendingRealm) router.push(`/realm/${pendingRealm.owner}/${pendingRealm.name}`);
     };
 
-    const handleRepoSubmit = (event: FormEvent) => {
-        event.preventDefault();
-
-        const parsedRepo = parseRepoInput(repoInputValue);
+    const handleRepoSubmit = (rawInput: string) => {
+        const parsedRepo = parseRepoInput(rawInput);
         if (!parsedRepo) {
             setValidationError(LANDING_TEXT.invalidRepo);
             return;
@@ -199,8 +195,6 @@ const Landing = () => {
 
             <div className="landing-overlay">
                 <LandingHero
-                    repoInputValue={repoInputValue}
-                    onRepoInputChange={setRepoInputValue}
                     validationError={validationError}
                     isInteractionLocked={isInteractionLocked}
                     isLoadingFeatured={isLoadingFeatured}
