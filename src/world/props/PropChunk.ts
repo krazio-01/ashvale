@@ -1,38 +1,96 @@
-import RAPIER from "@dimforge/rapier3d-compat";
-import { createFixedBody } from "@/systems/physics/RapierWorld";
+import { createStaticColliders, templateShapeCollider } from "@/systems/physics/RapierWorld";
 import type { RigidBody, World as PhysicsWorld } from "@dimforge/rapier3d-compat";
-import { Camera, Group, InstancedMesh, Object3D, Vector3 } from "three";
-import type { IPropGroup, IModelTemplate, IWorldContext, IWorldEntity } from "@/types/world";
-import { FOLIAGE_LAYER } from "@/constants/world";
-import { PROP_SCATTER, PROP_TRANSFORM_STRIDE, PROP_LAYER_RULES } from "@/constants/placement";
-import {
-    createSeededRandom,
-    hashString,
-    lerp,
-    freezeTransform,
-    yawQuaternion,
-} from "@/lib/helpers";
+import { Camera, Group } from "three";
+import type { IModelTemplate, IPropGroup, IWorldContext, IWorldEntity } from "@/types/world";
+import type { StaticCollider } from "@/types/physics";
+import type { IGameSettings } from "@/types/ui";
+import { AssetLibrary } from "@/world/assets/AssetLibrary";
+import { store } from "@/store/store";
+import { worldTierOf } from "@/store/settingsSlice";
+import { PROP_SCATTER, PROP_LAYER_RULES, PROP_TRANSFORM_STRIDE } from "@/constants/placement";
+import { createSeededRandom, hashString, lerp, freezeTransform } from "@/lib/helpers";
+import { IPoolRange, InstancePool } from "@/world/props/InstancePool";
+
+type ChunkDetail = "near" | "far" | "hidden";
+
+interface IFootprintBounds {
+    minimumX: number;
+    maximumX: number;
+    minimumZ: number;
+    maximumZ: number;
+}
 
 export class PropChunk implements IWorldEntity {
-    private static readonly instanceTransform = new Object3D();
+    private static farTreeSettings: IGameSettings | null = null;
 
-    private static readonly cameraGroundPosition = new Vector3();
+    private static farTreeDistance = 0;
 
-    private static buildInstanceMatrices(group: IPropGroup): Float32Array {
-        const matrices = new Float32Array(group.instanceCount * 16);
+    private static placeInstances(
+        group: IPropGroup,
+        template: IModelTemplate | null,
+        colliders: StaticCollider[],
+        footprint: IFootprintBounds
+    ): Float32Array {
+        const { transforms, instanceCount, footprintRadius } = group;
+        const matrices = new Float32Array(template ? instanceCount * 16 : 0);
+        const colliderShape = group.hasCollider ? group.colliderShape : null;
+        const trunkHeight = template?.trunk?.height ?? template?.height ?? 0;
+        const trunkRadius = Math.min(template?.trunk?.radius ?? footprintRadius, footprintRadius);
 
-        for (let instance = 0; instance < group.instanceCount; instance += 1) {
+        for (let instance = 0; instance < instanceCount; instance += 1) {
             const offset = instance * PROP_TRANSFORM_STRIDE;
+            const x = transforms[offset];
+            const y = transforms[offset + 1];
+            const z = transforms[offset + 2];
+            const yaw = transforms[offset + 3];
+            const scale = transforms[offset + 4];
+            const radius = footprintRadius * scale;
+            if (x - radius < footprint.minimumX) footprint.minimumX = x - radius;
+            if (x + radius > footprint.maximumX) footprint.maximumX = x + radius;
+            if (z - radius < footprint.minimumZ) footprint.minimumZ = z - radius;
+            if (z + radius > footprint.maximumZ) footprint.maximumZ = z + radius;
+            if (!template) continue;
 
-            PropChunk.instanceTransform.position.set(
-                group.transforms[offset],
-                group.transforms[offset + 1],
-                group.transforms[offset + 2]
-            );
-            PropChunk.instanceTransform.rotation.y = group.transforms[offset + 3];
-            PropChunk.instanceTransform.scale.setScalar(group.transforms[offset + 4]);
-            PropChunk.instanceTransform.updateMatrix();
-            PropChunk.instanceTransform.matrix.toArray(matrices, instance * 16);
+            const halfSine = Math.sin(yaw / 2);
+            const doubleSine = halfSine + halfSine;
+            const turn = Math.cos(yaw / 2) * doubleSine;
+            const diagonal = (1 - halfSine * doubleSine) * scale;
+            const element = instance * 16;
+            matrices[element] = diagonal;
+            matrices[element + 2] = -turn * scale;
+            matrices[element + 5] = scale;
+            matrices[element + 8] = turn * scale;
+            matrices[element + 10] = diagonal;
+            matrices[element + 12] = x;
+            matrices[element + 13] = y;
+            matrices[element + 14] = z;
+            matrices[element + 15] = 1;
+
+            if (colliderShape === null) continue;
+            if (colliderShape !== "cylinder") {
+                const collider = templateShapeCollider(
+                    colliderShape,
+                    template,
+                    [x, y, z],
+                    yaw,
+                    [scale, scale, scale],
+                    false
+                );
+                if (collider) colliders.push(collider);
+                continue;
+            }
+
+            const halfHeight = (trunkHeight * scale) / 2;
+            const cylinderRadius = trunkRadius * scale;
+            if (!(halfHeight > 0) || !(cylinderRadius > 0)) continue;
+
+            colliders.push({
+                kind: "cylinder",
+                halfHeight,
+                radius: cylinderRadius,
+                at: [x, y + halfHeight, z],
+                wallRunnable: false,
+            });
         }
 
         return matrices;
@@ -42,168 +100,155 @@ export class PropChunk implements IWorldEntity {
 
     private readonly physicsWorld: PhysicsWorld;
     private readonly camera: Camera;
-    private readonly instancedMeshes: InstancedMesh[] = [];
-    private readonly rigidBody: RigidBody;
+    private readonly rigidBody: RigidBody | null;
+    private readonly nearRanges: IPoolRange[] = [];
+    private readonly farRanges: IPoolRange[] = [];
+    private readonly smallRanges: IPoolRange[] = [];
+    private readonly treelineRanges: IPoolRange[] = [];
 
+    private detail: ChunkDetail = "hidden";
+    private showsSmall = false;
     private footprintCenterX = 0;
     private footprintCenterZ = 0;
-    private activationDistanceSquared = Infinity;
-    private deactivationDistanceSquared = Infinity;
+    private footprintReach = 0;
+    private nearDistance = Infinity;
+    private readonly nearEnterSquared: number;
+    private readonly nearKeepSquared: number;
+    private readonly smallEnterSquared: number;
+    private readonly smallKeepSquared: number;
 
-    constructor(context: IWorldContext, camera: Camera, groups: IPropGroup[]) {
+    constructor(
+        context: IWorldContext,
+        camera: Camera,
+        groups: IPropGroup[],
+        private readonly nearPool: InstancePool,
+        private readonly farPool: InstancePool
+    ) {
         this.camera = camera;
         this.physicsWorld = context.physicsWorld;
-        this.rigidBody = createFixedBody(context.physicsWorld);
+        const colliders: StaticCollider[] = [];
+        const footprint: IFootprintBounds = {
+            minimumX: Infinity,
+            maximumX: -Infinity,
+            minimumZ: Infinity,
+            maximumZ: -Infinity,
+        };
 
         for (const group of groups) {
             if (group.instanceCount === 0) continue;
 
             const template = context.assetLibrary.getTemplate(group.modelPath);
+            const matrices = PropChunk.placeInstances(group, template, colliders, footprint);
             if (!template) continue;
 
-            this.addInstancedMeshes(group, template);
-            if (group.hasCollider) this.addColliders(group, template);
+            if (group.isSmall && !group.isTreeline) {
+                this.smallRanges.push(nearPool.register(template, matrices, false));
+                continue;
+            }
+
+            const farPath = AssetLibrary.entryOf(group.modelPath)?.far;
+            const farTemplate = farPath ? context.assetLibrary.getTemplate(farPath) : null;
+            if (group.isTreeline)
+                this.treelineRanges.push(
+                    farPool.register(farTemplate ?? template, matrices, false)
+                );
+            else {
+                this.nearRanges.push(
+                    nearPool.register(template, matrices, PROP_LAYER_RULES[group.layer].castsShadow)
+                );
+                if (farTemplate)
+                    this.farRanges.push(farPool.register(farTemplate, matrices, false));
+            }
         }
 
+        this.rigidBody = colliders.length
+            ? createStaticColliders(this.physicsWorld, colliders)
+            : null;
         freezeTransform(this.sceneObject);
-        for (const instancedMesh of this.instancedMeshes)
-            instancedMesh.matrixWorldAutoUpdate = false;
 
-        this.measureFootprint(groups);
-        this.sceneObject.visible = false;
+        this.settleFootprint(footprint);
+        const { deactivationMargin, smallProps } = PROP_SCATTER;
+        const nearKeep = this.nearDistance + deactivationMargin;
+        const smallEnter = smallProps.viewDistance + this.footprintReach;
+        const smallKeep = smallEnter + deactivationMargin;
+        this.nearEnterSquared = this.nearDistance * this.nearDistance;
+        this.nearKeepSquared = nearKeep * nearKeep;
+        this.smallEnterSquared = smallEnter * smallEnter;
+        this.smallKeepSquared = smallKeep * smallKeep;
         this.update();
     }
 
     update(): void {
-        this.camera.getWorldPosition(PropChunk.cameraGroundPosition);
-
-        const offsetX = PropChunk.cameraGroundPosition.x - this.footprintCenterX;
-        const offsetZ = PropChunk.cameraGroundPosition.z - this.footprintCenterZ;
+        const cameraElements = this.camera.matrixWorld.elements;
+        const offsetX = cameraElements[12] - this.footprintCenterX;
+        const offsetZ = cameraElements[14] - this.footprintCenterZ;
         const distanceSquared = offsetX * offsetX + offsetZ * offsetZ;
 
-        this.sceneObject.visible = this.sceneObject.visible
-            ? distanceSquared <= this.deactivationDistanceSquared
-            : distanceSquared <= this.activationDistanceSquared;
+        let detail: ChunkDetail = "near";
+        if (
+            distanceSquared >
+            (this.detail === "near" ? this.nearKeepSquared : this.nearEnterSquared)
+        ) {
+            detail = this.distantDetail(distanceSquared);
+        }
+        const showsSmall =
+            detail === "near" &&
+            distanceSquared <= (this.showsSmall ? this.smallKeepSquared : this.smallEnterSquared);
+        if (detail !== this.detail || showsSmall !== this.showsSmall)
+            this.showDetail(detail, showsSmall);
     }
 
     dispose(): void {
-        this.physicsWorld.removeRigidBody(this.rigidBody);
-
-        for (const instancedMesh of this.instancedMeshes) instancedMesh.dispose();
-
-        this.instancedMeshes.length = 0;
-        this.sceneObject.clear();
+        if (this.rigidBody) this.physicsWorld.removeRigidBody(this.rigidBody);
+        this.showDetail("hidden", false);
     }
 
-    private addInstancedMeshes(group: IPropGroup, template: IModelTemplate): void {
-        const matrices = PropChunk.buildInstanceMatrices(group);
-        const castsShadow = PROP_LAYER_RULES[group.layer].castsShadow;
-
-        for (const part of template.parts) {
-            const instancedMesh = new InstancedMesh(
-                part.geometry,
-                part.material,
-                group.instanceCount
-            );
-            instancedMesh.castShadow = castsShadow;
-            instancedMesh.receiveShadow = true;
-            instancedMesh.matrixAutoUpdate = false;
-            if (part.isFoliage) instancedMesh.layers.enable(FOLIAGE_LAYER);
-
-            instancedMesh.instanceMatrix.array.set(matrices);
-            instancedMesh.instanceMatrix.needsUpdate = true;
-            instancedMesh.computeBoundingSphere();
-
-            this.instancedMeshes.push(instancedMesh);
-            this.sceneObject.add(instancedMesh);
+    private distantDetail(distanceSquared: number): ChunkDetail {
+        if (!this.farRanges.length && !this.treelineRanges.length) return "hidden";
+        const settings = store.getState().settings.values;
+        if (settings !== PropChunk.farTreeSettings) {
+            PropChunk.farTreeSettings = settings;
+            PropChunk.farTreeDistance = worldTierOf(settings).farTreeDistance;
         }
+        const farReach =
+            PropChunk.farTreeDistance +
+            this.footprintReach +
+            (this.detail === "hidden" ? 0 : PROP_SCATTER.deactivationMargin);
+        return distanceSquared <= farReach * farReach ? "far" : "hidden";
     }
 
-    private addColliders(group: IPropGroup, template: IModelTemplate): void {
-        const isCuboid = group.colliderShape === "cuboid";
-
-        for (let instance = 0; instance < group.instanceCount; instance += 1) {
-            const offset = instance * PROP_TRANSFORM_STRIDE;
-            const scale = group.transforms[offset + 4];
-            const x = group.transforms[offset];
-            const y = group.transforms[offset + 1];
-            const z = group.transforms[offset + 2];
-            const yaw = group.transforms[offset + 3];
-
-            if (isCuboid) {
-                const hx = template.halfExtents.x * scale;
-                const hy = template.halfExtents.y * scale;
-                const hz = template.halfExtents.z * scale;
-                if (!(hx > 0) || !(hy > 0) || !(hz > 0)) continue;
-
-                const cosYaw = Math.cos(yaw);
-                const sinYaw = Math.sin(yaw);
-                const offsetX =
-                    (template.centerOffset.x * cosYaw + template.centerOffset.z * sinYaw) * scale;
-                const offsetY = template.centerOffset.y * scale;
-                const offsetZ =
-                    (-template.centerOffset.x * sinYaw + template.centerOffset.z * cosYaw) * scale;
-
-                const colliderDesc = RAPIER.ColliderDesc.cuboid(hx, hy, hz)
-                    .setTranslation(x + offsetX, y + offsetY, z + offsetZ)
-                    .setRotation(yawQuaternion(yaw));
-
-                this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
-            } else {
-                const halfHeight = (template.height * scale) / 2;
-                const radius = group.footprintRadius * scale;
-                if (!(halfHeight > 0) || !(radius > 0)) continue;
-
-                const colliderDesc = RAPIER.ColliderDesc.cylinder(
-                    halfHeight,
-                    radius
-                ).setTranslation(x, y + halfHeight, z);
-
-                this.physicsWorld.createCollider(colliderDesc, this.rigidBody);
-            }
-        }
+    private showDetail(detail: ChunkDetail, showsSmall: boolean): void {
+        const previous = this.detail;
+        if (showsSmall !== this.showsSmall)
+            for (const range of this.smallRanges) this.nearPool.show(range, showsSmall);
+        if ((detail === "near") !== (previous === "near"))
+            for (const range of this.nearRanges) this.nearPool.show(range, detail === "near");
+        if ((detail === "far") !== (previous === "far"))
+            for (const range of this.farRanges) this.farPool.show(range, detail === "far");
+        if ((detail === "hidden") !== (previous === "hidden"))
+            for (const range of this.treelineRanges) this.farPool.show(range, detail !== "hidden");
+        this.detail = detail;
+        this.showsSmall = showsSmall;
     }
 
-    private measureFootprint(groups: IPropGroup[]): void {
-        let minimumX = Infinity;
-        let maximumX = -Infinity;
-        let minimumZ = Infinity;
-        let maximumZ = -Infinity;
-
-        for (const group of groups) {
-            const transforms = group.transforms;
-            const count = group.instanceCount;
-            for (let i = 0; i < count; i++) {
-                const offset = i * PROP_TRANSFORM_STRIDE;
-                const x = transforms[offset];
-                const z = transforms[offset + 2];
-                const scale = transforms[offset + 4];
-                const radius = group.footprintRadius * scale;
-
-                minimumX = Math.min(minimumX, x - radius);
-                maximumX = Math.max(maximumX, x + radius);
-                minimumZ = Math.min(minimumZ, z - radius);
-                maximumZ = Math.max(maximumZ, z + radius);
-            }
-        }
-
+    private settleFootprint({ minimumX, maximumX, minimumZ, maximumZ }: IFootprintBounds): void {
         if (minimumX > maximumX) return;
 
         this.footprintCenterX = (minimumX + maximumX) / 2;
         this.footprintCenterZ = (minimumZ + maximumZ) / 2;
+        this.footprintReach = Math.hypot(maximumX - minimumX, maximumZ - minimumZ) / 2;
 
-        const footprintReach = Math.hypot(maximumX - minimumX, maximumZ - minimumZ) / 2;
         const jitterSeed = hashString(
             `${this.footprintCenterX.toFixed(1)},${this.footprintCenterZ.toFixed(1)}`
         );
         const jitterRatio = createSeededRandom(jitterSeed)();
-        const jitteredRadius =
+        this.nearDistance =
             PROP_SCATTER.activationRadius *
-            lerp(1 - PROP_SCATTER.activationJitter, 1 + PROP_SCATTER.activationJitter, jitterRatio);
-        const activationDistance = jitteredRadius + footprintReach;
-        const deactivationDistance = activationDistance + PROP_SCATTER.deactivationMargin;
-
-        this.activationDistanceSquared = activationDistance * activationDistance;
-        this.deactivationDistanceSquared = deactivationDistance * deactivationDistance;
+                lerp(
+                    1 - PROP_SCATTER.activationJitter,
+                    1 + PROP_SCATTER.activationJitter,
+                    jitterRatio
+                ) +
+            this.footprintReach;
     }
 }
