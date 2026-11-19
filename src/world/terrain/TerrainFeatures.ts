@@ -1,94 +1,112 @@
-import RAPIER from "@dimforge/rapier3d-compat";
-import { createFixedBody } from "@/systems/physics/RapierWorld";
+import { createStaticColliders } from "@/systems/physics/RapierWorld";
 import type { RigidBody } from "@dimforge/rapier3d-compat";
+import { Object3D, type Vector3Tuple } from "three";
+import type { IEdgeStrip, IWorldContext, IWorldEntity } from "@/types/world";
+import type { LandMap } from "@/world/terrain/LandMap";
+import type { ITriangleMesh } from "@/types/physics";
+import { BORDER_BARRIER } from "@/constants/world";
+import { JUMP_CLIMB, PLAYER, WADING } from "@/constants/player";
+import { clamp, freezeTransform, lerp } from "@/lib/helpers";
 import {
-    BoxGeometry,
-    Color,
-    Group,
-    InstancedMesh,
-    MeshLambertMaterial,
-    Object3D,
-    type Vector3Tuple,
-} from "three";
-import type { IWorldContext, IWorldEntity } from "@/types/world";
-import {
-    corridorStepFaceDistance,
-    type TerrainSampleGrid,
+    edgeDropDepthAt,
+    edgeDropRunOf,
+    edgeDropWeightAt,
 } from "@/world/terrain/TerrainGeneration";
-import { CorridorClimbStyle, type ICorridorPath } from "@/types/world";
-import { TERRAIN, WORLD, WORLD_EDGE } from "@/constants/world";
-import { LEDGE_STEPS } from "@/constants/placement";
-import { PLAYER } from "@/constants/player";
-import {
-    clamp,
-    createSeededRandom,
-    FULL_TURN,
-    randomOffset,
-    freezeTransform,
-    yawQuaternion,
-    segmentFrame,
-} from "@/lib/helpers";
-
-interface IFenceMesh {
-    positions: Float32Array;
-    indices: Uint32Array;
-}
-
-interface IClimbAbility {
-    targetRise: number;
-    safeMaxRise: number;
-}
-
-interface ITread {
-    centerX: number;
-    centerZ: number;
-    halfWidth: number;
-    halfDepth: number;
-    baseElevation: number;
-    topElevation: number;
-    rotationY: number;
-}
 
 export class TerrainEdgeBarrier implements IWorldEntity {
-    private static buildFenceAlongFootprint(sampleGrid: TerrainSampleGrid): IFenceMesh {
-        const standingReach =
-            WORLD_EDGE.flatBorderWidth + WORLD_EDGE.lipWidth * WORLD_EDGE.barrierLipRatio;
-        const pointsPerSide = sampleGrid.pointsPerSide;
-        const halfCell = sampleGrid.cellSize / 2;
+    private static readonly SEGMENT_EDGES_BY_CASE: readonly (readonly number[])[] = [
+        [],
+        [3, 0],
+        [0, 1],
+        [3, 1],
+        [1, 2],
+        [3, 0, 1, 2],
+        [0, 2],
+        [3, 2],
+        [2, 3],
+        [0, 2],
+        [0, 1, 2, 3],
+        [1, 2],
+        [1, 3],
+        [0, 1],
+        [0, 3],
+        [],
+    ];
+
+    private static readonly CORNER_STEPS: readonly (readonly [number, number])[] = [
+        [0, 0],
+        [0, 1],
+        [1, 1],
+        [1, 0],
+    ];
+
+    private static buildFenceAlongWalkableLimit(
+        landMap: LandMap,
+        guardedStrips: readonly IEdgeStrip[]
+    ): ITriangleMesh {
+        const { pointsPerSide, cellSize, originX, originZ } = landMap;
+        const margins = new Float32Array(pointsPerSide * pointsPerSide);
+        const { dropHeight } = landMap.border;
+        const dropRun = edgeDropRunOf(landMap.border);
+
+        for (let index = 0; index < margins.length; index += 1) {
+            const footprintMargin =
+                landMap.fenceReach - landMap.valueAtPoint("footprintDistance", index);
+            const waterMargin =
+                WADING.maxDepth -
+                landMap.valueAtPoint("waterDepth", index) +
+                PLAYER.radius * landMap.valueAtPoint("steepness", index);
+            let margin = Math.min(footprintMargin, waterMargin);
+            const localX = originX + (index % pointsPerSide) * cellSize;
+            const localZ = originZ + Math.floor(index / pointsPerSide) * cellSize;
+            for (const strip of guardedStrips)
+                margin = Math.min(
+                    margin,
+                    JUMP_CLIMB.stepRise -
+                        edgeDropWeightAt(strip, localX, localZ) *
+                            edgeDropDepthAt(strip, localX, localZ, dropHeight, dropRun)
+                );
+            margins[index] = margin;
+        }
 
         const positionValues: number[] = [];
         const indexValues: number[] = [];
+        const edgeCrossing = (row: number, column: number, edge: number): Vector3Tuple => {
+            const [fromRow, fromColumn] = TerrainEdgeBarrier.CORNER_STEPS[edge];
+            const [toRow, toColumn] = TerrainEdgeBarrier.CORNER_STEPS[(edge + 1) % 4];
+            const fromIndex = (row + fromRow) * pointsPerSide + column + fromColumn;
+            const toIndex = (row + toRow) * pointsPerSide + column + toColumn;
+            const ratio = clamp(margins[fromIndex] / (margins[fromIndex] - margins[toIndex]), 0, 1);
 
-        const isStandingGround = (row: number, column: number): boolean =>
-            sampleGrid.valueAtPoint("footprintDistance", row * pointsPerSide + column) <=
-            standingReach;
-
-        const addPanel = (
-            centerX: number,
-            centerZ: number,
-            spanX: number,
-            spanZ: number,
-            elevation: number
-        ): void => {
+            return [
+                originX + (column + lerp(fromColumn, toColumn, ratio)) * cellSize,
+                lerp(
+                    landMap.valueAtPoint("elevation", fromIndex),
+                    landMap.valueAtPoint("elevation", toIndex),
+                    ratio
+                ),
+                originZ + (row + lerp(fromRow, toRow, ratio)) * cellSize,
+            ];
+        };
+        const addWall = (
+            [startX, startY, startZ]: Vector3Tuple,
+            [endX, endY, endZ]: Vector3Tuple
+        ) => {
             const firstVertex = positionValues.length / 3;
-            const bottom = elevation - WORLD_EDGE.barrierSink;
-            const top = elevation + WORLD_EDGE.barrierHeight;
-
             positionValues.push(
-                centerX - spanX,
-                bottom,
-                centerZ - spanZ,
-                centerX + spanX,
-                bottom,
-                centerZ + spanZ,
-                centerX - spanX,
-                top,
-                centerZ - spanZ,
-                centerX + spanX,
-                top,
-                centerZ + spanZ
+                startX,
+                startY - BORDER_BARRIER.sink,
+                startZ,
+                endX,
+                endY - BORDER_BARRIER.sink,
+                endZ,
+                startX,
+                startY + BORDER_BARRIER.height,
+                startZ,
+                endX,
+                endY + BORDER_BARRIER.height,
+                endZ
             );
-
             indexValues.push(
                 firstVertex,
                 firstVertex + 1,
@@ -99,29 +117,22 @@ export class TerrainEdgeBarrier implements IWorldEntity {
             );
         };
 
-        for (let row = 0; row < pointsPerSide; row += 1) {
-            const localZ = sampleGrid.originZ + row * sampleGrid.cellSize;
+        for (let row = 0; row + 1 < pointsPerSide; row += 1) {
+            for (let column = 0; column + 1 < pointsPerSide; column += 1) {
+                const nearLeft = row * pointsPerSide + column;
+                const farLeft = nearLeft + pointsPerSide;
+                const standingCase =
+                    (margins[nearLeft] >= 0 ? 1 : 0) |
+                    (margins[nearLeft + 1] >= 0 ? 2 : 0) |
+                    (margins[farLeft + 1] >= 0 ? 4 : 0) |
+                    (margins[farLeft] >= 0 ? 8 : 0);
 
-            for (let column = 0; column < pointsPerSide; column += 1) {
-                const localX = sampleGrid.originX + column * sampleGrid.cellSize;
-                if (!isStandingGround(row, column)) continue;
-
-                const elevation = sampleGrid.valueAtPoint(
-                    "elevation",
-                    row * pointsPerSide + column
-                );
-
-                if (column + 1 >= pointsPerSide || !isStandingGround(row, column + 1))
-                    addPanel(localX + halfCell, localZ, 0, halfCell, elevation);
-
-                if (column === 0 || !isStandingGround(row, column - 1))
-                    addPanel(localX - halfCell, localZ, 0, -halfCell, elevation);
-
-                if (row + 1 >= pointsPerSide || !isStandingGround(row + 1, column))
-                    addPanel(localX, localZ + halfCell, -halfCell, 0, elevation);
-
-                if (row === 0 || !isStandingGround(row - 1, column))
-                    addPanel(localX, localZ - halfCell, halfCell, 0, elevation);
+                const edges = TerrainEdgeBarrier.SEGMENT_EDGES_BY_CASE[standingCase];
+                for (let pair = 0; pair < edges.length; pair += 2)
+                    addWall(
+                        edgeCrossing(row, column, edges[pair]),
+                        edgeCrossing(row, column, edges[pair + 1])
+                    );
             }
         }
 
@@ -136,244 +147,29 @@ export class TerrainEdgeBarrier implements IWorldEntity {
     private readonly context: IWorldContext;
     private readonly rigidBody: RigidBody;
 
-    constructor(context: IWorldContext, center: Vector3Tuple, sampleGrid: TerrainSampleGrid) {
+    constructor(
+        context: IWorldContext,
+        center: Vector3Tuple,
+        landMap: LandMap,
+        edgeStrips: readonly IEdgeStrip[]
+    ) {
         this.context = context;
 
-        const fence = TerrainEdgeBarrier.buildFenceAlongFootprint(sampleGrid);
-        this.rigidBody = createFixedBody(context.physicsWorld, center);
-
-        if (fence.positions.length > 0)
-            context.physicsWorld.createCollider(
-                RAPIER.ColliderDesc.trimesh(fence.positions, fence.indices),
-                this.rigidBody
-            );
-    }
-
-    update(): void {}
-
-    dispose(): void {
-        this.context.physicsWorld.removeRigidBody(this.rigidBody);
-    }
-}
-
-export class TerrainLedges implements IWorldEntity {
-    private static resolveStepCount(
-        climbHeight: number,
-        spanLength: number,
-        averageRockHalfWidth: number,
-        climb: IClimbAbility
-    ): number {
-        const naturalStepCount = Math.ceil(climbHeight / climb.targetRise);
-        const spacing = averageRockHalfWidth * 2;
-        const maxAvailableSpan = spanLength * LEDGE_STEPS.maxAlongCorridorRatio;
-        const spanLimitedStepCount = Math.max(1, Math.floor(maxAvailableSpan / spacing));
-        const minSafeStepCount = Math.ceil(climbHeight / climb.safeMaxRise);
-
-        return Math.max(minSafeStepCount, Math.min(naturalStepCount, spanLimitedStepCount));
-    }
-
-    private static lateralOffsetFor(
-        style: CorridorClimbStyle,
-        step: number,
-        lateralReach: number,
-        hiddenSide: number,
-        nextRandom: () => number
-    ): number {
-        const scatter = randomOffset(nextRandom, lateralReach / 2);
-
-        if (style === CorridorClimbStyle.Hidden)
-            return hiddenSide * lateralReach * 0.6 + scatter * 0.5;
-        if (style === CorridorClimbStyle.Zigzag)
-            return (step % 2 === 0 ? 1 : -1) * lateralReach * 0.6 + scatter * 0.5;
-
-        return scatter;
-    }
-
-    private static measureClimbAbility(): IClimbAbility {
-        const jumpApex = (PLAYER.jumpForce * PLAYER.jumpForce) / (2 * Math.abs(WORLD.gravity));
-
-        return {
-            targetRise: jumpApex * LEDGE_STEPS.stepRiseOfJumpApex,
-            safeMaxRise: jumpApex * LEDGE_STEPS.safeRiseOfJumpApex,
-        };
-    }
-
-    private static addStaircaseForCorridor(
-        treads: ITread[],
-        corridor: ICorridorPath,
-        climb: IClimbAbility
-    ): void {
-        if (corridor.climbStyle === CorridorClimbStyle.Ramp) return;
-
-        const climbHeight = Math.abs(corridor.toElevation - corridor.fromElevation);
-        if (climbHeight <= climb.targetRise) return;
-
-        const {
-            alongX,
-            alongZ,
-            acrossX,
-            acrossZ,
-            length: spanLength,
-        } = segmentFrame(corridor.fromX, corridor.fromZ, corridor.toX, corridor.toZ);
-        if (spanLength <= 0) return;
-
-        const faceDistance = corridorStepFaceDistance(spanLength);
-        const isClimbing = corridor.toElevation > corridor.fromElevation;
-        const towardLowerGround = isClimbing ? -1 : 1;
-        const lowerElevation = Math.min(corridor.fromElevation, corridor.toElevation);
-        const higherElevation = Math.max(corridor.fromElevation, corridor.toElevation);
-
-        const nextRandom = createSeededRandom(Math.floor(corridor.lateralSeed * 1_000_003));
-        const averageRockHalfWidth = corridor.halfWidth * LEDGE_STEPS.rockWidthOfCorridorHalfWidth;
-        const lateralReach = corridor.halfWidth * LEDGE_STEPS.lateralSpreadOfCorridorHalfWidth;
-        const hiddenSide = corridor.lateralSeed < 0.5 ? -1 : 1;
-
-        const stepCount = TerrainLedges.resolveStepCount(
-            climbHeight,
-            spanLength,
-            averageRockHalfWidth,
-            climb
+        const fence = TerrainEdgeBarrier.buildFenceAlongWalkableLimit(
+            landMap,
+            edgeStrips.filter((strip) => strip.isGuarded)
         );
-        const perStepSpacing = Math.min(
-            averageRockHalfWidth * 2,
-            (spanLength * LEDGE_STEPS.maxAlongCorridorRatio) / stepCount
+        this.rigidBody = createStaticColliders(
+            context.physicsWorld,
+            fence.positions.length > 0
+                ? [{ kind: "trimesh", fixesInternalEdges: true, ...fence, wallRunnable: false }]
+                : [],
+            center
         );
-        const stepRise = climbHeight / stepCount;
-
-        for (let step = 0; step < stepCount; step += 1) {
-            const targetTop = Math.min(lowerElevation + stepRise * (step + 1), higherElevation);
-
-            for (let rock = 0; rock < LEDGE_STEPS.rocksPerStep; rock += 1) {
-                const halfWidth =
-                    averageRockHalfWidth *
-                    (1 + randomOffset(nextRandom, LEDGE_STEPS.rockWidthJitter / 2));
-
-                const lateralOffset = TerrainLedges.lateralOffsetFor(
-                    corridor.climbStyle,
-                    step,
-                    lateralReach,
-                    hiddenSide,
-                    nextRandom
-                );
-
-                const alongJitter =
-                    randomOffset(nextRandom, halfWidth / 2) * LEDGE_STEPS.alongSpreadOfRockWidth;
-                const distanceFromFace =
-                    TERRAIN.corridorStepFaceWidth / 2 +
-                    (stepCount - step) * perStepSpacing +
-                    alongJitter;
-
-                const distanceAlongSpan = clamp(
-                    faceDistance + towardLowerGround * distanceFromFace,
-                    averageRockHalfWidth,
-                    Math.max(averageRockHalfWidth, spanLength - averageRockHalfWidth)
-                );
-                const centerX =
-                    corridor.fromX + alongX * distanceAlongSpan + acrossX * lateralOffset;
-                const centerZ =
-                    corridor.fromZ + alongZ * distanceAlongSpan + acrossZ * lateralOffset;
-
-                const topElevation = Math.min(
-                    targetTop + randomOffset(nextRandom, stepRise / 2) * LEDGE_STEPS.riseJitter,
-                    higherElevation
-                );
-
-                treads.push({
-                    centerX,
-                    centerZ,
-                    halfWidth,
-                    halfDepth: halfWidth * (0.7 + nextRandom() * 0.6),
-                    baseElevation: topElevation - LEDGE_STEPS.buriedDepth,
-                    topElevation,
-                    rotationY: nextRandom() * FULL_TURN,
-                });
-            }
-        }
-    }
-
-    private static readonly treadTransform = new Object3D();
-
-    private static planCliffStaircases(corridorPaths: ICorridorPath[]): ITread[] {
-        const climb = TerrainLedges.measureClimbAbility();
-        const treads: ITread[] = [];
-
-        for (const corridor of corridorPaths)
-            TerrainLedges.addStaircaseForCorridor(treads, corridor, climb);
-
-        return treads;
-    }
-
-    readonly sceneObject = new Group();
-
-    private readonly context: IWorldContext;
-    private readonly geometry: BoxGeometry;
-    private readonly material: MeshLambertMaterial;
-    private readonly rigidBody: RigidBody;
-    private readonly treadMesh: InstancedMesh | null = null;
-
-    constructor(context: IWorldContext, center: Vector3Tuple, corridorPaths: ICorridorPath[]) {
-        this.context = context;
-
-        this.sceneObject.position.set(center[0], 0, center[2]);
         freezeTransform(this.sceneObject);
-
-        this.geometry = new BoxGeometry(1, 1, 1);
-        this.material = new MeshLambertMaterial({
-            color: new Color(context.environment.terrain.rockColor),
-        });
-
-        this.rigidBody = createFixedBody(context.physicsWorld, center);
-
-        const treads = TerrainLedges.planCliffStaircases(corridorPaths);
-        if (treads.length === 0) return;
-
-        this.treadMesh = new InstancedMesh(this.geometry, this.material, treads.length);
-        this.treadMesh.castShadow = true;
-        this.treadMesh.receiveShadow = true;
-
-        for (let index = 0; index < treads.length; index += 1) {
-            const tread = treads[index];
-
-            const treadHeight = tread.topElevation - tread.baseElevation;
-
-            TerrainLedges.treadTransform.position.set(
-                tread.centerX,
-                tread.baseElevation + treadHeight / 2,
-                tread.centerZ
-            );
-            TerrainLedges.treadTransform.scale.set(
-                tread.halfWidth * 2,
-                treadHeight,
-                tread.halfDepth * 2
-            );
-            TerrainLedges.treadTransform.rotation.y = tread.rotationY;
-            TerrainLedges.treadTransform.updateMatrix();
-            this.treadMesh.setMatrixAt(index, TerrainLedges.treadTransform.matrix);
-
-            const colliderDesc = RAPIER.ColliderDesc.cuboid(
-                tread.halfWidth,
-                treadHeight / 2,
-                tread.halfDepth
-            )
-                .setTranslation(tread.centerX, tread.baseElevation + treadHeight / 2, tread.centerZ)
-                .setRotation(yawQuaternion(tread.rotationY));
-
-            context.physicsWorld.createCollider(colliderDesc, this.rigidBody);
-        }
-
-        this.treadMesh.instanceMatrix.needsUpdate = true;
-        this.treadMesh.computeBoundingSphere();
-        this.sceneObject.add(this.treadMesh);
-        freezeTransform(this.treadMesh);
     }
-
-    update(): void {}
 
     dispose(): void {
         this.context.physicsWorld.removeRigidBody(this.rigidBody);
-        this.treadMesh?.dispose();
-        this.geometry.dispose();
-        this.material.dispose();
-        this.sceneObject.clear();
     }
 }
