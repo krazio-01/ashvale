@@ -1,6 +1,7 @@
 import math
 
 import bpy
+import numpy as np
 from mathutils import Euler, Matrix, Quaternion, Vector
 
 OUTPUT_FPS = 30
@@ -189,14 +190,15 @@ class ActionWriter:
         pose_bone.keyframe_insert(data_path, frame=1)
         full_path = f'pose.bones["{bone_name}"].{data_path}'
         curves = [curve for curve in action_fcurves(self.action) if curve.data_path == full_path]
-        coordinates = [0.0] * (2 * len(samples))
-        coordinates[0::2] = [float(frame) for frame in range(1, len(samples) + 1)]
+        coordinates = np.empty((len(samples), 2), np.float32)
+        coordinates[:, 0] = np.arange(1, len(samples) + 1)
         for curve in curves:
             points = curve.keyframe_points
             if len(points) < len(samples):
                 points.add(len(samples) - len(points))
-            coordinates[1::2] = [sample[curve.array_index] for sample in samples]
-            points.foreach_set("co", coordinates)
+            component = curve.array_index
+            coordinates[:, 1] = [sample[component] for sample in samples]
+            points.foreach_set("co", coordinates.ravel())
             curve.update()
 
 
@@ -234,7 +236,8 @@ class FootHeightProbe:
         for obj, indices in self.meshes:
             evaluated = obj.evaluated_get(depsgraph)
             mesh = evaluated.to_mesh()
-            lowest = min(lowest, min((evaluated.matrix_world @ mesh.vertices[index].co).z for index in indices))
+            world = evaluated.matrix_world
+            lowest = min(lowest, min((world @ mesh.vertices[index].co).z for index in indices))
             evaluated.to_mesh_clear()
         return lowest - self.rest_z
 

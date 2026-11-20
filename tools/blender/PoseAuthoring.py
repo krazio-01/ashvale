@@ -599,6 +599,10 @@ class BeatClipBaker:
         side = -1.0 if arm[2].endswith("r") else 1.0
         return side * offset.x, offset.y, z_sign * offset.z
 
+    def mean_elbow_offset_cm(self, frames, indices, arm, origin, z_sign):
+        offsets = (self.elbow_offset(frames[index], arm, origin, z_sign) for index in indices)
+        return tuple(sum(axis) / len(indices) * 100 for axis in zip(*offsets))
+
     def elbow_clearance(self, matrices, arm):
         pelvis = matrices["pelvis"].translation
         spine = matrices["spine_03"].translation - pelvis
@@ -1129,8 +1133,10 @@ class BeatClipBaker:
 
         worst_balance = (0.0, 0.0)
         for index, matrices in enumerate(frame_matrices):
+            if timeline.authored_weights[index] < CHECKED_AUTHORED_WEIGHT:
+                continue
             polygon = self.support(matrices)
-            if len(polygon) >= 3 and timeline.authored_weights[index] >= CHECKED_AUTHORED_WEIGHT:
+            if len(polygon) >= 3:
                 centre = self.centre_of_mass(matrices)
                 margin = inside_distance(polygon, (centre.x, centre.y))
                 if margin < worst_balance[0]:
@@ -1153,22 +1159,16 @@ class BeatClipBaker:
                 print(f"CHECK {job['output']} info wrist bend {label} {bend:.0f}° at {at:.2f}s typical {typical:.0f}°")
                 if bend > WRIST_BEND_LIMIT_DEGREES:
                     warnings.append(f"wrist bend {label} {bend:.0f}° at {at:.2f}s")
-                elbow, abduction = (
-                    min(self.arm_posture_degrees(frame_matrices[index], arm)[axis] for index in gripped) for axis in (0, 1)
-                )
+                postures = (self.arm_posture_degrees(frame_matrices[index], arm) for index in gripped)
+                elbow, abduction = map(min, zip(*postures))
                 print(f"CHECK {job['output']} info arm {label} elbow bend min {elbow:.0f}° abduction min {abduction:.0f}°")
                 if elbow < ELBOW_BEND_MIN_DEGREES:
                     warnings.append(f"arm {label} nearly straight, elbow bend {elbow:.0f}°")
                 clearance = min(self.elbow_clearance(frame_matrices[index], arm) for index in gripped)
                 print(f"CHECK {job['output']} info elbow clearance {label} min {clearance * 100:.0f}cm")
-                out, back, down = (
-                    sum(self.elbow_offset(frame_matrices[index], arm, arm[0], -1.0)[axis] for index in gripped) / len(gripped) * 100 for axis in range(3)
-                )
+                out, back, down = self.mean_elbow_offset_cm(frame_matrices, gripped, arm, arm[0], -1.0)
                 print(f"CHECK {job['output']} info elbow offset {label} out {out:.0f}cm back {back:.0f}cm down {down:.0f}cm")
-                from_pelvis = [
-                    sum(self.elbow_offset(frame_matrices[index], arm, "pelvis", 1.0)[axis] for index in gripped) / len(gripped) * 100
-                    for axis in range(3)
-                ]
+                from_pelvis = self.mean_elbow_offset_cm(frame_matrices, gripped, arm, "pelvis", 1.0)
                 print(f"CHECK {job['output']} info elbow from pelvis {label} out {from_pelvis[0]:.0f}cm back {from_pelvis[1]:.0f}cm up {from_pelvis[2]:.0f}cm")
                 if clearance < ELBOW_CLEARANCE_MIN_METRES:
                     warnings.append(f"elbow {label} {clearance * 100:.0f}cm from the spine, inside the ribs")

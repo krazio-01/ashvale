@@ -81,11 +81,12 @@ class MocapRetargeter:
             if is_identity
             else self.source_facing_correction(job, source, source_of, body_names, start, end, calibration_frame)
         )
-        ordered, offsets = self.rest_alignment_offsets(source, source_of, source_facing_correction)
         if is_identity:
+            ordered = self.mapped_bones(source_of)
             offsets = {name: Quaternion() for name in ordered}
             hip_scale = 1.0
         else:
+            ordered, offsets = self.rest_alignment_offsets(source, source_of, source_facing_correction)
             target_leg = leg_length(body_heads(self.target, rest_head))
             hip_scale = target_leg / max(leg_length(body_heads(source, pose_head, body_names)), 1e-6)
 
@@ -97,24 +98,27 @@ class MocapRetargeter:
 
         keyed = [pose_bone for pose_bone in self.target.pose.bones if pose_bone.name in offsets]
         rotations = {pose_bone.name: [] for pose_bone in keyed}
+        inverse_rest = {pose.name: pose.bone.matrix_local.to_quaternion().inverted() for pose in keyed}
+        source_bones = [(name, source.pose.bones[source_of[name]], offsets[name]) for name in ordered]
+        pelvis = source.pose.bones[source_of["pelvis"]]
         hip_samples = []
         for index in range(frame_count):
             source_frame = start + (index / OUTPUT_FPS) * take.fps * speed
             whole = int(source_frame)
             scene.frame_set(whole, subframe=source_frame - whole)
+            source_world = source.matrix_world
             world_rotation = {
-                name: (source_facing_correction @ (source.matrix_world @ source.pose.bones[source_of[name]].matrix).to_quaternion())
-                @ offsets[name]
-                for name in ordered
+                name: (source_facing_correction @ (source_world @ pose.matrix).to_quaternion()) @ offset
+                for name, pose, offset in source_bones
             }
             for pose_bone in keyed:
                 bone = pose_bone.bone
                 parent_rest, parent_pose = parent_pose_rotation(bone, world_rotation, self.armature_inverse)
                 desired = self.armature_inverse @ world_rotation[pose_bone.name]
                 rotations[pose_bone.name].append(
-                    bone.matrix_local.to_quaternion().inverted() @ parent_rest @ parent_pose.inverted() @ desired
+                    inverse_rest[pose_bone.name] @ parent_rest @ parent_pose.inverted() @ desired
                 )
-            hip_samples.append(source_facing_correction @ (source.matrix_world @ source.pose.bones[source_of["pelvis"]].head))
+            hip_samples.append(source_facing_correction @ (source_world @ pelvis.head))
         for pose_bone in keyed:
             writer.write(pose_bone.name, "rotation_quaternion", rotations[pose_bone.name])
 
@@ -152,12 +156,13 @@ class MocapRetargeter:
             bpy.context.scene.frame_set(calibration_frame)
         return yaw_between(source_back, target_back)
 
+    def mapped_bones(self, source_of):
+        bones = self.target.data.bones
+        return sorted((bone.name for bone in bones if bone.name in source_of), key=lambda name: len(bones[name].parent_recursive))
+
     def rest_alignment_offsets(self, source, source_of, source_facing_correction):
         target = self.target
-        ordered = sorted(
-            (bone.name for bone in target.data.bones if bone.name in source_of),
-            key=lambda name: len(target.data.bones[name].parent_recursive),
-        )
+        ordered = self.mapped_bones(source_of)
         matched = {}
         for name in ordered:
             rest = rest_world(target, name).to_quaternion()
