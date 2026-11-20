@@ -35,9 +35,10 @@ def quaternion_matrix(quaternion):
 
 
 def compose(translation, rotation, scale):
-    matrix = np.eye(4)
-    matrix[:3, :3] = quaternion_matrix(rotation) * scale
-    matrix[:3, 3] = translation
+    matrix = np.zeros((*np.shape(translation)[:-1], 4, 4))
+    matrix[..., :3, :3] = quaternion_matrix(rotation) * np.expand_dims(scale, -2)
+    matrix[..., :3, 3] = translation
+    matrix[..., 3, 3] = 1.0
     return matrix
 
 

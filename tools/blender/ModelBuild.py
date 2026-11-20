@@ -64,6 +64,10 @@ class Skeleton:
         self.rest_translations = np.array([node["translation"] for node in nodes], np.float64)
         self.rest_rotations = np.array([node["rotation"] for node in nodes], np.float64)
         self.rest_scales = np.array([node["scale"] for node in nodes], np.float64)
+        self.child_names = [[] for _ in nodes]
+        for child, parent in enumerate(self.parents):
+            if parent >= 0:
+                self.child_names[parent].append(self.names[child])
         self.skin = data["skin"]
         self.height = data["height"]
         self.clips = data["clips"]
@@ -79,19 +83,17 @@ class Skeleton:
         return cls(data, descriptor)
 
     def world(self, translations, rotations, scales=None):
-        scales = self.rest_scales if scales is None else scales
-        matrices = np.zeros((len(self.names), 4, 4))
+        local = compose(translations, rotations, self.rest_scales if scales is None else scales)
+        matrices = np.empty_like(local)
         for index, parent in enumerate(self.parents):
-            local = compose(translations[index], rotations[index], scales[index])
-            matrices[index] = local if parent < 0 else matrices[parent] @ local
+            matrices[index] = local[index] if parent < 0 else matrices[parent] @ local[index]
         return matrices
 
     def rest_world(self):
         return self.world(self.rest_translations, self.rest_rotations)
 
     def children(self, name):
-        index = self.index[name]
-        return [self.names[child] for child, parent in enumerate(self.parents) if parent == index]
+        return self.child_names[self.index[name]]
 
     def descendants(self, name):
         found = []
