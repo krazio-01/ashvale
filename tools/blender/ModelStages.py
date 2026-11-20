@@ -163,8 +163,9 @@ class AlignStage(BuildStage):
         target.data.transform(rotation.to_matrix().to_4x4())
         aligned = mesh_positions(target.data)
         heights = aligned[:, 2]
-        origin_end = aligned[heights <= heights.min() + (heights.max() - heights.min()) * cls.END_SLICE]
-        origin = np.array([origin_end[:, 0].mean(), origin_end[:, 1].mean(), heights.min()])
+        base_height = heights.min()
+        origin_end = aligned[heights <= base_height + (heights.max() - base_height) * cls.END_SLICE]
+        origin = np.array([origin_end[:, 0].mean(), origin_end[:, 1].mean(), base_height])
         target.data.transform(Matrix.Translation(Vector(-origin)))
 
 
@@ -943,6 +944,7 @@ def tile_uvs(obj, config):
 def lathe_sweep(part):
     sides = part["sides"]
     angles = 2 * np.pi * np.arange(sides) / sides
+    circle = [(math.cos(angle), math.sin(angle)) for angle in angles]
     vertices, rings = [], []
     for radius, height in part["profile"]:
         if radius == 0:
@@ -950,7 +952,7 @@ def lathe_sweep(part):
             vertices.append((0.0, height, 0.0))
         else:
             rings.append(list(range(len(vertices), len(vertices) + sides)))
-            vertices.extend((radius * math.cos(angle), height, radius * math.sin(angle)) for angle in angles)
+            vertices.extend((radius * x, height, radius * z) for x, z in circle)
     faces = []
     for lower, upper in zip(rings, rings[1:]):
         for index in range(sides):

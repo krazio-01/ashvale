@@ -13,12 +13,20 @@ def lattice_bone_name(prefix, body, column, row):
     return f"{prefix}{body}_c{column}_r{row}"
 
 
-def gaussian_weighted_average(values, samples, node_coordinates, sigma):
+def gaussian_weighted_averages(samples, node_coordinates, sigma, *fields):
     distance = (((node_coordinates[:, None, :] - samples[None, :, :]) / sigma) ** 2).sum(-1)
     kernel = np.exp(-0.5 * distance)
     total = kernel.sum(1)
-    averaged = kernel @ values / np.maximum(total, 1e-300)[:, None]
-    return np.where((total < 1e-9)[:, None], values[np.argmin(distance, axis=1)], averaged)
+    divisor = np.maximum(total, 1e-300)[:, None]
+    weak = total < 1e-9
+    nearest = np.argmin(distance[weak], axis=1) if weak.any() else None
+    averages = []
+    for values in fields:
+        averaged = kernel @ values / divisor
+        if nearest is not None:
+            averaged[weak] = values[nearest]
+        averages.append(averaged)
+    return averages
 
 
 def outward_normals(normals, nodes, centre):
@@ -63,8 +71,8 @@ def build_sheet(points, normals, columns, rows, centre, settings):
     cell_v = max(v_max / (rows - 1), settings.length(physics.minCell))
     samples = np.column_stack([(u - u_min) / cell_u, v / cell_v])
     corners = node_grid(columns, rows) * [(u_max - u_min) / (columns - 1) / cell_u, v_max / (rows - 1) / cell_v]
-    nodes = gaussian_weighted_average(points, samples, corners, physics.nodeSigmaCells)
-    node_normals = outward_normals(gaussian_weighted_average(normals, samples, corners, physics.nodeSigmaCells), nodes, centre)
+    nodes, averaged_normals = gaussian_weighted_averages(samples, corners, physics.nodeSigmaCells, points, normals)
+    node_normals = outward_normals(averaged_normals, nodes, centre)
     return {"nodes": nodes, "normals": node_normals, "u": u, "v": v, "u_min": u_min, "u_max": u_max, "v_max": v_max}
 
 
@@ -147,8 +155,7 @@ def build_wrapped_sheet(points, normals, centre, top, settings):
     grid["hem"] = hem_profile(column_position, drop, grid["columns"], physics.minRowVertices)
     samples = np.column_stack(wrapped_coordinates(grid, points))
     corners = node_grid(grid["columns"], rows)
-    grid["nodes"] = gaussian_weighted_average(points, samples, corners, physics.nodeSigmaCells)
-    normal_average = gaussian_weighted_average(normals, samples, corners, physics.nodeSigmaCells)
+    grid["nodes"], normal_average = gaussian_weighted_averages(samples, corners, physics.nodeSigmaCells, points, normals)
     grid["normals"] = outward_normals(normal_average, grid["nodes"], centre)
     return grid
 

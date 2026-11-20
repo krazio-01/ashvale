@@ -89,8 +89,11 @@ def detect_cloth(settings, namer, centres, areas, thin_face, piece, claimed):
     minimum_area = tuning.minClothArea * settings.height_scale.scale**2
     cell = settings.length(tuning.clothCellSize)
     candidates, accepted = [], []
-    for label in np.unique(piece[thin_face & ~claimed]):
-        members = np.flatnonzero(thin_face & ~claimed & (piece == label))
+    eligible = np.flatnonzero(thin_face & ~claimed)
+    ordered = eligible[np.argsort(piece[eligible], kind="stable")]
+    labels = piece[ordered]
+    boundaries = np.flatnonzero(labels[1:] != labels[:-1]) + 1
+    for members in np.split(ordered, boundaries):
         if len(members) < tuning.minClothFaces:
             continue
         points = centres[members]
