@@ -11,11 +11,6 @@ const takesIn =
     (file: string): string =>
         path.join(PIPELINE_CONFIG.combatAssetsRoot, folder, file);
 
-const mocap = (output: ClipName, take: Omit<IRetargetJob, "output">): IRetargetJob => ({
-    output,
-    ...take,
-});
-
 const take = <Output extends string>(
     output: Output,
     rig: SourceRig,
@@ -119,8 +114,8 @@ export const SOURCE_RIGS = [
 ] as const;
 
 export const CLIP_BAKE_FILES = {
-    target: sourcePathOf(PLAYER_ASSETS.clipLibraryPaths[0]),
-    output: sourcePathOf(PLAYER_ASSETS.clipLibraryPaths[1]),
+    target: sourcePathOf(PLAYER_ASSETS.clipLibraries.base),
+    output: sourcePathOf(PLAYER_ASSETS.clipLibraries.combat),
 };
 
 export const GAME_FIT = {
@@ -146,7 +141,7 @@ export const CLIPS_PROVIDED_BY_CHARACTER_MODEL: readonly string[] = [
 
 const UAL_LIBRARY_1 = path.resolve(CLIP_BAKE_FILES.target);
 
-const UAL_LIBRARY_2 = path.resolve("assets-src/models/characters/UAL2_Standard.glb");
+const UAL_LIBRARY_2 = path.resolve(sourcePathOf("/models/characters/UAL2_Standard.glb"));
 
 export const OUTPUT_FPS = 30;
 
@@ -191,84 +186,69 @@ const LOCOMOTION_JOBS: IRetargetJob[] = [
 const SWORD_COMBO_TAKE = TAKES.mocapOnlineSword("KBS_Sword_ATK_Combo_01_001.fbx");
 
 const PLAYER_ATTACK_JOBS: IRetargetJob[] = [
-    mocap(CLIP.swordLight1, {
-        source: SWORD_COMBO_TAKE,
-        rig: "motus",
+    take(CLIP.swordLight1, "motus", SWORD_COMBO_TAKE, {
         frames: [9, 36],
         rootMotion: "extract",
         calibrationFrame: 9,
     }),
-    mocap(CLIP.swordLight2, {
-        source: SWORD_COMBO_TAKE,
-        rig: "motus",
+    take(CLIP.swordLight2, "motus", SWORD_COMBO_TAKE, {
         frames: [36, 60],
         rootMotion: "extract",
         calibrationFrame: 1,
     }),
-    mocap(CLIP.swordLight3, {
-        source: SWORD_COMBO_TAKE,
-        rig: "motus",
+    take(CLIP.swordLight3, "motus", SWORD_COMBO_TAKE, {
         frames: [60, 87],
         rootMotion: "extract",
         calibrationFrame: 1,
     }),
-    mocap(CLIP.swordLight4, {
-        source: TAKES.rokokoLegacy("Destiny/Destiny_DrawSwordFight_HUMANIK_769.fbx"),
-        rig: "humanikCharacter",
-        frames: [1245, 1325],
-        rootMotion: "extract",
-        calibrationFrame: 1245,
-    }),
-    mocap(CLIP.swordHeavy, {
-        source: TAKES.mocapinFight("05_04_007_attack_02.fbx"),
-        rig: "motus",
+    take(
+        CLIP.swordLight4,
+        "humanikCharacter",
+        TAKES.rokokoLegacy("Destiny/Destiny_DrawSwordFight_HUMANIK_769.fbx"),
+        {
+            frames: [1245, 1325],
+            rootMotion: "extract",
+            calibrationFrame: 1245,
+        }
+    ),
+    take(CLIP.swordHeavy, "motus", TAKES.mocapinFight("05_04_007_attack_02.fbx"), {
         frames: [57, 145],
         rootMotion: "extract",
         calibrationFrame: 57,
     }),
-    mocap(CLIP.swordHeavyFinisher, {
-        source: TAKES.mocapinFight("05_04_008_attack_03.fbx"),
-        rig: "motus",
+    take(CLIP.swordHeavyFinisher, "motus", TAKES.mocapinFight("05_04_008_attack_03.fbx"), {
         frames: [12, 120],
         rootMotion: "extract",
         calibrationFrame: 12,
     }),
-    mocap(CLIP.swordCounter, {
-        source: TAKES.rokokoCombat("Sword_Generic_ue.fbx"),
-        rig: "ue",
+    take(CLIP.swordCounter, "ue", TAKES.rokokoCombat("Sword_Generic_ue.fbx"), {
         frames: [267, 286],
         rootMotion: "extract",
         calibrationFrame: 267,
     }),
 ];
 
+const FORWARD_ROLL_TAKE = TAKES.mocapOnlineDemo("Ninja/Ninja1_Combat_Forward_Roll_v1.fbx");
+
 const MOVEMENT_JOBS: IRetargetJob[] = [
-    mocap(CLIP.dodgeRoll, {
-        source: TAKES.mocapOnlineDemo("Ninja/Ninja1_Combat_Forward_Roll_v1.fbx"),
-        rig: "motus",
+    take(CLIP.dodgeRoll, "motus", FORWARD_ROLL_TAKE, {
         frames: [22, 70],
         rootMotion: "extract",
         calibrationFrame: 22,
         alignToTravel: true,
     }),
-    mocap(CLIP.dodgeBackstep, {
-        source: TAKES.atlas("Stand_Dodge_360_Take001_Offir_mocapatlas.fbx"),
-        rig: "atlas",
+    take(CLIP.dodgeBackstep, "atlas", TAKES.atlas("Stand_Dodge_360_Take001_Offir_mocapatlas.fbx"), {
         frames: [1136, 1214],
         rootMotion: "extract",
         calibrationFrame: 1136,
         speed: 1.3,
     }),
-    mocap(CLIP.dodgeLeft, {
-        source: TAKES.mocapinFight("05_01_019_dodge_L.fbx"),
-        rig: "motus",
+    take(CLIP.dodgeLeft, "motus", TAKES.mocapinFight("05_01_019_dodge_L.fbx"), {
         frames: [70, 98],
         rootMotion: "extract",
         calibrationFrame: 70,
     }),
-    mocap(CLIP.dodgeRight, {
-        source: TAKES.mocapinFight("05_01_018_dodge_R.fbx"),
-        rig: "motus",
+    take(CLIP.dodgeRight, "motus", TAKES.mocapinFight("05_01_018_dodge_R.fbx"), {
         frames: [58, 84],
         rootMotion: "extract",
         calibrationFrame: 58,
@@ -277,6 +257,14 @@ const MOVEMENT_JOBS: IRetargetJob[] = [
     take(CLIP.slideStart, "ual", UAL_LIBRARY_2, { action: "Slide_Start", rootMotion: "extract" }),
     take(CLIP.slideHold, "ual", UAL_LIBRARY_2, { action: "Slide_Loop", frames: [0, 10] }),
     take(CLIP.slideExit, "ual", UAL_LIBRARY_2, { action: "Slide_Exit", rootMotion: "extract" }),
+    take(CLIP.wallRunStart, "ual", UAL_LIBRARY_2, { action: "NinjaJump_Start", frames: [1, 8] }),
+    take(CLIP.mantle, "ual", UAL_LIBRARY_2, { action: "ClimbUp_1m" }),
+    take(CLIP.landingRollForward, "motus", FORWARD_ROLL_TAKE, {
+        frames: [32, 70],
+        rootMotion: "inPlace",
+        calibrationFrame: 32,
+        alignToTravel: true,
+    }),
 ];
 
 const KNOCKDOWN_TAKE = TAKES.mocapCentral("Fight/am_Ready_Fight_01_Knockdown_A.FBX");
@@ -296,37 +284,37 @@ const HIT_JOBS: IRetargetJob[] = [
         action: "Hit_Knockback",
         rootMotion: "extract",
     }),
-    mocap(CLIP.reactKnockback, {
-        source: KNOCKDOWN_TAKE,
-        rig: "manny",
+    take(CLIP.reactKnockback, "manny", KNOCKDOWN_TAKE, {
         frames: [505, 556],
         rootMotion: "extract",
         calibrationFrame: 500,
     }),
-    mocap(CLIP.reactKnockdown, {
-        source: KNOCKDOWN_TAKE,
-        rig: "manny",
+    take(CLIP.reactKnockdown, "manny", KNOCKDOWN_TAKE, {
         frames: [645, 740],
         rootMotion: "extract",
         calibrationFrame: 590,
     }),
-    mocap(CLIP.reactStagger, {
-        source: TAKES.rokokoLegacy("Combat/Fight_GettingKickedinBalls_HUMANIK_WHS_segment.fbx"),
-        rig: "humanikCharacter",
-        frames: [653, 797],
-        rootMotion: "inPlace",
-        calibrationFrame: 300,
-    }),
-    mocap(CLIP.reactParried, {
-        source: TAKES.rokokoLegacy("Combat/Boxing_GettingKnockedOut_HUMANIK_WHS.fbx"),
-        rig: "humanikCharacter",
-        frames: [455, 540],
-        rootMotion: "extract",
-        calibrationFrame: 455,
-    }),
-    mocap(CLIP.deathForward, {
-        source: TAKES.kevinCombat("HumanM@Death01.fbx"),
-        rig: "kevin",
+    take(
+        CLIP.reactStagger,
+        "humanikCharacter",
+        TAKES.rokokoLegacy("Combat/Fight_GettingKickedinBalls_HUMANIK_WHS_segment.fbx"),
+        {
+            frames: [653, 797],
+            rootMotion: "inPlace",
+            calibrationFrame: 300,
+        }
+    ),
+    take(
+        CLIP.reactParried,
+        "humanikCharacter",
+        TAKES.rokokoLegacy("Combat/Boxing_GettingKnockedOut_HUMANIK_WHS.fbx"),
+        {
+            frames: [455, 540],
+            rootMotion: "extract",
+            calibrationFrame: 455,
+        }
+    ),
+    take(CLIP.deathForward, "kevin", TAKES.kevinCombat("HumanM@Death01.fbx"), {
         frames: [1, 23],
         rootMotion: "extract",
         calibrationFrame: 1,
@@ -334,41 +322,51 @@ const HIT_JOBS: IRetargetJob[] = [
 ];
 
 const FINISHER_JOBS: IRetargetJob[] = [
-    mocap(CLIP.finisherKickdownAttacker, {
-        source: TAKES.mocapCentral("Fight/af_Ready_Fight_02_Kickdown_B.FBX"),
-        rig: "manny",
-        frames: [270, 345],
-        rootMotion: "extract",
-        calibrationFrame: 270,
-    }),
-    mocap(CLIP.finisherKickdownVictim, {
-        source: TAKES.mocapCentral("Fight/am_Ready_Fight_02_Kickdown_A.FBX"),
-        rig: "manny",
-        frames: [270, 345],
-        rootMotion: "extract",
-        calibrationFrame: 270,
-    }),
-    mocap(CLIP.finisherKnockdownAttacker, {
-        source: TAKES.mocapCentral("Fight/af_Ready_Fight_01_Knockdown_B.FBX"),
-        rig: "manny",
+    take(
+        CLIP.finisherKickdownAttacker,
+        "manny",
+        TAKES.mocapCentral("Fight/af_Ready_Fight_02_Kickdown_B.FBX"),
+        {
+            frames: [270, 345],
+            rootMotion: "extract",
+            calibrationFrame: 270,
+        }
+    ),
+    take(
+        CLIP.finisherKickdownVictim,
+        "manny",
+        TAKES.mocapCentral("Fight/am_Ready_Fight_02_Kickdown_A.FBX"),
+        {
+            frames: [270, 345],
+            rootMotion: "extract",
+            calibrationFrame: 270,
+        }
+    ),
+    take(
+        CLIP.finisherKnockdownAttacker,
+        "manny",
+        TAKES.mocapCentral("Fight/af_Ready_Fight_01_Knockdown_B.FBX"),
+        {
+            frames: [620, 700],
+            rootMotion: "extract",
+            calibrationFrame: 620,
+        }
+    ),
+    take(CLIP.finisherKnockdownVictim, "manny", KNOCKDOWN_TAKE, {
         frames: [620, 700],
         rootMotion: "extract",
         calibrationFrame: 620,
     }),
-    mocap(CLIP.finisherKnockdownVictim, {
-        source: KNOCKDOWN_TAKE,
-        rig: "manny",
-        frames: [620, 700],
-        rootMotion: "extract",
-        calibrationFrame: 620,
-    }),
-    mocap(CLIP.finisherBackstab, {
-        source: TAKES.rokokoWeapons("20210714_s085_stabTwist_Knife_tk01_ERJA-mvn085.fbx"),
-        rig: "motus",
-        frames: [430, 565],
-        rootMotion: "extract",
-        calibrationFrame: 430,
-    }),
+    take(
+        CLIP.finisherBackstab,
+        "motus",
+        TAKES.rokokoWeapons("20210714_s085_stabTwist_Knife_tk01_ERJA-mvn085.fbx"),
+        {
+            frames: [430, 565],
+            rootMotion: "extract",
+            calibrationFrame: 430,
+        }
+    ),
     take(CLIP.finisherExecution, "ual", UAL_LIBRARY_2, {
         action: "Sword_Regular_C",
         frames: [4, 48],
@@ -383,9 +381,7 @@ const FINISHER_JOBS: IRetargetJob[] = [
 
 const ENEMY_JOBS: IRetargetJob[] = [
     take(CLIP.enemyPunch, "ual", UAL_LIBRARY_1, { action: "Punch_Cross" }),
-    mocap(CLIP.enemySwipe, {
-        source: TAKES.rokokoCombatPack("KnifeFight_mixamo.fbx"),
-        rig: "mixamo",
+    take(CLIP.enemySwipe, "mixamo", TAKES.rokokoCombatPack("KnifeFight_mixamo.fbx"), {
         frames: [238, 290],
         rootMotion: "extract",
         calibrationFrame: 20,
@@ -415,38 +411,40 @@ const ENEMY_JOBS: IRetargetJob[] = [
 const SWORD_IDLE_TAKE = TAKES.rokokoCombatPack("SwordIdleMedium_mixamo.fbx");
 
 const IDLE_FIDGET_JOBS: IRetargetJob[] = [
-    mocap(CLIP.idleFidgetSwordInspect, {
-        source: SWORD_IDLE_TAKE,
-        rig: "mixamo",
+    take(CLIP.idleFidgetSwordInspect, "mixamo", SWORD_IDLE_TAKE, {
         frames: [770, 990],
         rootMotion: "inPlace",
         calibrationFrame: 770,
         holdFeet: true,
     }),
-    mocap(CLIP.idleFidgetSwordRoll, {
-        source: SWORD_IDLE_TAKE,
-        rig: "mixamo",
+    take(CLIP.idleFidgetSwordRoll, "mixamo", SWORD_IDLE_TAKE, {
         frames: [100, 175],
         rootMotion: "inPlace",
         calibrationFrame: 100,
         holdFeet: true,
     }),
-    mocap(CLIP.idleFidgetScratchArm, {
-        source: TAKES.mocapCentral("Idle/am_Stand_Idle_06_ScratchArm.FBX"),
-        rig: "manny",
-        frames: [1, 141],
-        rootMotion: "inPlace",
-        calibrationFrame: 1,
-        holdFeet: true,
-    }),
-    mocap(CLIP.idleFidgetLookAround, {
-        source: TAKES.mocapCentral("Idle/am_Stand_Idle_03_LookAround.FBX"),
-        rig: "manny",
-        frames: [1, 151],
-        rootMotion: "inPlace",
-        calibrationFrame: 1,
-        holdFeet: true,
-    }),
+    take(
+        CLIP.idleFidgetScratchArm,
+        "manny",
+        TAKES.mocapCentral("Idle/am_Stand_Idle_06_ScratchArm.FBX"),
+        {
+            frames: [1, 141],
+            rootMotion: "inPlace",
+            calibrationFrame: 1,
+            holdFeet: true,
+        }
+    ),
+    take(
+        CLIP.idleFidgetLookAround,
+        "manny",
+        TAKES.mocapCentral("Idle/am_Stand_Idle_03_LookAround.FBX"),
+        {
+            frames: [1, 151],
+            rootMotion: "inPlace",
+            calibrationFrame: 1,
+            holdFeet: true,
+        }
+    ),
 ];
 
 const TWO_HANDED_GRIP_POSE_JOB: IPoseSourceJob = {
@@ -910,15 +908,17 @@ type ParrySide = "High" | "Side";
 
 export const isBeatJob = (job: ClipJob): job is IBeatClipJob => "beats" in job;
 
-const stancePoseReferences = (stance: IStance): IPoseReference[] => [
-    ...(stance.feetFrom ? [stance.feetFrom] : []),
-    ...(typeof stance.offHand === "object" && "clip" in stance.offHand ? [stance.offHand] : []),
-];
-
-export const authoredPoses = (job: IBeatClipJob): IPoseReference[] => [
-    ...[job.start, ...job.beats.map((beat) => beat.pose)].map((name) => job.stances[name].base),
-    ...(job.fingers ? [job.fingers] : []),
-    ...Object.values<IStance>(job.stances).flatMap(stancePoseReferences),
-    ...(job.startMatches ? [job.startMatches] : []),
-    ...(job.endMatches ? [job.endMatches] : []),
-];
+export const authoredPoses = (job: IBeatClipJob): IPoseReference[] => {
+    const { stances } = job;
+    const poses = [stances[job.start].base];
+    for (const beat of job.beats) poses.push(stances[beat.pose].base);
+    if (job.fingers) poses.push(job.fingers);
+    for (const stance of Object.values<IStance>(stances)) {
+        if (stance.feetFrom) poses.push(stance.feetFrom);
+        const { offHand } = stance;
+        if (typeof offHand === "object" && "clip" in offHand) poses.push(offHand);
+    }
+    if (job.startMatches) poses.push(job.startMatches);
+    if (job.endMatches) poses.push(job.endMatches);
+    return poses;
+};

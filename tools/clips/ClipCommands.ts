@@ -1,9 +1,15 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { Buffer, Node, NodeIO, type Document, type Property } from "@gltf-transform/core";
+import {
+    Buffer,
+    Node,
+    NodeIO,
+    type Accessor,
+    type Document,
+    type Property,
+} from "@gltf-transform/core";
 import {
     Box3,
     Euler,
@@ -39,12 +45,14 @@ import {
     PIPELINE_CONFIG,
     PipelineCommand,
     copyFileWithFolders,
+    execFileAsync,
     formatMegabytes,
     readJsonFile,
+    runWithConcurrency,
     sourcePathOf,
     toMegabytes,
 } from "../pipeline";
-import { accessorElements, createGltfIo } from "../assets/AssetFormats";
+import { accessorValues, createGltfIo } from "../assets/AssetFormats";
 import {
     CLIP_JOBS,
     CLIP_BAKE_FILES,
@@ -104,7 +112,6 @@ export class ClipCooker extends PipelineCommand {
     private static readonly roundMark = (_key: string, value: unknown): unknown =>
         typeof value === "number" ? roundTo(value, ClipCooker.CLIP_MARK_PRECISION) : value;
 
-    readonly name = "cook-clips";
     readonly usage = "[--only <ClipName,ClipName> --out <file.glb>] [--merge <ClipName,ClipName>]";
     readonly summary =
         "Bake every manifest clip in Blender into CombatClips.glb (source + public); --only bakes a subset to --out without publishing; --merge bakes a subset into the published file";
@@ -123,7 +130,8 @@ export class ClipCooker extends PipelineCommand {
         if (values.merge && values.only)
             throw new Error(`--merge and --only are exclusive; usage: ${this.usage}`);
         const subset = (values.only ?? values.merge)?.split(",");
-        const jobs = subset ? CLIP_JOBS.filter((job) => subset.includes(job.output)) : CLIP_JOBS;
+        const requested = subset && new Set(subset);
+        const jobs = requested ? CLIP_JOBS.filter((job) => requested.has(job.output)) : CLIP_JOBS;
         if (subset && jobs.length !== subset.length)
             throw new Error(`the subset names clips with no manifest job: ${subset.join(", ")}`);
 
@@ -165,13 +173,19 @@ export class ClipCooker extends PipelineCommand {
             const names = new Set(animations.map((animation) => animation.getName()));
             this.verifyCatalogue(names, missingBefore);
             const durations = new Map<string, number>();
+            const lastTimeByInput = new Map<Accessor, number>();
             for (const animation of animations) {
-                const seconds = Math.max(
-                    0,
-                    ...animation
-                        .listSamplers()
-                        .map((sampler) => sampler.getInput()?.getMax([])[0] ?? 0)
-                );
+                let seconds = 0;
+                for (const sampler of animation.listSamplers()) {
+                    const input = sampler.getInput();
+                    if (!input) continue;
+                    let lastTime = lastTimeByInput.get(input);
+                    if (lastTime === undefined) {
+                        lastTime = input.getMax([])[0];
+                        lastTimeByInput.set(input, lastTime);
+                    }
+                    seconds = Math.max(seconds, lastTime);
+                }
                 durations.set(animation.getName(), seconds);
                 console.log(`CLIP ${animation.getName()} ${seconds.toFixed(3)}`);
             }
@@ -186,18 +200,15 @@ export class ClipCooker extends PipelineCommand {
 
     private static async mergeIntoPublished(io: NodeIO, stagedPath: string): Promise<Set<string>> {
         const published = await io.read(CLIP_BAKE_FILES.output);
-        const publishedNames = new Set(
-            published
-                .getRoot()
-                .listAnimations()
-                .map((animation) => animation.getName())
-        );
+        const publishedAnimations = published.getRoot().listAnimations();
+        const publishedNames = new Set<string>();
         const baked = await io.read(stagedPath);
         const bakedAnimations = baked.getRoot().listAnimations();
         const replaced = new Set(bakedAnimations.map((animation) => animation.getName()));
         const catalogue = new Set<string>(Object.values(CLIP));
-        for (const animation of published.getRoot().listAnimations()) {
+        for (const animation of publishedAnimations) {
             const name = animation.getName();
+            publishedNames.add(name);
             if (!catalogue.has(name)) console.log(`dropped ${name} (no longer in CLIP)`);
             if (replaced.has(name) || !catalogue.has(name)) animation.dispose();
         }
@@ -378,7 +389,6 @@ export class ClipAudition extends PipelineCommand {
     private static readonly isSourceRig = (rig: string): rig is SourceRig =>
         (SOURCE_RIGS as readonly string[]).includes(rig);
 
-    readonly name = "audition";
     readonly usage =
         "--out <dir> (--clip <ClipName> | --source <file> --rig <rig> [--from --to --calibration --action --extract --align-travel]) [--step n]";
     readonly summary =
@@ -425,24 +435,29 @@ export class ClipAudition extends PipelineCommand {
             path.join(outDirectory, "profile.txt"),
             lines.filter((line) => line.startsWith("PROFILE")).join("\n")
         );
-        this.writeContactSheets(outDirectory);
+        await this.writeContactSheets(outDirectory);
     }
 
     private manifestJobs(clipName: string): ClipJob[] {
-        const jobsByOutput = new Map<string, ClipJob>(CLIP_JOBS.map((job) => [job.output, job]));
+        const jobsByOutput = new Map<string, ClipJob>();
+        for (const job of CLIP_JOBS) jobsByOutput.set(job.output, job);
         const ordered: ClipJob[] = [];
-        const visit = (name: string, chain: readonly string[]): void => {
-            if (chain.includes(name))
-                throw new Error(`clip pose cycle: ${[...chain, name].join(" -> ")}`);
+        const visiting = new Set<string>();
+        const complete = new Set<string>();
+        const visit = (name: string): void => {
+            if (complete.has(name)) return;
+            if (visiting.has(name))
+                throw new Error(`clip pose cycle: ${[...visiting, name].join(" -> ")}`);
             const job = jobsByOutput.get(name);
             if (!job) throw new Error(`no manifest job outputs ${name}`);
-            if (ordered.includes(job)) return;
+            visiting.add(name);
             if (isBeatJob(job))
-                for (const pose of authoredPoses(job))
-                    if (!pose.library) visit(pose.clip, [...chain, name]);
+                for (const pose of authoredPoses(job)) if (!pose.library) visit(pose.clip);
+            visiting.delete(name);
+            complete.add(name);
             ordered.push(job);
         };
-        visit(clipName, []);
+        visit(clipName);
         return ordered;
     }
 
@@ -488,20 +503,28 @@ export class ClipAudition extends PipelineCommand {
         fs.mkdirSync(outDirectory, { recursive: true });
     }
 
-    private writeContactSheets(outDirectory: string): void {
+    private async writeContactSheets(outDirectory: string): Promise<void> {
         const renders = fs.readdirSync(outDirectory).filter((file) => file.endsWith(".png"));
+        const sheets: { sheet: string; pageFrames: string[] }[] = [];
         for (const view of ClipAudition.SHEET_VIEWS) {
             const frames = renders.filter((file) => file.startsWith(`${view}_`)).sort();
-            for (let page = 0; page * ClipAudition.SHEET_PAGE_FRAMES < frames.length; page += 1) {
-                const pageFrames = frames.slice(
-                    page * ClipAudition.SHEET_PAGE_FRAMES,
-                    (page + 1) * ClipAudition.SHEET_PAGE_FRAMES
-                );
-                const sheet = path.join(
-                    outDirectory,
-                    `sheet-${view}${page === 0 ? "" : `-${page + 1}`}.png`
-                );
-                execFileSync("montage", [
+            for (let page = 0; page * ClipAudition.SHEET_PAGE_FRAMES < frames.length; page += 1)
+                sheets.push({
+                    sheet: path.join(
+                        outDirectory,
+                        `sheet-${view}${page === 0 ? "" : `-${page + 1}`}.png`
+                    ),
+                    pageFrames: frames.slice(
+                        page * ClipAudition.SHEET_PAGE_FRAMES,
+                        (page + 1) * ClipAudition.SHEET_PAGE_FRAMES
+                    ),
+                });
+        }
+        await runWithConcurrency(
+            sheets,
+            PIPELINE_CONFIG.textures.concurrency,
+            async ({ sheet, pageFrames }) => {
+                await execFileAsync("montage", [
                     "-pointsize",
                     "11",
                     "-label",
@@ -513,9 +536,9 @@ export class ClipAudition extends PipelineCommand {
                     "+2+2",
                     sheet,
                 ]);
-                console.log(`SHEET ${sheet}`);
             }
-        }
+        );
+        for (const { sheet } of sheets) console.log(`SHEET ${sheet}`);
     }
 }
 
@@ -526,7 +549,11 @@ export class ClipComparer extends PipelineCommand {
 
     private static readonly SAME_TRANSLATION_CENTIMETRES = 0.01;
 
-    private static readClipFile(document: Document): IClipFile {
+    private static readonly beforeRotation = new Quaternion();
+
+    private static readonly afterRotation = new Quaternion();
+
+    private static readClipFile(document: Document, clipName?: string): IClipFile {
         const rest = new Map<string, number[]>();
         for (const node of document.getRoot().listNodes()) {
             rest.set(`${node.getName()}|rotation`, node.getRotation());
@@ -535,16 +562,18 @@ export class ClipComparer extends PipelineCommand {
 
         const clips = new Map<string, IClipTracks>();
         for (const animation of document.getRoot().listAnimations()) {
+            if (clipName && animation.getName() !== clipName) continue;
             const tracks = new Map<string, Interpolant>();
             let duration = 0;
             for (const channel of animation.listChannels()) {
                 const targetPath = channel.getTargetPath() ?? "";
-                const input = channel.getSampler()?.getInput();
-                const output = channel.getSampler()?.getOutput();
+                const sampler = channel.getSampler();
+                const input = sampler?.getInput();
+                const output = sampler?.getOutput();
                 if (!ClipComparer.COMPARED_PATHS.has(targetPath) || !input || !output) continue;
 
-                const times = accessorElements(input).map(([time]) => time);
-                const values = accessorElements(output).flat();
+                const times = trackValues(input);
+                const values = trackValues(output);
                 const name = `${channel.getTargetNode()?.getName()}|${targetPath}`;
                 const Track =
                     targetPath === "rotation" ? QuaternionKeyframeTrack : VectorKeyframeTrack;
@@ -556,7 +585,6 @@ export class ClipComparer extends PipelineCommand {
         return { clips, rest };
     }
 
-    readonly name = "compare-clips";
     readonly usage = "<before.glb> <after.glb> [--clip <ClipName>]";
     readonly summary = "Report per-clip rotation/translation differences between two clip files";
 
@@ -572,12 +600,10 @@ export class ClipComparer extends PipelineCommand {
         const io = await createGltfIo([EXTMeshoptCompression]);
         const [before, after] = await Promise.all(
             [beforePath, afterPath].map(async (file) =>
-                ClipComparer.readClipFile(await io.read(file))
+                ClipComparer.readClipFile(await io.read(file), values.clip)
             )
         );
-        const names = [...new Set([...before.clips.keys(), ...after.clips.keys()])]
-            .filter((name) => !values.clip || name === values.clip)
-            .sort();
+        const names = [...new Set([...before.clips.keys(), ...after.clips.keys()])].sort();
         if (names.length === 0) throw new Error(`no clip named ${values.clip} in either file`);
 
         let changed = 0;
@@ -609,33 +635,30 @@ export class ClipComparer extends PipelineCommand {
         const duration = Math.max(before.duration, after.duration);
         const channels = new Set([...before.tracks.keys(), ...after.tracks.keys()]);
 
+        const lastFrame = Math.round(duration * OUTPUT_FPS);
         for (const channel of channels) {
             const isRotation = channel.endsWith("|rotation");
-            const valueAt = (
-                clip: IClipTracks,
-                rest: Map<string, number[]>,
-                time: number
-            ): number[] => {
-                const track = clip.tracks.get(channel);
-                return track ? [...track.evaluate(time)] : (rest.get(channel) ?? []);
-            };
-            for (let frame = 0; frame <= Math.round(duration * OUTPUT_FPS); frame += 1) {
+            const worst = isRotation ? rotation : translation;
+            const beforeSource = before.tracks.get(channel) ?? beforeRest.get(channel);
+            const afterSource = after.tracks.get(channel) ?? afterRest.get(channel);
+            if (!beforeSource || !afterSource) continue;
+            for (let frame = 0; frame <= lastFrame; frame += 1) {
                 const time = frame / OUTPUT_FPS;
-                const a = valueAt(before, beforeRest, time);
-                const b = valueAt(after, afterRest, time);
-                if (a.length === 0 || b.length === 0) continue;
-
+                const a = Array.isArray(beforeSource) ? beforeSource : beforeSource.evaluate(time);
+                const b = Array.isArray(afterSource) ? afterSource : afterSource.evaluate(time);
                 const difference = isRotation
                     ? radiansToDegrees(
-                          new Quaternion()
+                          ClipComparer.beforeRotation
                               .fromArray(a)
                               .normalize()
-                              .angleTo(new Quaternion().fromArray(b).normalize())
+                              .angleTo(ClipComparer.afterRotation.fromArray(b).normalize())
                       )
-                    : Math.hypot(...a.map((value, index) => value - b[index])) * 100;
-                const worst = isRotation ? rotation : translation;
-                if (difference > worst.value)
-                    Object.assign(worst, { value: difference, channel, time });
+                    : Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) * 100;
+                if (difference > worst.value) {
+                    worst.value = difference;
+                    worst.channel = channel;
+                    worst.time = time;
+                }
                 if (isRotation) {
                     rotationSum += difference;
                     rotationSamples += 1;
@@ -660,22 +683,27 @@ export class ClipComparer extends PipelineCommand {
     }
 }
 
+function trackValues(accessor: Accessor): ArrayLike<number> {
+    return (!accessor.getNormalized() && accessor.getArray()) || accessorValues(accessor);
+}
+
 async function carryAnchor(io: NodeIO): Promise<ICarryAnchor> {
     const carry = PLAYER_STARTING_WEAPON.carry;
     if (!carry) throw new Error("the player weapon has no carry mount");
     const weaponRoot = (await io.read(sourcePathOf(PLAYER_STARTING_WEAPON.modelPath))).getRoot();
     const bounds = new Box3();
+    const meshBounds = new Box3();
+    const matrix = new Matrix4();
     for (const node of weaponRoot.listNodes()) {
-        const matrix = new Matrix4().fromArray(node.getWorldMatrix());
-        for (const primitive of node.getMesh()?.listPrimitives() ?? []) {
+        const mesh = node.getMesh();
+        if (!mesh) continue;
+        matrix.fromArray(node.getWorldMatrix());
+        for (const primitive of mesh.listPrimitives()) {
             const positions = primitive.getAttribute("POSITION");
             if (!positions) continue;
-            bounds.union(
-                new Box3(
-                    new Vector3(...positions.getMin([0, 0, 0])),
-                    new Vector3(...positions.getMax([0, 0, 0]))
-                ).applyMatrix4(matrix)
-            );
+            meshBounds.min.fromArray(positions.getMin([0, 0, 0]));
+            meshBounds.max.fromArray(positions.getMax([0, 0, 0]));
+            bounds.union(meshBounds.applyMatrix4(matrix));
         }
     }
     const { lengthAxis, tipDirectionSign } = measureBladeAxes(bounds);
