@@ -11,27 +11,83 @@ import {
 } from "@gltf-transform/core";
 import { ALL_EXTENSIONS } from "@gltf-transform/extensions";
 import { prune } from "@gltf-transform/functions";
-import { Matrix4, Vector3 } from "three";
+import { Matrix4 } from "three";
 import { CLIP } from "@/constants/characters";
 import { PHYSICS } from "@/constants/physics";
 import type { IPhysicsDefinition } from "@/types/physics";
-import { Blender, PIPELINE_CONFIG, ensureBlenderPackages, readJsonFile } from "../pipeline";
-import { accessorElements, createGltfIo } from "./AssetFormats";
-import type { IResolvedCharacterRecipe } from "./AssetManifest";
-import { CharacterValidator, VALIDATION_LIMITS, type BuildValidator } from "./AssetValidation";
+import { Blender, MILLIMETRES_PER_METRE, ensureBlenderPackages, readJsonFile } from "../pipeline";
+import { accessorValues, createGltfIo } from "./AssetFormats";
+import type {
+    IResolvedCharacterRecipe,
+    IResolvedImportedRecipe,
+    IResolvedKitRecipe,
+    IResolvedScanRecipe,
+} from "./AssetManifest";
+import type { ISharedTuning } from "./PipelineTuning";
+import { VALIDATION_LIMITS, type BuildValidator } from "./AssetValidation";
 
 type ArrayKind = Float32Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer>;
 
 export interface IBuildRecipe {
     name: string;
+    bakes: boolean;
 }
+
+interface IBakeInputs {
+    textureSize: number;
+    heightMetres: number;
+    referenceHeightMetres: number;
+    tuning: ISharedTuning;
+    bakes: boolean;
+}
+
+interface IBlenderStageInputs {
+    import: Pick<
+        IResolvedImportedRecipe,
+        "source" | "objects" | "facingYawDegrees" | "heightMetres" | "patches"
+    >;
+    align: IBuildRecipe;
+    decimate: Pick<IResolvedImportedRecipe, "triangles" | "tuning">;
+    generate: Pick<IResolvedKitRecipe, "tuning" | "materials" | "modules">;
+    modules: Pick<IResolvedKitRecipe, "bakes" | "materials" | "modules" | "tuning">;
+    unwrap: IBakeInputs;
+    bake: IBakeInputs;
+    "shared-material": Pick<IResolvedScanRecipe, "sharedMaterial">;
+    export: Pick<IResolvedImportedRecipe, "name" | "extras" | "tuning" | "propScale">;
+    "module-export": Pick<
+        IResolvedKitRecipe,
+        | "name"
+        | "extras"
+        | "tuning"
+        | "bakes"
+        | "materials"
+        | "propScale"
+        | "sharedMaterial"
+        | "sway"
+    >;
+    closeups: IBuildRecipe;
+    "module-closeups": Pick<IResolvedKitRecipe, "modules">;
+    prepare: IResolvedCharacterRecipe;
+    thickness: IResolvedCharacterRecipe;
+    joints: IResolvedCharacterRecipe;
+    "skinned-closeups": IResolvedCharacterRecipe;
+    masks: IResolvedCharacterRecipe;
+    physics: IResolvedCharacterRecipe;
+    rig: IResolvedCharacterRecipe;
+    bones: IResolvedCharacterRecipe;
+    weights: IResolvedCharacterRecipe;
+    "skinned-export": IResolvedCharacterRecipe;
+    anim: IResolvedCharacterRecipe;
+}
+
+type BlenderStageName = keyof IBlenderStageInputs;
+
+type StageNameFor<TRecipe> = {
+    [TName in BlenderStageName]: TRecipe extends IBlenderStageInputs[TName] ? TName : never;
+}[BlenderStageName];
 
 export interface IDetectionReport {
     physics: { name: string; attachBone: string; columns?: number; rows?: number }[];
-}
-
-interface IStageInputs {
-    requiredWorkFiles?: readonly string[];
 }
 
 interface IArraysMeta {
@@ -43,13 +99,11 @@ interface IArraysMeta {
 export class AssetBuild<TRecipe extends IBuildRecipe = IBuildRecipe> {
     private static readonly WORKSPACE_FOLDERS = ["validation", "out", "arrays", "preview"];
 
-    readonly kind: string;
     readonly name: string;
     readonly recipe: TRecipe;
     readonly root: string;
 
-    constructor(kind: string, recipe: TRecipe, workRoot: string) {
-        this.kind = kind;
+    constructor(recipe: TRecipe, workRoot: string) {
         this.name = recipe.name;
         this.recipe = recipe;
         this.root = path.resolve(workRoot, recipe.name);
@@ -70,70 +124,81 @@ export class AssetBuild<TRecipe extends IBuildRecipe = IBuildRecipe> {
         fs.writeFileSync(this.recipeFile, JSON.stringify(this.recipe, null, 4));
     }
 
+    assertHasFiles(files: readonly string[], reader: string): void {
+        const missing = files.map((file) => this.file(file)).filter((file) => !fs.existsSync(file));
+        if (missing.length > 0)
+            throw new Error(`${reader} needs ${missing.join(", ")}: run the earlier stages first`);
+    }
+
     readJson<T>(...parts: string[]): T {
         return readJsonFile<T>(this.file(...parts));
     }
 
     readArray<T extends ArrayKind>(name: string, kind: new (buffer: ArrayBuffer) => T): T {
         const bytes = fs.readFileSync(this.file("arrays", name));
-        return new kind(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+        const ownsBuffer = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength;
+        return new kind(
+            ownsBuffer
+                ? bytes.buffer
+                : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+        );
     }
 }
 
-abstract class BuildStage<TRecipe extends IBuildRecipe = IBuildRecipe> {
+export abstract class BuildStage<TRecipe extends IBuildRecipe = IBuildRecipe> {
     abstract readonly name: string;
-    private readonly inputs: IStageInputs;
-
-    constructor(inputs: IStageInputs = {}) {
-        this.inputs = inputs;
-    }
+    readonly canShareBlenderProcess: boolean = false;
+    protected readonly reads: readonly string[] = [];
 
     async execute(build: AssetBuild<TRecipe>, blender: Blender): Promise<void> {
-        const missing = (this.inputs.requiredWorkFiles ?? [])
-            .map((file) => build.file(file))
-            .filter((file) => !fs.existsSync(file));
-        if (missing.length > 0)
-            throw new Error(
-                `stage ${this.name} needs ${missing.join(", ")}: run the earlier stages first`
-            );
+        build.assertHasFiles(this.reads, `stage ${this.name}`);
         await this.run(build, blender);
     }
 
     protected abstract run(build: AssetBuild<TRecipe>, blender: Blender): Promise<void>;
 }
 
-class BlenderStage<TRecipe extends IBuildRecipe = IBuildRecipe> extends BuildStage<TRecipe> {
+export class BlenderStage<TRecipe extends IBuildRecipe = IBuildRecipe> extends BuildStage<TRecipe> {
     private static readonly STAGE_ECHO_PREFIXES = ["STAGE", "CHECK", "WARN"];
 
-    readonly name: string;
+    readonly name: StageNameFor<TRecipe>;
+    override readonly canShareBlenderProcess: boolean = true;
 
-    constructor(name: string, inputs: IStageInputs = {}) {
-        super(inputs);
+    constructor(name: StageNameFor<TRecipe>) {
+        super();
         this.name = name;
     }
 
-    protected async run(build: AssetBuild<TRecipe>, blender: Blender): Promise<void> {
+    static runTogether<TRecipe extends IBuildRecipe>(
+        build: AssetBuild<TRecipe>,
+        blender: Blender,
+        stages: readonly BlenderStage<TRecipe>[]
+    ): void {
+        build.assertHasFiles(stages[0].reads, `stage ${stages[0].name}`);
         blender.runScript(
-            ["model", build.kind, this.name, build.recipeFile, build.root],
+            ["model", stages.map((stage) => stage.name).join(","), build.recipeFile, build.root],
             BlenderStage.STAGE_ECHO_PREFIXES
         );
     }
+
+    protected async run(build: AssetBuild<TRecipe>, blender: Blender): Promise<void> {
+        BlenderStage.runTogether(build, blender, [this]);
+    }
 }
 
-class SkeletonStage extends BuildStage<IResolvedCharacterRecipe> {
+export class SkeletonStage extends BuildStage<IResolvedCharacterRecipe> {
     private static readonly IDENTITY_TOLERANCE = 1e-6;
 
     readonly name = "skeleton";
 
     private static assertIdentity(node: GltfNode, file: string): void {
-        const drift = node
+        const isIdentity = node
             .getWorldMatrix()
-            .reduce(
-                (worst, value, index) =>
-                    Math.max(worst, Math.abs(value - (index % 5 === 0 ? 1 : 0))),
-                0
+            .every(
+                (value, index) =>
+                    Math.abs(value - (index % 5 === 0 ? 1 : 0)) <= SkeletonStage.IDENTITY_TOLERANCE
             );
-        if (drift > SkeletonStage.IDENTITY_TOLERANCE)
+        if (!isIdentity)
             throw new Error(
                 `${file}: node ${node.getName()} must have an identity world transform`
             );
@@ -155,18 +220,22 @@ class SkeletonStage extends BuildStage<IResolvedCharacterRecipe> {
             build.recipe.skeletonDescriptor.bones.pelvis
         );
 
+        const jointIndex = new Map(orderedJoints.map((joint, index) => [joint, index]));
         fs.writeFileSync(
             build.file("skeleton.json"),
             JSON.stringify({
                 height,
                 skin: skin.listJoints().map((joint) => joint.getName()),
-                nodes: orderedJoints.map((joint) => ({
-                    name: joint.getName(),
-                    parent: orderedJoints.indexOf(joint.getParentNode() as GltfNode),
-                    translation: joint.getTranslation(),
-                    rotation: joint.getRotation(),
-                    scale: joint.getScale(),
-                })),
+                nodes: orderedJoints.map((joint) => {
+                    const parent = joint.getParentNode();
+                    return {
+                        name: joint.getName(),
+                        parent: parent ? (jointIndex.get(parent) ?? -1) : -1,
+                        translation: joint.getTranslation(),
+                        rotation: joint.getRotation(),
+                        scale: joint.getScale(),
+                    };
+                }),
                 clips,
             })
         );
@@ -208,38 +277,48 @@ class SkeletonStage extends BuildStage<IResolvedCharacterRecipe> {
         clipLibraries: readonly string[],
         pelvisBone: string
     ): Promise<Record<string, unknown>> {
-        const clipNames = new Set<string>(Object.values(CLIP));
+        const missing = new Set<string>(Object.values(CLIP));
         const clips: Record<string, unknown> = {};
         for (const library of clipLibraries) {
+            if (missing.size === 0) break;
             const libraryRoot = (await io.read(library)).getRoot();
-            const pelvis = libraryRoot.listNodes().find((node) => node.getName() === pelvisBone);
-            for (const animation of libraryRoot.listAnimations()) {
+            const animations = libraryRoot
+                .listAnimations()
+                .filter((animation) => missing.has(animation.getName()));
+            if (animations.length === 0) continue;
+
+            const pelvisRest =
+                libraryRoot
+                    .listNodes()
+                    .find((node) => node.getName() === pelvisBone)
+                    ?.getTranslation() ?? null;
+            for (const animation of animations) {
                 const name = animation.getName();
-                if (!clipNames.has(name) || name in clips) continue;
+                if (!missing.delete(name)) continue;
                 clips[name] = {
-                    pelvisRest: pelvis?.getTranslation() ?? null,
-                    channels: animation.listChannels().map((channel) => ({
-                        node: channel.getTargetNode()?.getName(),
-                        path: channel.getTargetPath(),
-                        interpolation: channel.getSampler()?.getInterpolation(),
-                        times: accessorElements(channel.getSampler()!.getInput()!).flat(),
-                        values: accessorElements(channel.getSampler()!.getOutput()!).flat(),
-                    })),
+                    pelvisRest,
+                    channels: animation.listChannels().map((channel) => {
+                        const sampler = channel.getSampler()!;
+                        return {
+                            node: channel.getTargetNode()?.getName(),
+                            path: channel.getTargetPath(),
+                            interpolation: sampler.getInterpolation(),
+                            times: accessorValues(sampler.getInput()!),
+                            values: accessorValues(sampler.getOutput()!),
+                        };
+                    }),
                 };
             }
         }
-        const missing = [...clipNames].filter((name) => !(name in clips));
-        if (missing.length > 0)
+        if (missing.size > 0)
             console.log(
-                `WARN skeleton: game clips missing from the clip libraries: ${missing.join(", ")}`
+                `WARN skeleton: game clips missing from the clip libraries: ${[...missing].join(", ")}`
             );
         return clips;
     }
 }
 
-class AssembleGlbStage extends BuildStage<IResolvedCharacterRecipe> {
-    private static readonly METRES_TO_MILLIMETRES = 1000;
-
+export class AssembleGlbStage extends BuildStage<IResolvedCharacterRecipe> {
     private static readonly PRIMITIVE_ATTRIBUTES = [
         ["POSITION", "VEC3", "positions.f32", Float32Array],
         ["NORMAL", "VEC3", "normals.f32", Float32Array],
@@ -249,18 +328,29 @@ class AssembleGlbStage extends BuildStage<IResolvedCharacterRecipe> {
     ] as const;
 
     readonly name = "graft";
+    protected override readonly reads = [
+        "arrays/meta.json",
+        "arrays/rest.json",
+        "arrays/ibm.f32",
+        ...AssembleGlbStage.PRIMITIVE_ATTRIBUTES.map(([, , file]) => `arrays/${file}`),
+        "arrays/indices.u32",
+        "baseColor.png",
+        "normal.png",
+        "detection.json",
+    ];
 
     protected async run(build: AssetBuild<IResolvedCharacterRecipe>): Promise<void> {
+        const detection = build.readJson<IDetectionReport>("detection.json");
+        const meta = build.readJson<IArraysMeta>("arrays", "meta.json");
+        const physics = detection.physics.length
+            ? build.readJson<IPhysicsDefinition>("arrays", "physics.json")
+            : null;
         const { io, document, skin, skinnedNode } = await readSkinnedSkeleton(
             build.recipe.skeleton
         );
         const root = document.getRoot();
-        const physics = build.readJson<IDetectionReport>("detection.json").physics.length
-            ? build.readJson<IPhysicsDefinition>("arrays", "physics.json")
-            : null;
         if (physics) this.addLatticeJoints(document, skin, physics);
 
-        const meta = build.readJson<IArraysMeta>("arrays", "meta.json");
         this.fitRestPose(skin, meta, build);
         this.replaceMesh(document, skinnedNode, build);
         if (physics) {
@@ -304,11 +394,14 @@ class AssembleGlbStage extends BuildStage<IResolvedCharacterRecipe> {
         meta: IArraysMeta,
         build: AssetBuild<IResolvedCharacterRecipe>
     ): void {
-        const skinJoints = skin.listJoints().map((joint) => joint.getName());
-        if (skinJoints.join(",") !== meta.jointNames.join(","))
+        const joints = skin.listJoints();
+        if (
+            joints.length !== meta.jointNames.length ||
+            joints.some((joint, index) => joint.getName() !== meta.jointNames[index])
+        )
             throw new Error("exported joint order does not match the skeleton's skin");
         const restTranslations = build.readJson<Record<string, vec3>>("arrays", "rest.json");
-        for (const joint of skin.listJoints()) {
+        for (const joint of joints) {
             const translation = restTranslations[joint.getName()];
             if (!translation) throw new Error(`no fitted rest translation for ${joint.getName()}`);
             joint.setTranslation(translation);
@@ -326,29 +419,34 @@ class AssembleGlbStage extends BuildStage<IResolvedCharacterRecipe> {
     private assertLatticeBind(skin: Skin, physics: IPhysicsDefinition): void {
         const inverseBinds = skin.getInverseBindMatrices()!;
         const joints = skin.listJoints();
+        const jointIndexByName = new Map<string, number>();
+        joints.forEach((joint, index) => {
+            if (!jointIndexByName.has(joint.getName()))
+                jointIndexByName.set(joint.getName(), index);
+        });
+        const inverseBind: number[] = [];
         const bind = new Matrix4();
-        const bindPosition = new Vector3();
-        const target = new Vector3();
-        let worst = 0;
+        let worstSquaredMetres = 0;
         let worstJoint = "";
         for (const body of physics.bodies) {
             for (const [node, name] of body.nodeBones.entries()) {
-                const index = joints.findIndex((joint) => joint.getName() === name);
+                const index = jointIndexByName.get(name) ?? -1;
                 if (index < 0) throw new Error(`lattice joint ${name} is not in the skin`);
-                bind.fromArray(inverseBinds.getElement(index, [])).invert();
-                const deviationMm =
-                    bindPosition
-                        .setFromMatrixPosition(bind)
-                        .distanceTo(target.fromArray(body.restPositions, node * 3)) *
-                    AssembleGlbStage.METRES_TO_MILLIMETRES;
-                if (!Number.isFinite(deviationMm))
+                bind.fromArray(inverseBinds.getElement(index, inverseBind)).invert();
+                const offset = node * 3;
+                const dx = bind.elements[12] - body.restPositions[offset];
+                const dy = bind.elements[13] - body.restPositions[offset + 1];
+                const dz = bind.elements[14] - body.restPositions[offset + 2];
+                const deviationSquaredMetres = dx * dx + dy * dy + dz * dz;
+                if (!Number.isFinite(deviationSquaredMetres))
                     throw new Error(`lattice joint ${name} has a non-finite bind position`);
-                if (deviationMm > worst) {
-                    worst = deviationMm;
+                if (deviationSquaredMetres > worstSquaredMetres) {
+                    worstSquaredMetres = deviationSquaredMetres;
                     worstJoint = name;
                 }
             }
         }
+        const worst = Math.sqrt(worstSquaredMetres) * MILLIMETRES_PER_METRE;
         if (worst > VALIDATION_LIMITS.latticeBindMillimetres)
             throw new Error(
                 `lattice joint ${worstJoint} binds ${worst.toFixed(3)} mm away from its node target (limit ${VALIDATION_LIMITS.latticeBindMillimetres} mm)`
@@ -396,15 +494,15 @@ class AssembleGlbStage extends BuildStage<IResolvedCharacterRecipe> {
     }
 }
 
-class ValidationStage<TRecipe extends IBuildRecipe, TMeasurements> extends BlenderStage<TRecipe> {
-    private readonly validator: BuildValidator<TRecipe, TMeasurements>;
+export class ValidationStage<
+    TRecipe extends IBuildRecipe,
+    TMeasurements,
+> extends BlenderStage<TRecipe> {
+    readonly validator: BuildValidator<TRecipe, TMeasurements>;
+    override readonly canShareBlenderProcess: boolean = false;
 
-    constructor(
-        name: string,
-        inputs: IStageInputs,
-        validator: BuildValidator<TRecipe, TMeasurements>
-    ) {
-        super(name, inputs);
+    constructor(name: StageNameFor<TRecipe>, validator: BuildValidator<TRecipe, TMeasurements>) {
+        super(name);
         this.validator = validator;
     }
 
@@ -414,19 +512,23 @@ class ValidationStage<TRecipe extends IBuildRecipe, TMeasurements> extends Blend
     }
 }
 
-class AssetBuildPipeline<TRecipe extends IBuildRecipe> {
-    readonly kind: string;
+export class AssetBuildPipeline<TRecipe extends IBuildRecipe> {
+    readonly validator: BuildValidator<TRecipe, unknown>;
     private readonly workRoot: string;
     private readonly stages: readonly BuildStage<TRecipe>[];
 
-    constructor(kind: string, workRoot: string, stages: readonly BuildStage<TRecipe>[]) {
-        this.kind = kind;
+    constructor(
+        workRoot: string,
+        stages: readonly BuildStage<TRecipe>[],
+        validation: ValidationStage<TRecipe, unknown>
+    ) {
         this.workRoot = workRoot;
-        this.stages = stages;
+        this.stages = [...stages, validation];
+        this.validator = validation.validator;
     }
 
     createBuild(recipe: TRecipe): AssetBuild<TRecipe> {
-        return new AssetBuild(this.kind, recipe, this.workRoot);
+        return new AssetBuild(recipe, this.workRoot);
     }
 
     async run(build: AssetBuild<TRecipe>, flags: readonly string[]): Promise<boolean> {
@@ -444,11 +546,31 @@ class AssetBuildPipeline<TRecipe extends IBuildRecipe> {
         ensureBlenderPackages();
         build.prepareWorkspace(first === 0);
 
-        for (const stage of this.stages.slice(first, last + 1)) {
+        const selected = this.stages.slice(first, last + 1);
+
+        for (let start = 0; start < selected.length;) {
+            let end = start + 1;
+            while (
+                selected[start].canShareBlenderProcess &&
+                end < selected.length &&
+                selected[end].canShareBlenderProcess
+            )
+                end += 1;
+            const group = selected.slice(start, end);
+            const label = group.map((stage) => stage.name).join(" + ");
             const started = Date.now();
-            console.log(`\n== ${stage.name}`);
-            await stage.execute(build, blender);
-            console.log(`== ${stage.name} ${((Date.now() - started) / 1000).toFixed(1)} s`);
+            console.log(`\n== ${label}`);
+            if (group.length === 1) await group[0].execute(build, blender);
+            else
+                BlenderStage.runTogether(
+                    build,
+                    blender,
+                    group.filter(
+                        (stage): stage is BlenderStage<TRecipe> => stage instanceof BlenderStage
+                    )
+                );
+            console.log(`== ${label} ${((Date.now() - started) / 1000).toFixed(1)} s`);
+            start = end;
         }
         console.log(`\nworkspace: ${build.root}`);
         return last === this.stages.length - 1;
@@ -469,112 +591,8 @@ const readSkinnedSkeleton = async (file: string) => {
     const document = await io.read(file);
     const root = document.getRoot();
     const skin = root.listSkins()[0];
+    if (!skin) throw new Error(`${file} has no skinned mesh`);
     const skinnedNode = root.listNodes().find((node) => node.getSkin() === skin && node.getMesh());
-    if (!skin || !skinnedNode) throw new Error(`${file} has no skinned mesh`);
+    if (!skinnedNode) throw new Error(`${file} has no skinned mesh`);
     return { io, document, skin, skinnedNode };
 };
-
-const CHARACTER_PIPELINE = new AssetBuildPipeline<IResolvedCharacterRecipe>(
-    "character",
-    PIPELINE_CONFIG.characters.workRoot,
-    [
-        new BlenderStage("prepare"),
-        new BlenderStage("unwrap", { requiredWorkFiles: ["lo.npz"] }),
-        new BlenderStage("bake", { requiredWorkFiles: ["hi.blend", "atlas.npz", "lo.npz"] }),
-        new SkeletonStage(),
-        new BlenderStage("joints", {
-            requiredWorkFiles: [
-                "lo_split.npz",
-                "albedo.png",
-                "hi.npz",
-                "thick.npy",
-                "skeleton.json",
-                "atlas.npz",
-                "reference.json",
-                "reference.npz",
-                "detection.json",
-            ],
-        }),
-        new BlenderStage("closeups", { requiredWorkFiles: ["lo.blend", "joints.json"] }),
-        new BlenderStage("masks", {
-            requiredWorkFiles: ["lo.blend", "props.npy", "skin.npy", "detection.json"],
-        }),
-        new BlenderStage("physics", {
-            requiredWorkFiles: [
-                "lo_split.npz",
-                "lo.blend",
-                "atlas.npz",
-                "thick.npy",
-                "skin.npy",
-                "hi.npz",
-                "reference.npz",
-                "props.npy",
-                "joints.json",
-                "skeleton.json",
-                "detection.json",
-            ],
-        }),
-        new BlenderStage("rig", {
-            requiredWorkFiles: [
-                "lo.blend",
-                "joints.json",
-                "skeleton.json",
-                "props.npy",
-                "pieces.npy",
-                "thick.npy",
-                "physics.json",
-                "detection.json",
-            ],
-        }),
-        new BlenderStage("bones", {
-            requiredWorkFiles: ["rig.npz", "lo.blend", "skeleton.json", "joints.json"],
-        }),
-        new BlenderStage("weights", {
-            requiredWorkFiles: [
-                "raw.npz",
-                "rig.npz",
-                "lo_split.npz",
-                "skeleton.json",
-                "thick.npy",
-                "detection.json",
-            ],
-        }),
-        new BlenderStage("export", {
-            requiredWorkFiles: [
-                "final.npz",
-                "rig.npz",
-                "lo_split.npz",
-                "skeleton.json",
-                "albedo.png",
-                "detection.json",
-            ],
-        }),
-        new AssembleGlbStage({
-            requiredWorkFiles: [
-                "arrays/meta.json",
-                "arrays/rest.json",
-                "baseColor.png",
-                "normal.png",
-                "detection.json",
-            ],
-        }),
-        new ValidationStage(
-            "anim",
-            {
-                requiredWorkFiles: [
-                    "lo.blend",
-                    "final.npz",
-                    "rig.npz",
-                    "skeleton.json",
-                    "lo_split.npz",
-                    "props.npy",
-                    "joints.json",
-                    "validation/measurements.json",
-                ],
-            },
-            new CharacterValidator()
-        ),
-    ]
-);
-
-export const ASSET_PIPELINES = { character: CHARACTER_PIPELINE } as const;

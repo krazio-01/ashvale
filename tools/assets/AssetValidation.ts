@@ -1,9 +1,22 @@
-import { Vector3 } from "three";
+import { Box3, MathUtils, Vector3, type Vector3Tuple } from "three";
 import type { ISkeletonDescriptor, SkeletonSide } from "@/types/characters";
+import type { IStaticPieceExtras } from "@/types/world";
 import type { AssetBuild, IBuildRecipe, IDetectionReport } from "./AssetBuilds";
-import type { CharacterJoints, IResolvedCharacterRecipe } from "./AssetManifest";
+import type {
+    CharacterJoints,
+    IBoundsMetres,
+    IKitPartBounds,
+    IResolvedCharacterRecipe,
+    IResolvedImportedRecipe,
+    IResolvedKitRecipe,
+    IResolvedScanRecipe,
+    IResolvedSculptRecipe,
+} from "./AssetManifest";
+import { MILLIMETRES_PER_METRE } from "../pipeline";
 
 export const VALIDATION_LIMITS = {
+    garmentArmShareSlack: 0.02,
+    latticeSpacingSlack: 1.25,
     rigidityMaxMm: 0.5,
     seamGapMm: 0.1,
     triangleTolerance: 0.01,
@@ -14,6 +27,18 @@ export const VALIDATION_LIMITS = {
     colliderRadiusMaxMetres: 0.35,
     latticeBindMillimetres: 0.5,
     latticeStretchRatio: 1.1,
+    sizeToleranceMetres: 0.01,
+    sizeToleranceFraction: 0.005,
+    minimumNormalDetail: 0.02,
+    embedFacingDegrees: 30,
+    openEdgeFraction: 0.02,
+    alphaCutoffTolerance: 1e-4,
+    farMaterialAreaLoss: 0.1,
+    wallRunFaceAreaSquareMetres: 1,
+    wallRunNormalSpreadDegrees: 5,
+    wallRunCreaseDegrees: 30,
+    wallRunAreaQuantile: 0.9,
+    supportGapMetres: 0.1,
 };
 
 interface IGarmentMeasurements {
@@ -57,6 +82,40 @@ interface ICharacterMeasurements {
     physics?: IPhysicsMeasurements;
 }
 
+interface IModelMeasurements {
+    triangles: number;
+    boundsMetres: IBoundsMetres;
+    uvRange: { min: readonly number[]; max: readonly number[] };
+    materialTriangles: Record<string, number>;
+    sharedMaterial: string | null;
+    normalDetail: number | null;
+    openEdgeMetres: number;
+    facingDegrees: number;
+    alphaCutoffs: Record<string, number | null>;
+}
+
+interface IKitModuleMeasurements {
+    triangles: number;
+    boundsMetres: IBoundsMetres;
+    sockets: readonly { name: string; at: Vector3Tuple }[];
+    faces?: readonly (readonly [number, number, number, number])[];
+}
+
+interface IKitMeasurements extends IModelMeasurements {
+    modules: Record<string, IKitModuleMeasurements>;
+}
+
+export interface IExpectedSize {
+    node: string | null;
+    heightMetres: number;
+    boundsMetres: IBoundsMetres | null;
+}
+
+interface IWallSide {
+    areaSquareMetres: number;
+    spreadDegrees: number;
+}
+
 export class Findings extends Array<string> {
     failIf(condition: boolean, message: string): void {
         if (condition) this.push(message);
@@ -64,8 +123,13 @@ export class Findings extends Array<string> {
 }
 
 export abstract class BuildValidator<TRecipe extends IBuildRecipe, TMeasurements = unknown> {
+    protected static readonly MEASUREMENTS_FILE = "validation/measurements.json";
+
+    readonly reads: readonly string[] = [BuildValidator.MEASUREMENTS_FILE];
+
     validate(build: AssetBuild<TRecipe>): void {
-        const measurements = build.readJson<TMeasurements>("validation", "measurements.json");
+        build.assertHasFiles(this.reads, "validation");
+        const measurements = build.readJson<TMeasurements>(BuildValidator.MEASUREMENTS_FILE);
         const failures = this.findFailures(build, measurements);
         console.log(`  images: ${build.file("validation")}`);
         if (failures.length > 0)
@@ -75,10 +139,293 @@ export abstract class BuildValidator<TRecipe extends IBuildRecipe, TMeasurements
         );
     }
 
+    protected static checkTriangles(
+        budget: number,
+        triangles: number,
+        mode: "exact" | "atMost",
+        failures: Findings
+    ): void {
+        console.log(`  ${triangles} triangles (budget ${budget})`);
+        if (mode === "exact")
+            failures.failIf(
+                Math.abs(triangles - budget) / budget > VALIDATION_LIMITS.triangleTolerance,
+                `${triangles} triangles, config asks for ${budget}`
+            );
+        else
+            failures.failIf(
+                triangles > budget,
+                `${triangles} triangles, over the budget of ${budget}`
+            );
+    }
+
+    abstract expectedSizes(recipe: TRecipe): readonly IExpectedSize[];
+
+    protected tilesUvs(_recipe: TRecipe): boolean {
+        return false;
+    }
+
     protected abstract findFailures(
         build: AssetBuild<TRecipe>,
         measurements: TMeasurements
     ): string[];
+}
+
+abstract class StaticValidator<
+    TRecipe extends IBuildRecipe,
+    TMeasurements extends IModelMeasurements,
+> extends BuildValidator<TRecipe, TMeasurements> {
+    protected findFailures(build: AssetBuild<TRecipe>, measurements: TMeasurements): string[] {
+        const failures = new Findings();
+        console.log(`\nValidating ${build.recipe.name}`);
+        this.checkShape(build.recipe, measurements, failures);
+        for (const size of this.expectedSizes(build.recipe)) {
+            const label = size.node ?? build.recipe.name;
+            const measured = this.measuredBounds(measurements, size.node);
+            if (measured) checkSize(size, measured, label, failures);
+            else failures.push(`${label} was not measured`);
+        }
+        const { min, max } = measurements.uvRange;
+        console.log(`  UVs ${min.join(", ")} to ${max.join(", ")}`);
+        failures.failIf(
+            !this.tilesUvs(build.recipe) &&
+                (min.some((value) => value < 0) || max.some((value) => value > 1)),
+            `UVs reach ${min.join(", ")} to ${max.join(", ")}, outside 0 to 1`
+        );
+        for (const [material, triangles] of Object.entries(measurements.materialTriangles))
+            console.log(`  material ${material || "(none)"}: ${triangles} triangles`);
+        return failures;
+    }
+
+    protected abstract checkShape(
+        recipe: TRecipe,
+        measurements: TMeasurements,
+        failures: Findings
+    ): void;
+
+    protected abstract measuredBounds(
+        measurements: TMeasurements,
+        node: string | null
+    ): IBoundsMetres | null;
+}
+
+export class ModelValidator<
+    TRecipe extends IResolvedImportedRecipe = IResolvedImportedRecipe,
+> extends StaticValidator<TRecipe, IModelMeasurements> {
+    expectedSizes(recipe: TRecipe): readonly IExpectedSize[] {
+        return recipe.heightMetres === null
+            ? []
+            : [{ node: null, heightMetres: recipe.heightMetres, boundsMetres: null }];
+    }
+
+    protected checkShape(
+        recipe: TRecipe,
+        measurements: IModelMeasurements,
+        failures: Findings
+    ): void {
+        BuildValidator.checkTriangles(recipe.triangles, measurements.triangles, "atMost", failures);
+    }
+
+    protected measuredBounds(measurements: IModelMeasurements): IBoundsMetres {
+        return measurements.boundsMetres;
+    }
+}
+
+export class SculptValidator<
+    TRecipe extends IResolvedImportedRecipe & { extras: Readonly<IStaticPieceExtras> } =
+        IResolvedSculptRecipe,
+> extends ModelValidator<TRecipe> {
+    protected override checkShape(
+        recipe: TRecipe,
+        measurements: IModelMeasurements,
+        failures: Findings
+    ): void {
+        super.checkShape(recipe, measurements, failures);
+        const { openEdgeMetres, facingDegrees, boundsMetres } = measurements;
+        const closedLimit =
+            VALIDATION_LIMITS.openEdgeFraction * Math.max(...extentsOf(boundsMetres));
+        const open = openEdgeMetres > closedLimit;
+        console.log(
+            `  open edges ${openEdgeMetres} m (closed up to ${closedLimit.toFixed(3)} m), facing ${facingDegrees} degrees from +Z`
+        );
+        if (!recipe.extras.embedOnly) {
+            failures.failIf(
+                open,
+                `${openEdgeMetres} m of open edges: mark the recipe embedOnly or pick a closed source`
+            );
+            return;
+        }
+        failures.failIf(!open, "marked embedOnly but the mesh is closed: set embedOnly to false");
+        failures.failIf(
+            Math.abs(facingDegrees) > VALIDATION_LIMITS.embedFacingDegrees,
+            `an embedOnly front faces ${facingDegrees} degrees from +Z (limit ${VALIDATION_LIMITS.embedFacingDegrees}): set facingYawDegrees to ${-facingDegrees}`
+        );
+    }
+}
+
+export class ScanValidator extends SculptValidator<IResolvedScanRecipe> {
+    protected override checkShape(
+        recipe: IResolvedScanRecipe,
+        measurements: IModelMeasurements,
+        failures: Findings
+    ): void {
+        super.checkShape(recipe, measurements, failures);
+        const { normalDetail, sharedMaterial } = measurements;
+        console.log(`  normal detail ${normalDetail}, shared material ${sharedMaterial}`);
+        failures.failIf(
+            normalDetail === null || normalDetail < VALIDATION_LIMITS.minimumNormalDetail,
+            `normal map detail ${normalDetail} is below ${VALIDATION_LIMITS.minimumNormalDetail}: the bake came out flat`
+        );
+        failures.failIf(
+            sharedMaterial !== recipe.sharedMaterial,
+            `material carries shared material ${sharedMaterial}, recipe asks for ${recipe.sharedMaterial}`
+        );
+    }
+}
+
+export class KitValidator extends StaticValidator<IResolvedKitRecipe, IKitMeasurements> {
+    protected override tilesUvs(recipe: IResolvedKitRecipe): boolean {
+        return Object.values(recipe.materials).every((material) => material.kind === "tiled");
+    }
+
+    private static wallSides(
+        faces: IKitModuleMeasurements["faces"],
+        areaScale: number
+    ): IWallSide[] {
+        const maximumTilt = Math.sin(
+            MathUtils.degToRad(VALIDATION_LIMITS.wallRunNormalSpreadDegrees)
+        );
+        const crease = Math.cos(MathUtils.degToRad(VALIDATION_LIMITS.wallRunCreaseDegrees));
+        let remaining: { normal: Vector3; area: number }[] = [];
+        for (const [x, y, z, area] of faces ?? [])
+            if (Math.abs(y) <= maximumTilt)
+                remaining.push({ normal: new Vector3(x, y, z), area: area * areaScale });
+        const sides: IWallSide[] = [];
+        const mean = new Vector3();
+        while (remaining.length > 0) {
+            const seed = remaining.reduce((largest, face) =>
+                face.area > largest.area ? face : largest
+            );
+            const side: typeof remaining = [];
+            const rest: typeof remaining = [];
+            for (const face of remaining)
+                (face.normal.dot(seed.normal) >= crease ? side : rest).push(face);
+            remaining = rest;
+            mean.set(0, 0, 0);
+            let area = 0;
+            for (const face of side) {
+                mean.addScaledVector(face.normal, face.area);
+                area += face.area;
+            }
+            mean.normalize();
+            let covered = 0;
+            const quantileAngle = side
+                .map((face) => ({ angle: face.normal.angleTo(mean), area: face.area }))
+                .sort((first, second) => first.angle - second.angle)
+                .find(
+                    (face) => (covered += face.area) >= area * VALIDATION_LIMITS.wallRunAreaQuantile
+                )!.angle;
+            sides.push({
+                areaSquareMetres: area,
+                spreadDegrees: 2 * MathUtils.radToDeg(quantileAngle),
+            });
+        }
+        return sides;
+    }
+
+    static unsupportedParts(parts: readonly IKitPartBounds[]): IKitPartBounds[] {
+        const gap = VALIDATION_LIMITS.supportGapMetres;
+        const boxes = parts.map(({ min, max }) =>
+            new Box3(new Vector3(...min), new Vector3(...max)).expandByScalar(gap / 2)
+        );
+        const supported = parts.map(({ min }) => min[1] <= gap);
+        const reached = supported.flatMap((isGrounded, index) => (isGrounded ? [index] : []));
+        while (reached.length > 0) {
+            const box = boxes[reached.pop() ?? 0];
+            boxes.forEach((other, index) => {
+                if (supported[index] || !other.intersectsBox(box)) return;
+                supported[index] = true;
+                reached.push(index);
+            });
+        }
+        return parts.filter((_, index) => !supported[index]);
+    }
+
+    expectedSizes(recipe: IResolvedKitRecipe): readonly IExpectedSize[] {
+        return recipe.modules.map((kitModule) => ({
+            node: kitModule.name,
+            heightMetres: extentsOf(kitModule.boundsMetres)[1],
+            boundsMetres: kitModule.boundsMetres,
+        }));
+    }
+
+    protected checkShape(
+        recipe: IResolvedKitRecipe,
+        measurements: IKitMeasurements,
+        failures: Findings
+    ): void {
+        for (const [slot, material] of Object.entries(recipe.materials)) {
+            if (material.kind !== "cutout") continue;
+            const cutoff = measurements.alphaCutoffs[slot] ?? null;
+            console.log(`  material ${slot}: alpha cutoff ${cutoff}`);
+            failures.failIf(
+                cutoff === null ||
+                    Math.abs(cutoff - material.alphaCutoff) >
+                        VALIDATION_LIMITS.alphaCutoffTolerance,
+                `material ${slot} exports alpha cutoff ${cutoff}, recipe asks for ${material.alphaCutoff}: its cards would render solid`
+            );
+        }
+        for (const kitModule of recipe.modules) {
+            for (const part of KitValidator.unsupportedParts(kitModule.partBoundsMetres))
+                failures.push(
+                    `module ${kitModule.name}: a ${part.material} part rests on nothing, its lowest point is ${part.min[1].toFixed(2)} m up`
+                );
+            const measured = measurements.modules[kitModule.name];
+            if (!measured) continue;
+            const { min, max } = measured.boundsMetres;
+            console.log(
+                `  module ${kitModule.name}: ${min.join(", ")} to ${max.join(", ")} m, ${measured.sockets.length} sockets`
+            );
+            BuildValidator.checkTriangles(
+                recipe.trianglesPerModule,
+                measured.triangles,
+                "atMost",
+                failures
+            );
+            const bounds = new Box3(new Vector3(...min), new Vector3(...max));
+            for (const socket of measured.sockets)
+                failures.failIf(
+                    !bounds.containsPoint(new Vector3(...socket.at)),
+                    `module ${kitModule.name}: socket ${socket.name} at ${socket.at.join(", ")} sits outside the module`
+                );
+            if (!kitModule.extras.wallRunnable) continue;
+            const sides = KitValidator.wallSides(measured.faces, recipe.propScale ** 2);
+            const widest = sides.reduce<IWallSide | null>(
+                (best, side) =>
+                    !best || side.areaSquareMetres > best.areaSquareMetres ? side : best,
+                null
+            );
+            console.log(
+                `  module ${kitModule.name} widest wall ${widest?.areaSquareMetres.toFixed(2) ?? 0} m², spread ${widest?.spreadDegrees.toFixed(1) ?? "-"}°`
+            );
+            failures.failIf(
+                !sides.some(
+                    (side) =>
+                        side.areaSquareMetres >= VALIDATION_LIMITS.wallRunFaceAreaSquareMetres &&
+                        side.spreadDegrees <= VALIDATION_LIMITS.wallRunNormalSpreadDegrees
+                ),
+                `module ${kitModule.name} is wall-runnable but has no vertical wall of ${VALIDATION_LIMITS.wallRunFaceAreaSquareMetres} m² flat within ${VALIDATION_LIMITS.wallRunNormalSpreadDegrees}°`
+            );
+        }
+    }
+
+    protected measuredBounds(
+        measurements: IKitMeasurements,
+        node: string | null
+    ): IBoundsMetres | null {
+        return node === null
+            ? measurements.boundsMetres
+            : (measurements.modules[node]?.boundsMetres ?? null);
+    }
 }
 
 export class CharacterValidator extends BuildValidator<
@@ -87,6 +434,12 @@ export class CharacterValidator extends BuildValidator<
 > {
     private static readonly heightFactor = (recipe: IResolvedCharacterRecipe): number =>
         recipe.heightMetres / recipe.referenceHeightMetres;
+
+    override readonly reads = [BuildValidator.MEASUREMENTS_FILE, "joints.json", "detection.json"];
+
+    expectedSizes(recipe: IResolvedCharacterRecipe): readonly IExpectedSize[] {
+        return [{ node: null, heightMetres: recipe.heightMetres, boundsMetres: null }];
+    }
 
     protected findFailures(
         build: AssetBuild<IResolvedCharacterRecipe>,
@@ -99,7 +452,12 @@ export class CharacterValidator extends BuildValidator<
         this.checkRigidity(measurements, failures);
         this.checkStretch(measurements, failures);
         this.checkPhysics(build, measurements, failures);
-        this.checkTriangles(build.recipe, measurements, failures);
+        BuildValidator.checkTriangles(
+            build.recipe.triangles,
+            measurements.triangles,
+            "exact",
+            failures
+        );
         return failures;
     }
 
@@ -109,10 +467,10 @@ export class CharacterValidator extends BuildValidator<
         side: SkeletonSide
     ): number {
         const [hipBone, kneeBone, ankleBone] = skeleton.bones.legs[side];
-        const hip = new Vector3(...positions[hipBone!]!);
-        const knee = new Vector3(...positions[kneeBone!]!);
-        const ankle = new Vector3(...positions[ankleBone!]!);
-        const ball = new Vector3(...positions[skeleton.bones.feet[side][1]!]!);
+        const hip = new Vector3(...positions[hipBone!]);
+        const knee = new Vector3(...positions[kneeBone!]);
+        const ankle = new Vector3(...positions[ankleBone!]);
+        const ball = new Vector3(...positions[skeleton.bones.feet[side][1]]);
 
         const legAxis = ankle.clone().sub(hip).normalize();
         const toesForward = new Vector3(ball.x - ankle.x, ball.y - ankle.y, 0);
@@ -269,7 +627,9 @@ export class CharacterValidator extends BuildValidator<
         if (!garment) return;
         const { rig, weights } = build.recipe.tuning;
         const liftLimitMm =
-            weights.garmentLiftLimit * 1000 * CharacterValidator.heightFactor(build.recipe);
+            weights.garmentLiftLimit *
+            MILLIMETRES_PER_METRE *
+            CharacterValidator.heightFactor(build.recipe);
         console.log(
             `  garment rim ${garment.rimVertices}, mantle ${garment.mantleVertices}, drape ${garment.drapeVertices}, ` +
                 `detached ${garment.detachedNodes}, drape arm share ${garment.maxDrapeArmShare}, lift ${garment.liftMm} mm (${garment.liftSamples} drape nodes measured)`
@@ -283,7 +643,7 @@ export class CharacterValidator extends BuildValidator<
             `${garment.detachedNodes} garment nodes are split from the body, so the rim can open`
         );
         failures.failIf(
-            garment.maxDrapeArmShare > rig.garmentArmShare + 0.02,
+            garment.maxDrapeArmShare > rig.garmentArmShare + VALIDATION_LIMITS.garmentArmShareSlack,
             `drape arm share ${garment.maxDrapeArmShare} is above the cap ${rig.garmentArmShare}`
         );
         failures.failIf(
@@ -291,7 +651,11 @@ export class CharacterValidator extends BuildValidator<
             `the drape lifts ${garment.liftMm} mm off the body (limit ${liftLimitMm.toFixed(1)} mm)`
         );
         const scale = CharacterValidator.heightFactor(build.recipe);
-        const spacingLimitMm = build.recipe.tuning.physics.nodeSpacing * 1.25 * 1000 * scale;
+        const spacingLimitMm =
+            build.recipe.tuning.physics.nodeSpacing *
+            VALIDATION_LIMITS.latticeSpacingSlack *
+            MILLIMETRES_PER_METRE *
+            scale;
         console.log(
             `  garment lattice ${garment.latticeNodes} nodes, spacing ${garment.nodeSpacingMm} mm, ` +
                 `uncovered ${garment.uncoveredVertices}, blend band stretch ${garment.bandStretch}x (rigid ${garment.bandStretchRigid}x)`
@@ -309,16 +673,67 @@ export class CharacterValidator extends BuildValidator<
             `the lattice stretches the blend band ${garment.bandStretch}x against ${garment.bandStretchRigid}x for the rigid skin (allowed ratio ${VALIDATION_LIMITS.latticeStretchRatio}), which shows as a hinge`
         );
     }
-
-    private checkTriangles(
-        recipe: IResolvedCharacterRecipe,
-        measurements: ICharacterMeasurements,
-        failures: Findings
-    ): void {
-        const drift = Math.abs(measurements.triangles - recipe.triangles) / recipe.triangles;
-        failures.failIf(
-            drift > VALIDATION_LIMITS.triangleTolerance,
-            `${measurements.triangles} triangles, config asks for ${recipe.triangles}`
-        );
-    }
 }
+
+export const extentsOf = (bounds: IBoundsMetres): Vector3Tuple => [
+    bounds.max[0] - bounds.min[0],
+    bounds.max[1] - bounds.min[1],
+    bounds.max[2] - bounds.min[2],
+];
+
+export const boundsDrift = (first: IBoundsMetres, second: IBoundsMetres): number =>
+    Math.max(
+        Math.abs(first.min[0] - second.min[0]),
+        Math.abs(first.min[1] - second.min[1]),
+        Math.abs(first.min[2] - second.min[2]),
+        Math.abs(first.max[0] - second.max[0]),
+        Math.abs(first.max[1] - second.max[1]),
+        Math.abs(first.max[2] - second.max[2])
+    );
+
+export const scaleBounds = (bounds: IBoundsMetres, factor: number): IBoundsMetres => ({
+    min: [bounds.min[0] * factor, bounds.min[1] * factor, bounds.min[2] * factor],
+    max: [bounds.max[0] * factor, bounds.max[1] * factor, bounds.max[2] * factor],
+});
+
+export const scaleExpectedSize = (expected: IExpectedSize, factor: number): IExpectedSize => ({
+    node: expected.node,
+    heightMetres: expected.heightMetres * factor,
+    boundsMetres: expected.boundsMetres && scaleBounds(expected.boundsMetres, factor),
+});
+
+export const checkSize = (
+    expected: IExpectedSize,
+    measured: IBoundsMetres,
+    label: string,
+    failures: Findings
+): void => {
+    const height = extentsOf(measured)[1];
+    const base = measured.min[1];
+    const tolerance = sizeToleranceFor(
+        expected.boundsMetres ? extentsOf(expected.boundsMetres) : [expected.heightMetres]
+    );
+    console.log(
+        `  ${label}: height ${height.toFixed(3)} m (recipe ${expected.heightMetres.toFixed(3)} m), base ${base.toFixed(3)} m`
+    );
+    failures.failIf(
+        Math.abs(height - expected.heightMetres) > tolerance,
+        `${label}: height ${height.toFixed(3)} m differs from the recipe's ${expected.heightMetres.toFixed(3)} m by more than ${tolerance.toFixed(3)} m (wrong scale or not +Y up)`
+    );
+    failures.failIf(
+        Math.abs(base) > tolerance,
+        `${label}: base sits at y = ${base.toFixed(3)} m, not 0`
+    );
+    if (!expected.boundsMetres) return;
+    const drift = boundsDrift(measured, expected.boundsMetres);
+    failures.failIf(
+        drift > tolerance,
+        `${label}: bounds sit ${drift.toFixed(3)} m from the recipe's (tolerance ${tolerance.toFixed(3)} m)`
+    );
+};
+
+const sizeToleranceFor = (extentsMetres: readonly number[]): number =>
+    Math.max(
+        VALIDATION_LIMITS.sizeToleranceMetres,
+        VALIDATION_LIMITS.sizeToleranceFraction * Math.max(...extentsMetres)
+    );
