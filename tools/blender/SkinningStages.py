@@ -938,12 +938,14 @@ class PhysicsStage(BuildStage):
             "blend": np.zeros(count),
         }
         bodies = []
+        lattice_count = 0
         for index, body in enumerate(read_detection(work)["physics"], start=1):
             mask = self.body_mask(body, mesh, skinning["labels"], settings)
             skinning["labels"][mask] = index
             build = self.sheet_lattice if body.get("clothSeed") else self.garment_lattice
             record, nodes, weights, blend = build(body, mesh, geometry, mask, settings)
-            skinning["nodes"][mask] = nodes + sum(len(done["nodeBones"]) for done in bodies)
+            skinning["nodes"][mask] = nodes + lattice_count
+            lattice_count += len(record["nodeBones"])
             skinning["weights"][mask], skinning["blend"][mask] = weights, blend
             bodies.append(record)
             print(
@@ -957,7 +959,6 @@ class PhysicsStage(BuildStage):
         PhysicsWork.save(work, bodies, colliders, skinning, geometry)
         self.render_physics_masks(settings, work, skinning["labels"], bodies, geometry["mantle"])
         radii = [collider["radius"] for collider in colliders]
-        lattice_count = sum(len(body["nodeBones"]) for body in bodies)
         print(
             f"STAGE physics bodies={len(bodies)} latticeBones={lattice_count} colliders={len(colliders)} "
             f"radius={min(radii):.3f}-{max(radii):.3f}m validation/physics_masks.png"
@@ -1393,9 +1394,11 @@ class RigStage(BuildStage):
         missing = np.nonzero(weights.sum(1) < 1e-6)[0]
         if len(missing) == 0:
             return weights
-        distances = np.array([segment_distance(positions[missing], *segments[name]) for name in owners])
-        for row, nearest in zip(missing, np.argmin(distances, axis=0)):
-            weights[row, bones.index(owners[nearest])] = 1.0
+        missing_positions = positions[missing]
+        distances = np.array([segment_distance(missing_positions, *segments[name]) for name in owners])
+        nearest = np.argmin(distances, axis=0)
+        for owner_index in np.unique(nearest):
+            weights[missing[nearest == owner_index], bones.index(owners[owner_index])] = 1.0
         print(f"CHECK unweighted vertices bound to their nearest bone: {len(missing)}")
         return weights
 

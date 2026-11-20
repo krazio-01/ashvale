@@ -33,11 +33,15 @@ class WorkFiles:
 
 
 def bone_role(key, convert=None):
-    return property(lambda self: self._bone(key) if convert is None else convert(self._bone(key)))
+    if convert is None:
+        return property(lambda self: self._bone(key))
+    return property(lambda self: convert(self._bone(key)))
 
 
 def descriptor_section(key, convert=None):
-    return property(lambda self: self._section(key) if convert is None else convert(self._section(key)))
+    if convert is None:
+        return property(lambda self: self._section(key))
+    return property(lambda self: convert(self._section(key)))
 
 
 class SkeletonDescriptor:
