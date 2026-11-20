@@ -1,34 +1,76 @@
-import { execFile, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { promisify } from "node:util";
-import { type Accessor, NodeIO } from "@gltf-transform/core";
+import { type Accessor, type Material, NodeIO, type Texture } from "@gltf-transform/core";
 import {
     EXTMeshoptCompression,
     KHRMeshQuantization,
     KHRTextureBasisu,
 } from "@gltf-transform/extensions";
 import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
-import { readJsonFile } from "../pipeline";
+import { PIPELINE_CONFIG, execFileAsync, readJsonFile } from "../pipeline";
 
 export const TEXTURE_ROLE = { base: "base", normal: "normal", strip: "strip" } as const;
 
 export const COOKED_EXTENSIONS = [KHRTextureBasisu, KHRMeshQuantization, EXTMeshoptCompression];
 
-const TEXTURE_SLOTS: readonly { owner?: "pbrMetallicRoughness"; key: string; role: TextureRole }[] =
-    [
-        { owner: "pbrMetallicRoughness", key: "baseColorTexture", role: TEXTURE_ROLE.base },
-        { key: "normalTexture", role: TEXTURE_ROLE.normal },
-        { key: "emissiveTexture", role: TEXTURE_ROLE.base },
-        {
-            owner: "pbrMetallicRoughness",
-            key: "metallicRoughnessTexture",
-            role: TEXTURE_ROLE.strip,
-        },
-        { key: "occlusionTexture", role: TEXTURE_ROLE.strip },
-    ];
+export const TEXTURE_SLOTS: readonly ITextureSlot[] = [
+    {
+        owner: "pbrMetallicRoughness",
+        key: "baseColorTexture",
+        role: TEXTURE_ROLE.base,
+        fileRole: "baseColor",
+        keptOnImport: true,
+        textureOf: (material) => material.getBaseColorTexture(),
+        clear: (material) => material.setBaseColorTexture(null),
+    },
+    {
+        key: "normalTexture",
+        role: TEXTURE_ROLE.normal,
+        fileRole: "normal",
+        keptOnImport: true,
+        textureOf: (material) => material.getNormalTexture(),
+        clear: (material) => material.setNormalTexture(null),
+    },
+    {
+        key: "emissiveTexture",
+        role: TEXTURE_ROLE.base,
+        fileRole: "emissive",
+        keptOnImport: false,
+        textureOf: (material) => material.getEmissiveTexture(),
+        clear: (material) => material.setEmissiveTexture(null).setEmissiveFactor([0, 0, 0]),
+    },
+    {
+        owner: "pbrMetallicRoughness",
+        key: "metallicRoughnessTexture",
+        role: TEXTURE_ROLE.strip,
+        fileRole: "orm",
+        keptOnImport: false,
+        textureOf: (material) => material.getMetallicRoughnessTexture(),
+        clear: (material) => material.setMetallicRoughnessTexture(null),
+    },
+    {
+        key: "occlusionTexture",
+        role: TEXTURE_ROLE.strip,
+        fileRole: "occlusion",
+        keptOnImport: false,
+        textureOf: (material) => material.getOcclusionTexture(),
+        clear: (material) => material.setOcclusionTexture(null),
+    },
+];
 
 type TextureRole = (typeof TEXTURE_ROLE)[keyof typeof TEXTURE_ROLE];
+
+interface ITextureSlot {
+    owner?: "pbrMetallicRoughness";
+    key: string;
+    role: TextureRole;
+    fileRole: string;
+    keptOnImport: boolean;
+    textureOf: (material: Material) => Texture | null;
+    clear: (material: Material) => void;
+}
 
 interface ITextureReference {
     index: number;
@@ -37,6 +79,8 @@ interface ITextureReference {
 type TextureHolder = Partial<Record<string, ITextureReference>>;
 
 interface IGltfMaterial {
+    name?: string;
+    extras?: Record<string, unknown>;
     pbrMetallicRoughness?: {
         baseColorTexture?: ITextureReference;
         metallicRoughnessTexture?: ITextureReference;
@@ -102,7 +146,10 @@ export class TextureRoleMap {
     }
 
     encodable(): [string, TextureRole][] {
-        return [...this.rolesByFile].filter(([, role]) => role !== TEXTURE_ROLE.strip);
+        const encodable: [string, TextureRole][] = [];
+        for (const [file, role] of this.rolesByFile)
+            if (role !== TEXTURE_ROLE.strip) encodable.push([file, role]);
+        return encodable;
     }
 }
 
@@ -142,6 +189,12 @@ export class GltfDocument {
         const textureIndexMap = this.rebuildTextures(imageIndexMap);
         this.remapMaterialTextures(textureIndexMap);
         if (imageIndexMap.size > 0) this.declareBasisuExtension();
+    }
+
+    markFoliageMaterials(pattern: RegExp): void {
+        for (const material of this.json.materials ?? [])
+            if (material.name && pattern.test(material.name))
+                material.extras = { ...material.extras, foliage: true };
     }
 
     writeTo(outputPath: string): void {
@@ -216,7 +269,7 @@ export class GltfDocument {
     }
 }
 
-class ImageFile {
+export class ImageFile {
     private static readonly IMAGE_HEAD_BYTES = 65536;
 
     private static readonly PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -306,10 +359,20 @@ export class TextureEncoder {
         "200",
     ];
 
-    private static readonly execFileAsync = promisify(execFile);
+    private static readonly DFD_OFFSET_FIELD = 48;
+
+    private static readonly DFD_COLOR_MODEL = 12;
+
+    private static readonly DFD_FIRST_CHANNEL_TYPE = 31;
+
+    private static readonly UASTC_COLOR_MODEL = 166;
+
+    private static readonly UASTC_RGB_CHANNEL_IDS: ReadonlySet<number> = new Set([0, 3]);
+
+    private static readonly CHANNEL_ID_MASK = 0x0f;
 
     static assertInstalled(): void {
-        execFileSync("ktx", ["--version"], { stdio: "ignore" });
+        TextureEncoder.encoderVersion();
     }
 
     static isValidKtx2(file: string): boolean {
@@ -322,12 +385,41 @@ export class TextureEncoder {
         }
     }
 
-    static readChannelType(file: string): string | undefined {
-        const info = execFileSync("ktx", ["info", file], { encoding: "utf8" });
-        return info
-            .split("\n")
-            .find((line) => line.includes("Channel Type"))
-            ?.trim();
+    static isUastcRgb(file: string): boolean {
+        const header = ImageFile.readHead(file, TextureEncoder.DFD_OFFSET_FIELD + 4);
+        if (header.length < TextureEncoder.DFD_OFFSET_FIELD + 4) return false;
+        const dfdOffset = header.readUInt32LE(TextureEncoder.DFD_OFFSET_FIELD);
+        const head = ImageFile.readHead(
+            file,
+            dfdOffset + TextureEncoder.DFD_FIRST_CHANNEL_TYPE + 1
+        );
+        return (
+            head[dfdOffset + TextureEncoder.DFD_COLOR_MODEL] === TextureEncoder.UASTC_COLOR_MODEL &&
+            TextureEncoder.UASTC_RGB_CHANNEL_IDS.has(
+                head[dfdOffset + TextureEncoder.DFD_FIRST_CHANNEL_TYPE] &
+                    TextureEncoder.CHANNEL_ID_MASK
+            )
+        );
+    }
+
+    private static encoderVersionOutput: string | null = null;
+
+    private static get cacheDirectory(): string {
+        return path.join(PIPELINE_CONFIG.builds.workRoot, PIPELINE_CONFIG.textures.cacheFolder);
+    }
+
+    private static encoderVersion(): string {
+        TextureEncoder.encoderVersionOutput ??= execFileSync("ktx", ["--version"], {
+            encoding: "utf8",
+        });
+        return TextureEncoder.encoderVersionOutput;
+    }
+
+    static pruneCache(usedKeys: ReadonlySet<string>): void {
+        if (!fs.existsSync(TextureEncoder.cacheDirectory)) return;
+        for (const file of fs.readdirSync(TextureEncoder.cacheDirectory))
+            if (!usedKeys.has(path.parse(file).name))
+                fs.rmSync(path.join(TextureEncoder.cacheDirectory, file), { force: true });
     }
 
     static async encode(
@@ -335,7 +427,7 @@ export class TextureEncoder {
         role: TextureRole,
         outputFile: string,
         maxTextureSize: number
-    ): Promise<void> {
+    ): Promise<string> {
         fs.mkdirSync(path.dirname(outputFile), { recursive: true });
         const { width, height } = TextureEncoder.fitDimensions(sourceFile, maxTextureSize);
         const args = [
@@ -350,9 +442,25 @@ export class TextureEncoder {
                 : TextureEncoder.BASE_ENCODE_ARGS),
         ];
 
-        await TextureEncoder.execFileAsync("ktx", [...args, sourceFile, outputFile]);
-        if (!TextureEncoder.isValidKtx2(outputFile))
+        const key = createHash("sha256")
+            .update(fs.readFileSync(sourceFile))
+            .update(JSON.stringify(args))
+            .update(TextureEncoder.encoderVersion())
+            .digest("hex");
+        const cachedFile = path.join(TextureEncoder.cacheDirectory, `${key}.ktx2`);
+        if (TextureEncoder.isValidKtx2(cachedFile)) {
+            fs.copyFileSync(cachedFile, outputFile);
+            return key;
+        }
+
+        fs.mkdirSync(TextureEncoder.cacheDirectory, { recursive: true });
+        const pendingFile = `${cachedFile}.${process.pid}.${path.basename(outputFile)}.pending`;
+        await execFileAsync("ktx", [...args, sourceFile, pendingFile]);
+        if (!TextureEncoder.isValidKtx2(pendingFile))
             throw new Error(`ktx produced an invalid file: ${outputFile}`);
+        fs.renameSync(pendingFile, cachedFile);
+        fs.copyFileSync(cachedFile, outputFile);
+        return key;
     }
 
     private static fitDimensions(file: string, maxTextureSize: number): IImageDimensions {
@@ -378,8 +486,19 @@ export const createGltfIo = async (
     });
 };
 
-export const accessorElements = (accessor: Accessor): number[][] =>
-    Array.from({ length: accessor.getCount() }, (_, index) => accessor.getElement(index, []));
+export const accessorValues = (accessor: Accessor): number[] => {
+    const size = accessor.getElementSize();
+    const count = accessor.getCount();
+    const values = new Array<number>(count * size);
+    const element: number[] = [];
+    let offset = 0;
+    for (let index = 0; index < count; index += 1) {
+        accessor.getElement(index, element);
+        for (let component = 0; component < size; component += 1)
+            values[offset++] = element[component];
+    }
+    return values;
+};
 
 export const textureSlotsOf = (material: IGltfMaterial) =>
     TEXTURE_SLOTS.map(({ owner, key, role }) => {
