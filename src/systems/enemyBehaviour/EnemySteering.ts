@@ -1,7 +1,7 @@
 import { Vector3 } from "three";
 import type { CombatRegistry } from "@/systems/combat/CombatRegistry";
 import { ENEMY_STEERING, OBSTACLE_PROBE } from "@/constants/enemies";
-import { COMBAT_MOVEMENT } from "@/constants/combat";
+import { COMBAT_MOVEMENT, PLANAR_REJECT_MARGIN } from "@/constants/combat";
 import {
     shortestAngleBetween,
     yawFromDirection,
@@ -53,29 +53,39 @@ export class EnemySteering {
 
     private separationFromTeammates(): Vector3 {
         const separation = EnemySteering.scratchSeparation.set(0, 0, 0);
-        const position = this.body.position;
-        const ownRadius = this.body.bodyRadius;
+        const body = this.body;
+        const position = body.position;
+        const ownRadius = body.bodyRadius;
+        const { separationMargin, maximumSeparationPush, separationStrength } = ENEMY_STEERING;
+        const minimumLength = COMBAT_MOVEMENT.minimumPlanarLength;
         const teammates = this.registry.collectTeammates(
-            this.body.team,
+            body.team,
             position,
-            ownRadius * 2 + ENEMY_STEERING.separationMargin,
+            ownRadius * 2 + separationMargin,
             EnemySteering.scratchTeammates
         );
 
         for (const teammate of teammates) {
-            if (teammate === this.body) continue;
+            if (teammate === body) continue;
 
-            const offsetX = position.x - teammate.sceneObject.position.x;
-            const offsetZ = position.z - teammate.sceneObject.position.z;
+            const teammatePosition = teammate.sceneObject.position;
+            const offsetX = position.x - teammatePosition.x;
+            const offsetZ = position.z - teammatePosition.z;
+            const comfortable = ownRadius + teammate.bodyRadius + separationMargin;
+            if (
+                offsetX * offsetX + offsetZ * offsetZ >
+                comfortable * comfortable * PLANAR_REJECT_MARGIN
+            )
+                continue;
+
             const distance = Math.hypot(offsetX, offsetZ);
-            const comfortable = ownRadius + teammate.bodyRadius + ENEMY_STEERING.separationMargin;
-            if (distance >= comfortable || distance < COMBAT_MOVEMENT.minimumPlanarLength) continue;
+            if (distance >= comfortable || distance < minimumLength) continue;
 
             const intrusion = Math.min(
-                ENEMY_STEERING.maximumSeparationPush,
-                (comfortable - distance) / ENEMY_STEERING.separationMargin
+                maximumSeparationPush,
+                (comfortable - distance) / separationMargin
             );
-            const push = intrusion * ENEMY_STEERING.separationStrength;
+            const push = intrusion * separationStrength;
             separation.x += (offsetX / distance) * push;
             separation.z += (offsetZ / distance) * push;
         }

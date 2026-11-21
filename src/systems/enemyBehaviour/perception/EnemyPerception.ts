@@ -32,6 +32,8 @@ interface IPerceivingBody extends ICombatant {
 }
 
 class SightSensor {
+    private static readonly maxSenseRange = Math.max(SIGHT.farRange, SIGHT.proximitySenseRange);
+
     private static coneStrength(
         eye: Vector3,
         facingYaw: number,
@@ -94,6 +96,13 @@ class SightSensor {
         visibility: number,
         deltaSeconds: number
     ): number {
+        if (
+            Math.abs(target.x - eye.x) > SightSensor.maxSenseRange ||
+            Math.abs(target.z - eye.z) > SightSensor.maxSenseRange
+        ) {
+            this.wasInCone = false;
+            return 0;
+        }
         const distance = horizontalDistance(eye, target);
         const proximitySense = SightSensor.proximitySenseStrength(distance, visibility);
         const cone = SightSensor.coneStrength(eye, facingYaw, target, distance);

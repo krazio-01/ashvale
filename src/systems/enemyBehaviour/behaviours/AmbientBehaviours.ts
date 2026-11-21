@@ -3,14 +3,21 @@ import { EnemyBehaviour, LookAround } from "@/systems/enemyBehaviour/behaviours/
 import type { IEnemyBody } from "@/systems/enemyBehaviour/behaviours/EnemyBehaviour";
 import type { AwarenessMeter } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
 import { PATROL, RETURN_HOME, INVESTIGATE, SEARCH } from "@/constants/enemies";
-import { FULL_TURN, valueInRange, pointAtYaw, horizontalDistance, yawTowards } from "@/lib/helpers";
+import {
+    FULL_TURN,
+    valueInRange,
+    pointAtYaw,
+    horizontalDistanceSquared,
+    yawTowards,
+} from "@/lib/helpers";
 import type { RandomSource } from "@/lib/helpers";
 import type { IWanderTuning } from "@/types/combat";
+
+const LOST_LEAD_DISTANCE_SQUARED = (INVESTIGATE.arriveDistance * 2) ** 2;
 
 type InvestigationStage = "hesitating" | "approaching" | "looking";
 
 abstract class WanderBehaviour extends EnemyBehaviour {
-    private readonly tuning: IWanderTuning;
     private readonly waypoint = new Vector3();
     private readonly lookAround: LookAround;
     private isWalking = false;
@@ -20,10 +27,9 @@ abstract class WanderBehaviour extends EnemyBehaviour {
         body: IEnemyBody,
         awareness: AwarenessMeter,
         random: RandomSource,
-        tuning: IWanderTuning
+        private readonly tuning: IWanderTuning
     ) {
         super(body, awareness, random);
-        this.tuning = tuning;
         this.lookAround = new LookAround(body, random);
     }
 
@@ -31,13 +37,13 @@ abstract class WanderBehaviour extends EnemyBehaviour {
         this.stageRemaining -= deltaSeconds;
 
         if (this.isWalking) {
+            const { arriveDistance } = this.tuning;
             const remaining = this.body.moveTowards(
                 this.waypoint,
                 this.body.archetype.patrolSpeed,
-                this.tuning.arriveDistance
+                arriveDistance
             );
-            if (remaining <= this.tuning.arriveDistance || this.stageRemaining <= 0)
-                this.pauseAtWaypoint();
+            if (remaining <= arriveDistance || this.stageRemaining <= 0) this.pauseAtWaypoint();
             return;
         }
 
@@ -146,7 +152,7 @@ export class InvestigateBehaviour extends EnemyBehaviour {
             return;
         }
 
-        if (horizontalDistance(this.body.position, lead) > INVESTIGATE.arriveDistance * 2) {
+        if (horizontalDistanceSquared(this.body.position, lead) > LOST_LEAD_DISTANCE_SQUARED) {
             this.stage = "approaching";
             return;
         }

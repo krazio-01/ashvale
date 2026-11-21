@@ -25,15 +25,11 @@ export interface IEnemyCombatBody extends IEnemyBody {
 }
 
 export abstract class EnemyBehaviour<Body extends IEnemyBody = IEnemyBody> {
-    protected readonly body: Body;
-    protected readonly awareness: AwarenessMeter;
-    protected readonly random: RandomSource;
-
-    constructor(body: Body, awareness: AwarenessMeter, random: RandomSource) {
-        this.body = body;
-        this.awareness = awareness;
-        this.random = random;
-    }
+    constructor(
+        protected readonly body: Body,
+        protected readonly awareness: AwarenessMeter,
+        protected readonly random: RandomSource
+    ) {}
 
     enter(): void {}
 
@@ -43,16 +39,14 @@ export abstract class EnemyBehaviour<Body extends IEnemyBody = IEnemyBody> {
 }
 
 export class LookAround {
-    private readonly body: IEnemyBody;
-    private readonly random: RandomSource;
     private secondsUntilTurn = 0;
     private isGlancing = false;
     private baseYaw = 0;
 
-    constructor(body: IEnemyBody, random: RandomSource) {
-        this.body = body;
-        this.random = random;
-    }
+    constructor(
+        private readonly body: IEnemyBody,
+        private readonly random: RandomSource
+    ) {}
 
     reset(): void {
         this.isGlancing = false;
@@ -77,12 +71,9 @@ export class LookAround {
 }
 
 export class BehaviourSelector {
-    private readonly behaviours: Readonly<Record<AlertPhase, EnemyBehaviour>>;
     private active: EnemyBehaviour | null = null;
 
-    constructor(behaviours: Readonly<Record<AlertPhase, EnemyBehaviour>>) {
-        this.behaviours = behaviours;
-    }
+    constructor(private readonly behaviours: Readonly<Record<AlertPhase, EnemyBehaviour>>) {}
 
     tick(phase: AlertPhase, deltaSeconds: number): void {
         const next = this.behaviours[phase];

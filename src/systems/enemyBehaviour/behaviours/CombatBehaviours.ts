@@ -282,35 +282,40 @@ export class EngageBehaviour extends EnemyBehaviour<IEnemyCombatBody> {
             return;
         }
 
-        if (tactic === "circle") {
-            const bearing = yawTowards(targetPosition, body.position);
-            const slotAngle = this.coordinator.claimRingAngle(this.enemyId, bearing);
-            const heldGap = clamp(gap, ENGAGE_TACTICS.waitingMinGap, ENGAGE_TACTICS.waitingGap);
-            const ringRadius = heldGap + body.bodyRadius + targetRadius;
-            const orbitSpeed = combatSpeed * ENGAGE_TACTICS.circleSpeedFraction;
-            const maxAngleStep = (orbitSpeed * ENGAGE_TACTICS.orbitLookaheadSeconds) / ringRadius;
-            const slotPoint = pointAtYaw(
-                targetPosition,
-                slotAngle,
-                ringRadius,
-                EngageBehaviour.scratchRingPoint
-            );
-            const slotError = horizontalDistance(body.position, slotPoint);
-            if (slotError > ENGAGE_TACTICS.ringDeadZone) this.isRepositioning = true;
-            else if (slotError <= ENGAGE_TACTICS.ringSettleDistance) this.isRepositioning = false;
-            if (!this.isRepositioning) {
-                body.holdStill();
-                return;
-            }
+        if (tactic === "circle") this.circleTarget(gap, targetPosition, targetRadius);
+        else this.startPlannedAttack(gap, targetPosition, targetRadius);
+    }
 
-            const angle =
-                bearing +
-                clamp(shortestAngleBetween(bearing, slotAngle), -maxAngleStep, maxAngleStep);
-            pointAtYaw(targetPosition, angle, ringRadius, EngageBehaviour.scratchRingPoint);
-            body.moveTowards(EngageBehaviour.scratchRingPoint, orbitSpeed, 0);
+    private circleTarget(gap: number, targetPosition: Vector3, targetRadius: number): void {
+        const body = this.body;
+        const bearing = yawTowards(targetPosition, body.position);
+        const slotAngle = this.coordinator.claimRingAngle(this.enemyId, bearing);
+        const heldGap = clamp(gap, ENGAGE_TACTICS.waitingMinGap, ENGAGE_TACTICS.waitingGap);
+        const ringRadius = heldGap + body.bodyRadius + targetRadius;
+        const orbitSpeed = body.archetype.combatSpeed * ENGAGE_TACTICS.circleSpeedFraction;
+        const maxAngleStep = (orbitSpeed * ENGAGE_TACTICS.orbitLookaheadSeconds) / ringRadius;
+        const slotPoint = pointAtYaw(
+            targetPosition,
+            slotAngle,
+            ringRadius,
+            EngageBehaviour.scratchRingPoint
+        );
+        const slotError = horizontalDistance(body.position, slotPoint);
+        if (slotError > ENGAGE_TACTICS.ringDeadZone) this.isRepositioning = true;
+        else if (slotError <= ENGAGE_TACTICS.ringSettleDistance) this.isRepositioning = false;
+        if (!this.isRepositioning) {
+            body.holdStill();
             return;
         }
 
+        const angle =
+            bearing + clamp(shortestAngleBetween(bearing, slotAngle), -maxAngleStep, maxAngleStep);
+        pointAtYaw(targetPosition, angle, ringRadius, EngageBehaviour.scratchRingPoint);
+        body.moveTowards(EngageBehaviour.scratchRingPoint, orbitSpeed, 0);
+    }
+
+    private startPlannedAttack(gap: number, targetPosition: Vector3, targetRadius: number): void {
+        const body = this.body;
         const attack = this.plannedAttack;
         const isTargetInFinisher = this.target.isInFinisher;
         if (
