@@ -3,11 +3,11 @@ import { useGameStore } from "@/hooks/useGameStore";
 import { keysOf } from "@/lib/helpers";
 import "./loreJournal.scss";
 
-interface LoreJournalProps {
+interface ILoreJournalProps {
     realmKey: string;
 }
 
-export const LoreJournal = ({ realmKey }: LoreJournalProps) => {
+export const LoreJournal = ({ realmKey }: ILoreJournalProps) => {
     const lore = useGameStore((state) => state.progression.records[realmKey]?.lore);
     const entries = [...(lore ?? [])].sort(
         (first, second) => first.chapterIndex - second.chapterIndex

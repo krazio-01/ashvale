@@ -13,7 +13,7 @@ import "./pauseMenu.scss";
 import { PAUSE_TEXT, QUALITY_TEXT, SETTINGS_TEXT } from "@/constants/strings";
 import { useHotkey } from "@/hooks/useHotkey";
 
-interface PauseMenuProps {
+interface IPauseMenuProps {
     onResume: () => void;
     onQuit?: () => void;
     realmTitle?: string;
@@ -31,7 +31,7 @@ export const PauseMenu = ({
     title = PAUSE_TEXT.title,
     dismissLabel = PAUSE_TEXT.resume,
     dismissKey,
-}: PauseMenuProps) => {
+}: IPauseMenuProps) => {
     const committed = useGameStore((state) => state.settings.values);
     const qualityReport = useGameStore((state) => state.session.qualityReport);
     const [activeSection, setActiveSection] = useState<SettingSection>("display");
@@ -41,11 +41,9 @@ export const PauseMenu = ({
     const isDirty = !areSettingsEqual(draft, committed);
 
     useEffect(() => {
-        shellRef.current?.focus();
-    }, []);
-
-    useEffect(() => {
-        const shell = shellRef.current!;
+        const shell = shellRef.current;
+        if (!shell) return;
+        shell.focus();
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key !== "Tab") return;

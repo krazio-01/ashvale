@@ -11,9 +11,13 @@ import { PAUSE_TEXT } from "@/constants/strings";
 
 type SettingChangeHandler = ISettingsSlice["update"];
 
-interface ControlRowProps<K extends keyof IGameSettings> {
-    descriptor: ISettingControlDescriptor<K>;
-    currentValue: IGameSettings[K];
+type SettingKey = keyof IGameSettings;
+
+type SettingValue = IGameSettings[SettingKey];
+
+interface IControlRowProps {
+    descriptor: ISettingControlDescriptor;
+    currentValue: SettingValue;
     onChange: SettingChangeHandler;
 }
 
@@ -24,12 +28,12 @@ const RowHeader = ({ label, description }: { label: string; description: string 
     </div>
 );
 
-const SliderRow = <K extends keyof IGameSettings>({
+const SliderRow = ({
     descriptor,
     currentValue,
     onChange,
 }: {
-    descriptor: ISliderControlDescriptor<K>;
+    descriptor: ISliderControlDescriptor<SettingKey>;
     currentValue: number;
     onChange: SettingChangeHandler;
 }) => {
@@ -46,11 +50,7 @@ const SliderRow = <K extends keyof IGameSettings>({
                     max={descriptor.max}
                     step={descriptor.step}
                     value={currentValue}
-                    onChange={(e) =>
-                        onChange({
-                            [descriptor.key]: Number(e.target.value),
-                        } as Partial<IGameSettings>)
-                    }
+                    onChange={(e) => onChange(settingPatch(descriptor.key, Number(e.target.value)))}
                 />
                 <span className="slider-value">{formatted}</span>
             </div>
@@ -58,13 +58,13 @@ const SliderRow = <K extends keyof IGameSettings>({
     );
 };
 
-const ChoiceRow = <K extends keyof IGameSettings>({
+const ChoiceRow = ({
     descriptor,
     currentValue,
     onChange,
 }: {
-    descriptor: IChoiceControlDescriptor<K>;
-    currentValue: IGameSettings[K];
+    descriptor: IChoiceControlDescriptor<SettingKey>;
+    currentValue: SettingValue;
     onChange: SettingChangeHandler;
 }) => (
     <div className="setting-row">
@@ -81,9 +81,7 @@ const ChoiceRow = <K extends keyof IGameSettings>({
                         disabled={isDerivedOnly}
                         title={isDerivedOnly ? PAUSE_TEXT.presetSetAutomatically : undefined}
                         className={option.value === currentValue ? "active" : ""}
-                        onClick={() =>
-                            onChange({ [descriptor.key]: option.value } as Partial<IGameSettings>)
-                        }
+                        onClick={() => onChange(settingPatch(descriptor.key, option.value))}
                     >
                         {option.label}
                     </button>
@@ -93,19 +91,17 @@ const ChoiceRow = <K extends keyof IGameSettings>({
     </div>
 );
 
-export const SettingControlRow = <K extends keyof IGameSettings>({
-    descriptor,
-    currentValue,
-    onChange,
-}: ControlRowProps<K>) => {
+export const SettingControlRow = ({ descriptor, currentValue, onChange }: IControlRowProps) => {
     switch (descriptor.type) {
         case "slider":
             return (
-                <SliderRow
-                    descriptor={descriptor}
-                    currentValue={currentValue as number}
-                    onChange={onChange}
-                />
+                typeof currentValue === "number" && (
+                    <SliderRow
+                        descriptor={descriptor}
+                        currentValue={currentValue}
+                        onChange={onChange}
+                    />
+                )
             );
         case "toggle":
             return (
@@ -116,7 +112,7 @@ export const SettingControlRow = <K extends keyof IGameSettings>({
                         options: [
                             { label: descriptor.offLabel, value: false },
                             { label: descriptor.onLabel, value: true },
-                        ] as IChoiceControlDescriptor<K>["options"],
+                        ],
                     }}
                     currentValue={currentValue}
                     onChange={onChange}
@@ -132,3 +128,12 @@ export const SettingControlRow = <K extends keyof IGameSettings>({
             );
     }
 };
+
+function settingPatch<Key extends SettingKey>(
+    key: Key,
+    value: IGameSettings[Key]
+): Partial<IGameSettings> {
+    const patch: Partial<IGameSettings> = {};
+    patch[key] = value;
+    return patch;
+}
