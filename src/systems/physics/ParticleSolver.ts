@@ -58,7 +58,9 @@ interface ILinkSet {
     readonly b: Uint16Array;
     readonly restLength: Float64Array;
     readonly body: Uint8Array;
-    readonly softness: Float64Array;
+    readonly complianceByBody: number[];
+    readonly denominator: Float64Array;
+    denominatorsDirty: boolean;
 }
 
 export class ParticleSolver {
@@ -68,14 +70,7 @@ export class ParticleSolver {
 
     private static readonly DEGENERATE = PHYSICS.epsilon.geometry;
 
-    private static readonly LINK_KINDS: readonly LinkKind[] = ["stretch", "bend"];
-
     private static readonly MAX_COLLIDERS = 255;
-
-    private static readonly SOFTNESS_KEY = {
-        stretch: "stretchSoftness",
-        bend: "bendSoftness",
-    } as const;
 
     private static createLinkSet(capacity: number): ILinkSet {
         return {
@@ -84,7 +79,9 @@ export class ParticleSolver {
             b: new Uint16Array(capacity),
             restLength: new Float64Array(capacity),
             body: new Uint8Array(capacity),
-            softness: new Float64Array(capacity),
+            complianceByBody: [],
+            denominator: new Float64Array(capacity),
+            denominatorsDirty: true,
         };
     }
 
@@ -98,10 +95,11 @@ export class ParticleSolver {
     private closestZ = 0;
     private carried: ICarriedMotion | null = null;
     private readonly carryRotation = new Float64Array(9);
-    private carryPending = false;
     private readonly tuningByBody: IClothTuning[] = [];
     private readonly dampingDecay: number[] = [];
     private readonly frictionKeep: number[] = [];
+    private driftLimitsDirty = true;
+    private tetherLimitsDirty = true;
     private readonly links: Record<LinkKind, ILinkSet>;
     readonly position: Float64Array;
     private readonly predicted: Float64Array;
@@ -178,6 +176,10 @@ export class ParticleSolver {
     }
 
     addParticle(spec: IParticleSpec): number {
+        this.driftLimitsDirty = true;
+        this.tetherLimitsDirty = true;
+        this.links.stretch.denominatorsDirty = true;
+        this.links.bend.denominatorsDirty = true;
         const index = this.particleCount++;
         this.inverseMass[index] = spec.pinned ? 0 : 1;
         this.bodyOf[index] = spec.body;
@@ -189,6 +191,7 @@ export class ParticleSolver {
     addLink(kind: LinkKind, a: number, b: number, restLength: number, body: number): void {
         const links = this.links[kind];
         const index = links.count++;
+        links.denominatorsDirty = true;
         links.a[index] = a;
         links.b[index] = b;
         links.restLength[index] = restLength;
@@ -196,6 +199,7 @@ export class ParticleSolver {
     }
 
     addTether(particle: number, pin: number, restLength: number): void {
+        this.tetherLimitsDirty = true;
         const index = this.tetherCount++;
         this.tetherParticle[index] = particle;
         this.tetherPin[index] = pin;
@@ -233,6 +237,8 @@ export class ParticleSolver {
     disableCollider(index: number): void {
         if (!this.colliderEnabled[index]) return;
         this.colliderEnabled[index] = 0;
+        while (this.colliderCount > 0 && !this.colliderEnabled[this.colliderCount - 1])
+            this.colliderCount--;
         this.wake();
     }
 
@@ -257,7 +263,6 @@ export class ParticleSolver {
 
     carry(motion: ICarriedMotion): void {
         this.carried = motion;
-        this.carryPending = true;
     }
 
     addImpulse(x: number, y: number, z: number): void {
@@ -290,28 +295,32 @@ export class ParticleSolver {
         return true;
     }
 
-    step(frameSeconds: number, environment: ISolverEnvironment, reduced: boolean): boolean {
-        const seconds = Math.min(frameSeconds, PHYSICS.step.maxFrameSeconds);
-        const carried = this.carryPending ? this.carried : null;
-        this.carryPending = false;
+    step(
+        seconds: number,
+        environment: ISolverEnvironment,
+        reduced: boolean,
+        frameCount: number
+    ): boolean {
+        const carried = this.carried;
+        this.carried = null;
         if (!(seconds > 0)) return false;
-        if (this.movedEnoughToWake(seconds)) this.wake();
+        if (this.settledSeconds > 0 && this.movedEnoughToWake(seconds)) this.wake();
         if (this.isSettled()) {
             this.shiftByHomeMovement();
             this.endFrame();
             return true;
         }
-        const substeps = ParticleSolver.substepCount(seconds, reduced);
+        const substeps = ParticleSolver.substepCount(seconds, reduced, frameCount);
         const stepSeconds = seconds / substeps;
-        this.pushDriftCentresOutOfColliders();
+        if (this.colliderCount > 0) this.pushDriftCentresOutOfColliders();
         this.beginFrame(seconds, stepSeconds, carried);
         if (carried) this.prepareCarry(carried, substeps);
         for (let substep = 1; substep <= substeps; substep++) {
             if (carried) this.carryParticles(carried, substep - 1, substeps);
             this.interpolate(substep / substeps);
             this.predict(stepSeconds, environment);
-            this.solveLinks(this.links.stretch, stepSeconds);
-            this.solveLinks(this.links.bend, stepSeconds);
+            this.solveLinks(this.links.stretch);
+            this.solveLinks(this.links.bend);
             this.limitDrift();
             this.keepOutsideBody();
             this.solveTethers();
@@ -411,40 +420,70 @@ export class ParticleSolver {
             this.position[offset] += this.homeTo[offset] - this.homeFrom[offset];
     }
 
-    private static substepCount(seconds: number, reduced: boolean): number {
+    private static substepCount(seconds: number, reduced: boolean, frameCount: number): number {
         const { substepsPerFrame, referenceFrameSeconds, maxSubsteps, reducedSubstepShare } =
             PHYSICS.step;
         const share = reduced ? reducedSubstepShare : 1;
         return Math.min(
-            maxSubsteps,
+            maxSubsteps * frameCount,
             Math.max(1, Math.ceil((substepsPerFrame * share * seconds) / referenceFrameSeconds))
         );
     }
 
     private beginFrame(seconds: number, stepSeconds: number, carried: ICarriedMotion | null): void {
+        const inverseStepSquared = 1 / (stepSeconds * stepSeconds);
         for (let body = 0; body < this.tuningByBody.length; body++) {
-            this.dampingDecay[body] = Math.exp(
-                -this.tuningByBody[body].damping * this.dampingScale * stepSeconds
+            const tuning = this.tuningByBody[body];
+            this.cacheCompliance(
+                this.links.stretch,
+                body,
+                tuning.stretchSoftness * inverseStepSquared
             );
-            this.frictionKeep[body] = Math.exp(-this.tuningByBody[body].friction * stepSeconds);
+            this.cacheCompliance(this.links.bend, body, tuning.bendSoftness * inverseStepSquared);
+            this.dampingDecay[body] = Math.exp(-tuning.damping * this.dampingScale * stepSeconds);
+            this.frictionKeep[body] = Math.exp(-tuning.friction * stepSeconds);
         }
+        this.refreshLinkDenominators(this.links.stretch);
+        this.refreshLinkDenominators(this.links.bend);
+        if (this.driftLimitsDirty) this.refreshDriftLimits();
+        if (this.tetherLimitsDirty) this.refreshTetherLengths();
+        if (this.colliderCount > 0) {
+            this.boundColliders();
+            this.gatherCandidates(PHYSICS.solver.maxSpeed * seconds, carried);
+        }
+    }
+
+    private cacheCompliance(links: ILinkSet, body: number, compliance: number): void {
+        if (Object.is(compliance, links.complianceByBody[body])) return;
+        links.complianceByBody[body] = compliance;
+        links.denominatorsDirty = true;
+    }
+
+    private refreshLinkDenominators(links: ILinkSet): void {
+        if (!links.denominatorsDirty) return;
+        for (let link = 0; link < links.count; link++) {
+            const weightA = this.inverseMass[links.a[link]];
+            const weightB = this.inverseMass[links.b[link]];
+            links.denominator[link] = weightA + weightB + links.complianceByBody[links.body[link]];
+        }
+        links.denominatorsDirty = false;
+    }
+
+    private refreshDriftLimits(): void {
         for (let particle = 0; particle < this.particleCount; particle++) {
             const tuning = this.tuningByBody[this.bodyOf[particle]];
             this.maxDrift[particle] =
                 tuning.maxDriftAtHem * this.hemShare[particle] ** tuning.driftCurve;
         }
-        for (const kind of ParticleSolver.LINK_KINDS) {
-            const links = this.links[kind];
-            for (let link = 0; link < links.count; link++)
-                links.softness[link] =
-                    this.tuningByBody[links.body[link]][ParticleSolver.SOFTNESS_KEY[kind]];
-        }
+        this.driftLimitsDirty = false;
+    }
+
+    private refreshTetherLengths(): void {
         for (let tether = 0; tether < this.tetherCount; tether++)
             this.tetherLength[tether] =
                 this.tetherRest[tether] *
                 this.tuningByBody[this.bodyOf[this.tetherParticle[tether]]].pinSlack;
-        this.boundColliders();
-        this.gatherCandidates(PHYSICS.solver.maxSpeed * seconds, carried);
+        this.tetherLimitsDirty = false;
     }
 
     private boundColliders(): void {
@@ -485,25 +524,29 @@ export class ParticleSolver {
             let count = 0;
             if (this.inverseMass[particle] !== 0) {
                 const offset = particle * 3;
+                const x = this.position[offset];
+                const y = this.position[offset + 1];
+                const z = this.position[offset + 2];
+                const firstCandidate = particle * this.colliderCapacity;
                 let margin = travel + this.tuningByBody[this.bodyOf[particle]].collisionThickness;
                 if (motion)
                     margin +=
                         moveLength +
                         motion.angle *
                             Math.sqrt(
-                                (this.position[offset] - motion.originX) ** 2 +
-                                    (this.position[offset + 1] - motion.originY) ** 2 +
-                                    (this.position[offset + 2] - motion.originZ) ** 2
+                                (x - motion.originX) ** 2 +
+                                    (y - motion.originY) ** 2 +
+                                    (z - motion.originZ) ** 2
                             );
                 for (let collider = 0; collider < this.colliderCount; collider++) {
                     if (!this.colliderEnabled[collider]) continue;
                     const bound = collider * ParticleSolver.BOUND_STRIDE;
                     const reach = this.colliderBound[bound + 3] + margin;
-                    const dx = this.position[offset] - this.colliderBound[bound];
-                    const dy = this.position[offset + 1] - this.colliderBound[bound + 1];
-                    const dz = this.position[offset + 2] - this.colliderBound[bound + 2];
+                    const dx = x - this.colliderBound[bound];
+                    const dy = y - this.colliderBound[bound + 1];
+                    const dz = z - this.colliderBound[bound + 2];
                     if (dx * dx + dy * dy + dz * dz <= reach * reach)
-                        this.candidates[particle * this.colliderCapacity + count++] = collider;
+                        this.candidates[firstCandidate + count++] = collider;
                 }
             }
             this.candidateCount[particle] = count;
@@ -569,6 +612,7 @@ export class ParticleSolver {
     private interpolate(blend: number): void {
         const triples = this.particleCount * 3;
         ParticleSolver.lerpInto(this.homeNow, this.homeFrom, this.homeTo, triples, blend);
+        if (this.colliderCount === 0) return;
         ParticleSolver.lerpInto(
             this.driftCentre,
             this.driftCentreFrom,
@@ -623,31 +667,29 @@ export class ParticleSolver {
         }
     }
 
-    private solveLinks(links: ILinkSet, stepSeconds: number): void {
-        const inverseStepSquared = 1 / (stepSeconds * stepSeconds);
+    private solveLinks(links: ILinkSet): void {
+        const { predicted, inverseMass } = this;
         for (let link = 0; link < links.count; link++) {
             const a = links.a[link];
             const b = links.b[link];
-            const weightA = this.inverseMass[a];
-            const weightB = this.inverseMass[b];
+            const weightA = inverseMass[a];
+            const weightB = inverseMass[b];
             if (weightA + weightB === 0) continue;
             const oa = a * 3;
             const ob = b * 3;
-            const dx = this.predicted[oa] - this.predicted[ob];
-            const dy = this.predicted[oa + 1] - this.predicted[ob + 1];
-            const dz = this.predicted[oa + 2] - this.predicted[ob + 2];
+            const dx = predicted[oa] - predicted[ob];
+            const dy = predicted[oa + 1] - predicted[ob + 1];
+            const dz = predicted[oa + 2] - predicted[ob + 2];
             const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (length < ParticleSolver.DEGENERATE) continue;
-            const lambda =
-                -(length - links.restLength[link]) /
-                (weightA + weightB + links.softness[link] * inverseStepSquared);
+            const lambda = -(length - links.restLength[link]) / links.denominator[link];
             const scale = lambda / length;
-            this.predicted[oa] += weightA * scale * dx;
-            this.predicted[oa + 1] += weightA * scale * dy;
-            this.predicted[oa + 2] += weightA * scale * dz;
-            this.predicted[ob] -= weightB * scale * dx;
-            this.predicted[ob + 1] -= weightB * scale * dy;
-            this.predicted[ob + 2] -= weightB * scale * dz;
+            predicted[oa] += weightA * scale * dx;
+            predicted[oa + 1] += weightA * scale * dy;
+            predicted[oa + 2] += weightA * scale * dz;
+            predicted[ob] -= weightB * scale * dx;
+            predicted[ob + 1] -= weightB * scale * dy;
+            predicted[ob + 2] -= weightB * scale * dz;
         }
     }
 
@@ -669,19 +711,20 @@ export class ParticleSolver {
     }
 
     private limitDrift(): void {
+        const centres = this.colliderCount > 0 ? this.driftCentre : this.homeNow;
         for (let particle = 0; particle < this.particleCount; particle++) {
             if (this.inverseMass[particle] === 0) continue;
             const offset = particle * 3;
-            const dx = this.predicted[offset] - this.driftCentre[offset];
-            const dy = this.predicted[offset + 1] - this.driftCentre[offset + 1];
-            const dz = this.predicted[offset + 2] - this.driftCentre[offset + 2];
+            const dx = this.predicted[offset] - centres[offset];
+            const dy = this.predicted[offset + 1] - centres[offset + 1];
+            const dz = this.predicted[offset + 2] - centres[offset + 2];
             const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
             const maxDrift = this.maxDrift[particle];
             if (length <= maxDrift) continue;
             const scale = maxDrift / length;
-            this.predicted[offset] = this.driftCentre[offset] + dx * scale;
-            this.predicted[offset + 1] = this.driftCentre[offset + 1] + dy * scale;
-            this.predicted[offset + 2] = this.driftCentre[offset + 2] + dz * scale;
+            this.predicted[offset] = centres[offset] + dx * scale;
+            this.predicted[offset + 1] = centres[offset + 1] + dy * scale;
+            this.predicted[offset + 2] = centres[offset + 2] + dz * scale;
         }
     }
 
@@ -723,8 +766,8 @@ export class ParticleSolver {
             let z = this.predicted[offset + 2];
             let touched = 0;
             const first = particle * this.colliderCapacity;
-            const last = first + this.candidateCount[particle];
-            for (let pass = 0; pass < PHYSICS.solver.collisionPasses; pass++)
+            const last = this.colliderCount > 0 ? first + this.candidateCount[particle] : first;
+            for (let pass = 0; first < last && pass < PHYSICS.solver.collisionPasses; pass++)
                 for (let slot = first; slot < last; slot++) {
                     const colliderIndex = this.candidates[slot];
                     const collider = colliderIndex * ParticleSolver.COLLIDER_STRIDE;
@@ -820,8 +863,9 @@ export class ParticleSolver {
                 vy = ny * separatingSpeed + (vy - ny * normalSpeed) * keep;
                 vz = nz * separatingSpeed + (vz - nz * normalSpeed) * keep;
             }
-            const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-            const scale = speed > maxSpeed ? maxSpeed / speed : 1;
+            const speedSquared = vx * vx + vy * vy + vz * vz;
+            const scale =
+                speedSquared > maxSpeed * maxSpeed ? maxSpeed / Math.sqrt(speedSquared) : 1;
             this.velocity[offset] = vx * scale;
             this.velocity[offset + 1] = vy * scale;
             this.velocity[offset + 2] = vz * scale;
@@ -833,17 +877,17 @@ export class ParticleSolver {
 
     private updateSleep(seconds: number): void {
         const limit = PHYSICS.solver.sleepSpeed * PHYSICS.solver.sleepSpeed;
-        let fastest = 0;
-        for (let particle = 0; particle < this.particleCount; particle++) {
-            const offset = particle * 3;
-            fastest = Math.max(
-                fastest,
+        for (let offset = 0; offset < this.particleCount * 3; offset += 3) {
+            const speedSquared =
                 this.velocity[offset] ** 2 +
-                    this.velocity[offset + 1] ** 2 +
-                    this.velocity[offset + 2] ** 2
-            );
+                this.velocity[offset + 1] ** 2 +
+                this.velocity[offset + 2] ** 2;
+            if (!(speedSquared < limit)) {
+                this.settledSeconds = 0;
+                return;
+            }
         }
-        this.settledSeconds = fastest < limit ? this.settledSeconds + seconds : 0;
+        this.settledSeconds += seconds;
     }
 
     private endFrame(): void {

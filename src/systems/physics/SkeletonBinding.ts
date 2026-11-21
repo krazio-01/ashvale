@@ -1,4 +1,4 @@
-import { Matrix3, Matrix4, Quaternion, SkinnedMesh, Vector3 } from "three";
+import { Matrix4, Quaternion, SkinnedMesh, Vector3 } from "three";
 import type { Bone, Object3D, Skeleton } from "three";
 import { PHYSICS } from "@/constants/physics";
 import { sheetTangents } from "@/systems/physics/ClothBody";
@@ -17,14 +17,13 @@ interface IBodyBinding {
     bones: Object3D[];
     nodeBindWorld: Matrix4[];
     nodeGroup: Int32Array;
-    groupNode: Int32Array;
     groupSkin: Matrix4[];
-    skinSlots: Int32Array;
-    skinWeights: Float64Array;
+    groupInfluences: { matrix: Matrix4; weight: number }[][];
     restPositions: Float64Array;
     restNormals: Float64Array;
     homes: Float64Array;
     normals: Float64Array;
+    nodesOnAttachment: Matrix4[];
 }
 
 export class SkeletonBinding implements IPhysicsBinding {
@@ -46,13 +45,13 @@ export class SkeletonBinding implements IPhysicsBinding {
 
     private static readonly scratchRotationMatrix = new Matrix4();
 
-    private static readonly scratchNormalMatrix = new Matrix3();
-
     private static readonly scratchHomeRotation = new Quaternion();
 
     private static readonly scratchDelta = new Quaternion();
 
     private static readonly scratchScale = new Vector3();
+
+    private static readonly scratchAttachInverse = new Matrix4();
 
     private static readonly SKIN_INFLUENCES = 4;
 
@@ -95,16 +94,6 @@ export class SkeletonBinding implements IPhysicsBinding {
         );
     }
 
-    private static boneIndexIn(
-        skeleton: Skeleton,
-        bone: Object3D,
-        missingError: (name: string) => string
-    ): number {
-        const index = skeleton.bones.indexOf(bone as Bone);
-        if (index < 0) throw new Error(missingError(bone.name));
-        return index;
-    }
-
     private readonly model: Object3D;
     private readonly definition: IPhysicsDefinition;
     private readonly attachBones: Object3D[];
@@ -116,8 +105,12 @@ export class SkeletonBinding implements IPhysicsBinding {
     constructor(model: Object3D, definition: IPhysicsDefinition) {
         this.model = model;
         this.definition = definition;
+        const byName = new Map<string, Object3D>();
+        model.traverse((bone) => {
+            if (!byName.has(bone.name)) byName.set(bone.name, bone);
+        });
         const find = (name: string): Object3D => {
-            const bone = model.getObjectByName(name);
+            const bone = byName.get(name);
             if (!bone) throw new Error(ERRORS.physicsBoneMissing(name));
             return bone;
         };
@@ -126,10 +119,19 @@ export class SkeletonBinding implements IPhysicsBinding {
             find(definition.bodies[0].nodeBones[0])
         );
         this.referenceBone = find(definition.referenceBone);
+        const inverses = new Map<Object3D, Matrix4>();
+        skeleton.bones.forEach((bone, index) => {
+            if (!inverses.has(bone)) inverses.set(bone, skeleton.boneInverses[index]);
+        });
         const slots = new Map<string, number>();
         this.attachBones = definition.bodies.map((body) => find(body.attachBone));
         this.colliderBones = definition.colliders.map((collider) => find(collider.bone));
-        this.bodies = definition.bodies.map((body) => this.bindBody(body, skeleton, find, slots));
+        this.bodies = definition.bodies.map((body) => this.bindBody(body, inverses, find, slots));
+        for (const body of this.bodies)
+            for (const bone of body.bones) {
+                bone.matrixAutoUpdate = false;
+                bone.matrixWorldAutoUpdate = false;
+            }
     }
 
     prepareFrame(includeHomes = true, isPoseCurrent = false): void {
@@ -216,54 +218,80 @@ export class SkeletonBinding implements IPhysicsBinding {
         world.elements[14] += position.z - SkeletonBinding.scratchPoint.z;
     }
 
+    pinNodesToAttachments(): void {
+        const inverse = SkeletonBinding.scratchAttachInverse;
+        for (let bodyIndex = 0; bodyIndex < this.bodies.length; bodyIndex++) {
+            const body = this.bodies[bodyIndex];
+            inverse.copy(this.attachBones[bodyIndex].matrixWorld).invert();
+            for (let node = 0; node < body.bones.length; node++)
+                body.nodesOnAttachment[node].multiplyMatrices(
+                    inverse,
+                    body.bones[node].matrixWorld
+                );
+        }
+    }
+
+    moveNodesWithAttachments(isPoseCurrent: boolean): void {
+        if (!isPoseCurrent) this.model.updateWorldMatrix(true, true);
+        for (let bodyIndex = 0; bodyIndex < this.bodies.length; bodyIndex++) {
+            const body = this.bodies[bodyIndex];
+            const attachment = this.attachBones[bodyIndex].matrixWorld;
+            for (let node = 0; node < body.bones.length; node++)
+                body.bones[node].matrixWorld.multiplyMatrices(
+                    attachment,
+                    body.nodesOnAttachment[node]
+                );
+        }
+    }
+
     private blendSkin(body: IBodyBinding, group: number): void {
         const elements = body.groupSkin[group].elements;
         elements.fill(0);
-        const first = body.groupNode[group] * SkeletonBinding.SKIN_INFLUENCES;
-        for (let slot = first; slot < first + SkeletonBinding.SKIN_INFLUENCES; slot++) {
-            const weight = body.skinWeights[slot];
-            if (weight === 0) continue;
-            const source = this.skinBones[body.skinSlots[slot]].matrix.elements;
+        for (const { matrix, weight } of body.groupInfluences[group]) {
+            const source = matrix.elements;
             for (let element = 0; element < 16; element++)
                 elements[element] += source[element] * weight;
         }
     }
 
     private placeHome(body: IBodyBinding, node: number): void {
-        const skin = body.groupSkin[body.nodeGroup[node]];
-        SkeletonBinding.scratchPoint
-            .fromArray(body.restPositions, node * 3)
-            .applyMatrix4(skin)
-            .toArray(body.homes, node * 3);
-        SkeletonBinding.scratchNormalMatrix.setFromMatrix4(skin);
-        SkeletonBinding.scratchPoint
-            .fromArray(body.restNormals, node * 3)
-            .applyMatrix3(SkeletonBinding.scratchNormalMatrix)
-            .normalize()
-            .toArray(body.normals, node * 3);
+        const e = body.groupSkin[body.nodeGroup[node]].elements;
+        const offset = node * 3;
+        const x = body.restPositions[offset];
+        const y = body.restPositions[offset + 1];
+        const z = body.restPositions[offset + 2];
+        const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15]);
+        body.homes[offset] = (e[0] * x + e[4] * y + e[8] * z + e[12]) * w;
+        body.homes[offset + 1] = (e[1] * x + e[5] * y + e[9] * z + e[13]) * w;
+        body.homes[offset + 2] = (e[2] * x + e[6] * y + e[10] * z + e[14]) * w;
+
+        const rx = body.restNormals[offset];
+        const ry = body.restNormals[offset + 1];
+        const rz = body.restNormals[offset + 2];
+        const nx = e[0] * rx + e[4] * ry + e[8] * rz;
+        const ny = e[1] * rx + e[5] * ry + e[9] * rz;
+        const nz = e[2] * rx + e[6] * ry + e[10] * rz;
+        const inverseLength = 1 / (Math.sqrt(nx * nx + ny * ny + nz * nz) || 1);
+        body.normals[offset] = nx * inverseLength;
+        body.normals[offset + 1] = ny * inverseLength;
+        body.normals[offset + 2] = nz * inverseLength;
     }
 
     private bindBody(
         body: IPhysicsBodyDefinition,
-        skeleton: Skeleton,
+        inverses: ReadonlyMap<Object3D, Matrix4>,
         find: (name: string) => Object3D,
         slots: Map<string, number>
     ): IBodyBinding {
         const nodes = body.columns * body.rows;
         const bones = body.nodeBones.map(find);
-        const nodeBindWorld = bones.map((bone) =>
-            skeleton.boneInverses[
-                SkeletonBinding.boneIndexIn(skeleton, bone, ERRORS.latticeBoneMissing)
-            ]
-                .clone()
-                .invert()
-        );
-        for (const bone of bones) {
-            bone.matrixAutoUpdate = false;
-            bone.matrixWorldAutoUpdate = false;
-        }
+        const nodeBindWorld = bones.map((bone) => {
+            const inverse = inverses.get(bone);
+            if (!inverse) throw new Error(ERRORS.latticeBoneMissing(bone.name));
+            return inverse.clone().invert();
+        });
         const skinSlots = Int32Array.from(body.skinBones, (name) =>
-            this.skinSlot(name, skeleton, find, slots)
+            this.skinSlot(name, inverses, find, slots)
         );
         const skinWeights = Float64Array.from(body.skinWeights);
         const groups = new Map<string, number>();
@@ -286,30 +314,36 @@ export class SkeletonBinding implements IPhysicsBinding {
             bones,
             nodeBindWorld,
             nodeGroup,
-            groupNode: Int32Array.from(groupNode),
             groupSkin: groupNode.map(() => new Matrix4()),
-            skinSlots,
-            skinWeights,
+            groupInfluences: groupNode.map((node) => {
+                const influences: { matrix: Matrix4; weight: number }[] = [];
+                const first = node * SkeletonBinding.SKIN_INFLUENCES;
+                for (let slot = first; slot < first + SkeletonBinding.SKIN_INFLUENCES; slot++) {
+                    const weight = skinWeights[slot];
+                    if (weight !== 0)
+                        influences.push({ matrix: this.skinBones[skinSlots[slot]].matrix, weight });
+                }
+                return influences;
+            }),
             restPositions: Float64Array.from(body.restPositions),
             restNormals: Float64Array.from(body.restNormals),
             homes: new Float64Array(nodes * 3),
             normals: new Float64Array(nodes * 3),
+            nodesOnAttachment: bones.map(() => new Matrix4()),
         };
     }
 
     private skinSlot(
         name: string,
-        skeleton: Skeleton,
+        inverses: ReadonlyMap<Object3D, Matrix4>,
         find: (name: string) => Object3D,
         slots: Map<string, number>
     ): number {
         const known = slots.get(name);
         if (known !== undefined) return known;
         const bone = find(name);
-        const inverse =
-            skeleton.boneInverses[
-                SkeletonBinding.boneIndexIn(skeleton, bone, ERRORS.skinBoneMissing)
-            ];
+        const inverse = inverses.get(bone);
+        if (!inverse) throw new Error(ERRORS.skinBoneMissing(bone.name));
         slots.set(name, this.skinBones.length);
         this.skinBones.push({ bone, inverse, matrix: new Matrix4() });
         return this.skinBones.length - 1;

@@ -24,7 +24,6 @@ export class ClothSimulation {
     private static readonly scratchMove = new Vector3();
     private static readonly scratchAxis = new Vector3();
     private static readonly scratchTurn = new Quaternion();
-    private static readonly scratchOrigin = new Vector3();
     private static readonly scratchPush = new Vector3();
 
     readonly solver: ParticleSolver;
@@ -33,6 +32,7 @@ export class ClothSimulation {
     private readonly character: Object3D;
     private readonly groundProbe: ISurfaceProbe;
     private readonly colliderCount: number;
+    private readonly stepStride: number;
     private readonly capsuleSources: (ICapsuleSource | null)[] = Object.values(
         PHYSICS.capsuleSlots
     ).map(() => null);
@@ -73,12 +73,16 @@ export class ClothSimulation {
     private hasReference = false;
     private windTime = 0;
     private restartDampingRemaining = 0;
+    private pendingSeconds = 0;
+    private pendingSimulatedSeconds = 0;
+    private pendingFrames = 0;
 
     private constructor(
         model: Object3D,
         character: Object3D,
         probe: ISurfaceProbe,
-        definition: IPhysicsDefinition
+        definition: IPhysicsDefinition,
+        stepStride: number
     ) {
         if (definition.version !== PHYSICS.dataVersion)
             throw new Error(ERRORS.physicsDataVersion(definition.version, PHYSICS.dataVersion));
@@ -86,6 +90,7 @@ export class ClothSimulation {
         this.character = character;
         this.groundProbe = probe;
         this.colliderCount = definition.colliders.length;
+        this.stepStride = stepStride;
         this.bodies = definition.bodies.map((body, index) => new ClothSheet(body, index));
         const totals = this.bodies.reduce(
             (sum, body) => ({
@@ -110,32 +115,44 @@ export class ClothSimulation {
     static create(
         model: Object3D,
         character: Object3D,
-        probe: ISurfaceProbe
+        probe: ISurfaceProbe,
+        stepStride: number
     ): ClothSimulation | null {
         const definition = model.userData[PHYSICS.dataKey] as IPhysicsDefinition | undefined;
-        return definition ? new ClothSimulation(model, character, probe, definition) : null;
+        return definition
+            ? new ClothSimulation(model, character, probe, definition, stepStride)
+            : null;
     }
 
     update(deltaSeconds: number, detail: PhysicsDetail, isPoseCurrent: boolean): void {
-        const floorY = detail === "frozen" ? null : this.floorHeightBelowCharacter();
         const wasFrozen = this.previousDetail === "frozen";
         this.previousDetail = detail;
-        const isFrozen = detail === "frozen";
-        this.binding.prepareFrame(!isFrozen, isPoseCurrent);
-        if (isFrozen) {
+        if (detail === "frozen") {
+            this.binding.prepareFrame(false, isPoseCurrent);
             this.writeAnimatedPose();
             this.hasReference = false;
+            this.clearPendingTime();
             return;
         }
-        const seconds = Number.isFinite(deltaSeconds) ? Math.max(deltaSeconds, 0) : 0;
-        for (const body of this.bodies) {
-            body.reloadTuning();
-            body.updateHomeTargets(this.solver, this.binding);
+        const frameSeconds = Number.isFinite(deltaSeconds) ? Math.max(deltaSeconds, 0) : 0;
+        this.pendingSeconds += frameSeconds;
+        this.pendingSimulatedSeconds += Math.min(frameSeconds, PHYSICS.step.maxFrameSeconds);
+        this.pendingFrames += 1;
+        if (this.hasReference && this.pendingFrames < this.stepStride) {
+            this.binding.moveNodesWithAttachments(isPoseCurrent);
+            return;
         }
+        const seconds = this.pendingSeconds;
+        const simulatedSeconds = this.pendingSimulatedSeconds;
+        const frameCount = this.pendingFrames;
+        this.clearPendingTime();
+        const floorY = this.floorHeightBelowCharacter();
+        this.binding.prepareFrame(true, isPoseCurrent);
+        for (const body of this.bodies) body.updateHomeTargets(this.solver, this.binding);
         this.updateColliders();
         this.binding.referenceWorld(this.nextPosition, this.nextRotation);
         if (!this.hasReference || this.isTeleport(seconds)) this.restart(wasFrozen);
-        else this.carryClothWithCharacter(seconds);
+        else this.carryClothWithCharacter(seconds, simulatedSeconds);
         this.rememberReference();
         const { dampingSeconds, dampingScale } = PHYSICS.restart;
         this.solver.dampingScale = lerp(
@@ -147,10 +164,13 @@ export class ClothSimulation {
         this.windTime += seconds;
         this.updateWind();
         this.environment.floorY = floorY;
-        if (this.solver.step(seconds, this.environment, detail === "reduced")) {
+        if (
+            this.solver.step(simulatedSeconds, this.environment, detail === "reduced", frameCount)
+        ) {
             if (!this.solver.isFinite()) this.reset();
             for (const body of this.bodies) body.writeSimulatedPose(this.solver, this.binding);
         }
+        if (this.stepStride > 1) this.binding.pinNodesToAttachments();
     }
 
     attachCapsule(slot: number, source: ICapsuleSource): void {
@@ -161,6 +181,8 @@ export class ClothSimulation {
         this.binding.prepareFrame();
         this.binding.referenceWorld(this.nextPosition, this.nextRotation);
         this.restart(false);
+        this.clearPendingTime();
+        if (this.stepStride > 1) this.binding.pinNodesToAttachments();
     }
 
     applyHitImpulse(push: Vector3, strength: number): void {
@@ -178,6 +200,12 @@ export class ClothSimulation {
         this.rememberReference();
         this.environment.flingX = this.environment.flingY = this.environment.flingZ = 0;
         this.writeAnimatedPose();
+    }
+
+    private clearPendingTime(): void {
+        this.pendingSeconds = 0;
+        this.pendingSimulatedSeconds = 0;
+        this.pendingFrames = 0;
     }
 
     private writeAnimatedPose(): void {
@@ -225,7 +253,7 @@ export class ClothSimulation {
         );
     }
 
-    private carryClothWithCharacter(seconds: number): void {
+    private carryClothWithCharacter(seconds: number, simulatedSeconds: number): void {
         const { moveLag, turnLag, turnFlingScale, maxLagMoveSpeed, maxLagTurnSpeed } =
             PHYSICS.reference;
         const move = ClothSimulation.scratchMove.subVectors(
@@ -247,7 +275,6 @@ export class ClothSimulation {
         this.motion.referenceMoveY = move.y;
         this.motion.referenceMoveZ = move.z;
         const distance = move.length();
-        const simulatedSeconds = Math.min(seconds, PHYSICS.step.maxFrameSeconds);
         const cappedDistance = Math.min(distance, maxLagMoveSpeed * simulatedSeconds);
         const cappedAngle = Math.min(angle, maxLagTurnSpeed * simulatedSeconds);
         const carriedDistance = distance - cappedDistance + (1 - moveLag) * cappedDistance;
@@ -302,7 +329,6 @@ export class ClothSimulation {
     }
 
     private floorHeightBelowCharacter(): number | null {
-        const origin = this.character.getWorldPosition(ClothSimulation.scratchOrigin);
-        return this.groundProbe.surfaceAlong(origin, WORLD.down)?.point.y ?? null;
+        return this.groundProbe.surfaceAlong(this.character.position, WORLD.down)?.point.y ?? null;
     }
 }
