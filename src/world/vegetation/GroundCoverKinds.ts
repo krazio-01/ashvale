@@ -10,7 +10,7 @@ import {
 import type { IGroundSurface, IShaderPatch, IWorldContext } from "@/types/world";
 import type { CoverAffinity, IThemeGroundCover } from "@/types/themes";
 import { FLOWER_PATCHES, GRASS, GROUND_COVER } from "@/constants/placement";
-import { SCALE, STYLE } from "@/constants/world";
+import { MAX_SMALL_INDEX_VERTEX_COUNT, SCALE, STYLE } from "@/constants/world";
 import { FULL_TURN, createSeededRandom, shiftedColor } from "@/lib/helpers";
 import { MaterialLibrary } from "@/world/assets/MaterialLibrary";
 import {
@@ -218,7 +218,7 @@ class GrassKind extends GroundCoverKind {
         const bladeTraits = new Float32Array(totalVertices * 4);
         const bladeRanks = new Float32Array(totalVertices);
         const indices =
-            totalVertices > 65535
+            totalVertices > MAX_SMALL_INDEX_VERTEX_COUNT
                 ? new Uint32Array(bladeCount * indicesPerBlade)
                 : new Uint16Array(bladeCount * indicesPerBlade);
         const nextRandom = createSeededRandom(GrassKind.BLADE_SEED);

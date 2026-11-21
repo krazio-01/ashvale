@@ -15,7 +15,12 @@ import type { IWorldContext, IWorldEntity, IWaterCourse, IWaterPoint } from "@/t
 import type { LandMap } from "@/world/terrain/LandMap";
 import { CellIndex } from "@/lib/spatialGrid";
 import { shoreAllowanceAt } from "@/world/water/WaterChannel";
-import { WATER_CHANNEL, WATER_SURFACE, WADING_RIPPLES } from "@/constants/world";
+import {
+    MAX_SMALL_INDEX_VERTEX_COUNT,
+    WATER_CHANNEL,
+    WATER_SURFACE,
+    WADING_RIPPLES,
+} from "@/constants/world";
 import {
     lerp,
     smoothstep,
@@ -34,8 +39,6 @@ const RIBBON_ATTRIBUTES = [
     ["flowDirection", 2],
     ["streamCoord", 2],
 ] as const;
-
-const MAX_SMALL_INDEX_VERTEX_COUNT = 65535;
 
 type RibbonArrays = Record<(typeof RIBBON_ATTRIBUTES)[number][0], Float32Array>;
 

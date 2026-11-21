@@ -211,7 +211,7 @@ abstract class WaterCourseKind {
             forwardCut = forwardCut + forward - forwardLow;
             reverseCut = reverseCut + reverse - reverseLow;
         }
-        return forwardCut <= reverseCut ? anchors : anchors.reverse();
+        return forwardCut <= reverseCut ? anchors : anchors.toReversed();
     }
 
     protected static settleWaterline(points: IWaterPoint[], ground: ISurfaceHeightProbe): void {

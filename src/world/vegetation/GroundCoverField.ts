@@ -218,12 +218,7 @@ export class GroundCoverField implements IWorldEntity {
             cameraElements[14] - this.sceneObject.position.z
         );
 
-        const facingX = cameraElements[8];
-        const facingY = cameraElements[9];
-        const facingZ = cameraElements[10];
-        const inverseLength =
-            1 / (Math.sqrt(facingX * facingX + facingY * facingY + facingZ * facingZ) || 1);
-        const facing = Math.atan2(-(facingZ * inverseLength), -(facingX * inverseLength));
+        const facing = Math.atan2(-cameraElements[10], -cameraElements[8]);
         const halfView = Math.atan(1 / this.camera.projectionMatrix.elements[0]);
         for (const { mesh, facing: sectorFacing, reach } of this.sectors)
             mesh.visible =
