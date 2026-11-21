@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef } from "react";
 import type { FormEvent } from "react";
 import { InlineLoader } from "generative-loaders";
 import { APP_TEXT, LANDING_TEXT } from "@/constants/strings";
@@ -41,10 +41,10 @@ const LandingHero = ({
     onRepoSubmit: (rawInput: string) => void;
     onQuickPlay: () => void;
 }) => {
-    const [repoInputValue, setRepoInputValue] = useState("");
+    const repoInputRef = useRef<HTMLInputElement>(null);
     const handleSubmit = (event: FormEvent) => {
         event.preventDefault();
-        onRepoSubmit(repoInputValue);
+        onRepoSubmit(repoInputRef.current?.value ?? "");
     };
 
     return (
@@ -58,16 +58,13 @@ const LandingHero = ({
                 <div className="landing-repo-field">
                     <span className="landing-repo-prefix">{LANDING_TEXT.repoPrefix}</span>
                     <input
+                        ref={repoInputRef}
                         type="text"
-                        value={repoInputValue}
-                        onChange={(event) => setRepoInputValue(event.target.value)}
                         placeholder={LANDING_TEXT.repoPlaceholder}
                         disabled={isInteractionLocked}
                         aria-label={LANDING_TEXT.repoInputLabel}
                     />
-                    {repoInputValue && !isInteractionLocked && (
-                        <kbd className="landing-repo-kbd">↵</kbd>
-                    )}
+                    {!isInteractionLocked && <kbd className="landing-repo-kbd">↵</kbd>}
                 </div>
                 <button
                     type="submit"
@@ -75,7 +72,7 @@ const LandingHero = ({
                     disabled={isInteractionLocked}
                 >
                     <PortalIcon />
-                    Open the Realm
+                    {LANDING_TEXT.openRealm}
                 </button>
             </form>
 
@@ -83,7 +80,7 @@ const LandingHero = ({
 
             <div className="landing-divider">
                 <span className="landing-divider-line" />
-                or
+                {LANDING_TEXT.divider}
                 <span className="landing-divider-line" />
             </div>
 
@@ -98,7 +95,7 @@ const LandingHero = ({
                 ) : (
                     <>
                         <DiceIcon />
-                        Quick Play
+                        {LANDING_TEXT.quickPlay}
                     </>
                 )}
             </button>

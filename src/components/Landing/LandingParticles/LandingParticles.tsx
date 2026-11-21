@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
     AdditiveBlending,
     BufferGeometry,
     Color,
-    Float32BufferAttribute,
+    BufferAttribute,
+    DynamicDrawUsage,
     PointsMaterial,
 } from "three";
-import type { BufferAttribute, PointsMaterialParameters } from "three";
+import type { PointsMaterialParameters } from "three";
 import { useFrame } from "@react-three/fiber";
 import {
     createSeededRandom,
@@ -25,18 +26,22 @@ const STAR_ELEVATION_CEILING = Math.PI / 2;
 
 const STAR_COLOR = new Color(LANDING_STARS.color);
 
-type IUpdateParticle<T> = (
-    particle: T,
-    index: number,
-    positionAttribute: BufferAttribute,
-    colorAttribute: BufferAttribute | undefined,
+const EMBERS = buildEmbers();
+
+const FIREFLIES = buildFireflies();
+
+const STARS = buildStars();
+
+type UpdateParticles<T> = (
+    particles: readonly T[],
+    attribute: BufferAttribute,
     elapsedSeconds: number
 ) => void;
 
 interface IParticleFieldProps<T> {
-    particles: T[];
+    particles: readonly T[];
     getPosition?: (particle: T) => [number, number, number];
-    updateFrame: IUpdateParticle<T>;
+    updateFrame: UpdateParticles<T>;
     color: string;
     size: number;
     blending?: PointsMaterialParameters["blending"];
@@ -49,7 +54,7 @@ interface IEmberParticle {
     orbitZ: number;
     riseSpeed: number;
     driftPhase: number;
-    initialHeight: number;
+    initialRiseOffset: number;
 }
 
 interface IFirefly {
@@ -80,19 +85,19 @@ function ParticleField<T>({
     opacity = 1,
     vertexColors = false,
 }: IParticleFieldProps<T>) {
-    const geometry = useMemo(() => {
-        const positions = new Float32Array(particles.length * 3);
+    const { geometry, animated } = useMemo(() => {
+        const position = new BufferAttribute(new Float32Array(particles.length * 3), 3);
         if (getPosition)
-            particles.forEach((particle, index) => positions.set(getPosition(particle), index * 3));
-
-        const bufferGeometry = new BufferGeometry();
-        bufferGeometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
-        if (vertexColors)
-            bufferGeometry.setAttribute(
-                "color",
-                new Float32BufferAttribute(new Float32Array(particles.length * 3), 3)
+            particles.forEach((particle, index) =>
+                position.setXYZ(index, ...getPosition(particle))
             );
-        return bufferGeometry;
+        const bufferGeometry = new BufferGeometry().setAttribute("position", position);
+        if (!vertexColors)
+            return { geometry: bufferGeometry, animated: position.setUsage(DynamicDrawUsage) };
+
+        const colors = new BufferAttribute(new Float32Array(particles.length * 3), 3);
+        bufferGeometry.setAttribute("color", colors);
+        return { geometry: bufferGeometry, animated: colors.setUsage(DynamicDrawUsage) };
     }, [particles, getPosition, vertexColors]);
 
     const material = useMemo(() => {
@@ -113,66 +118,52 @@ function ParticleField<T>({
     useEffect(() => () => geometry.dispose(), [geometry]);
     useEffect(() => () => material.dispose(), [material]);
 
-    useFrame(() => {
-        const positionAttribute = geometry.getAttribute("position") as BufferAttribute;
-        const colorAttribute = geometry.getAttribute("color") as BufferAttribute | undefined;
-        const elapsedSeconds = performance.now() * 0.001;
-
-        for (let index = 0; index < particles.length; index += 1) {
-            updateFrame(particles[index], index, positionAttribute, colorAttribute, elapsedSeconds);
-        }
-
-        if (!vertexColors) positionAttribute.needsUpdate = true;
-        if (colorAttribute) colorAttribute.needsUpdate = true;
-    });
+    useFrame(() => advanceParticles(updateFrame, particles, animated));
 
     return <points geometry={geometry} material={material} frustumCulled={false} />;
 }
 
-export const LandingEmbers = () => {
-    const [particles] = useState(() => buildEmbers());
+export const LandingEmbers = () => (
+    <ParticleField
+        particles={EMBERS}
+        updateFrame={updateEmbers}
+        color={LANDING_EMBERS.color}
+        size={LANDING_EMBERS.size}
+        blending={AdditiveBlending}
+        opacity={0.85}
+    />
+);
 
-    return (
-        <ParticleField
-            particles={particles}
-            updateFrame={updateEmber}
-            color={LANDING_EMBERS.color}
-            size={LANDING_EMBERS.size}
-            blending={AdditiveBlending}
-            opacity={0.85}
-        />
-    );
-};
+export const LandingFireflies = () => (
+    <ParticleField
+        particles={FIREFLIES}
+        updateFrame={updateFireflies}
+        color={LANDING_FIREFLIES.color}
+        size={LANDING_FIREFLIES.size}
+        blending={AdditiveBlending}
+        opacity={0.9}
+    />
+);
 
-export const LandingFireflies = () => {
-    const [fireflies] = useState(() => buildFireflies());
+export const LandingStars = () => (
+    <ParticleField
+        particles={STARS}
+        getPosition={getStarPosition}
+        updateFrame={updateStars}
+        color={LANDING_STARS.color}
+        size={LANDING_STARS.size}
+        vertexColors
+    />
+);
 
-    return (
-        <ParticleField
-            particles={fireflies}
-            updateFrame={updateFirefly}
-            color={LANDING_FIREFLIES.color}
-            size={LANDING_FIREFLIES.size}
-            blending={AdditiveBlending}
-            opacity={0.9}
-        />
-    );
-};
-
-export const LandingStars = () => {
-    const [stars] = useState(() => buildStars());
-
-    return (
-        <ParticleField
-            particles={stars}
-            getPosition={getStarPosition}
-            updateFrame={updateStar}
-            color={LANDING_STARS.color}
-            size={LANDING_STARS.size}
-            vertexColors
-        />
-    );
-};
+function advanceParticles<T>(
+    updateFrame: UpdateParticles<T>,
+    particles: readonly T[],
+    attribute: BufferAttribute
+): void {
+    updateFrame(particles, attribute, performance.now() * 0.001);
+    attribute.needsUpdate = true;
+}
 
 function buildEmbers(): IEmberParticle[] {
     const nextRandom = createSeededRandom(LANDING_EMBERS.seed);
@@ -185,27 +176,22 @@ function buildEmbers(): IEmberParticle[] {
             orbitZ: Math.sin(angle) * orbitRadius,
             riseSpeed: LANDING_EMBERS.riseSpeed * (0.6 + nextRandom() * 0.8),
             driftPhase: nextRandom() * FULL_TURN,
-            initialHeight: lerp(LANDING_EMBERS.minHeight, LANDING_EMBERS.maxHeight, nextRandom()),
+            initialRiseOffset: nextRandom() * EMBER_HEIGHT_SPAN,
         };
     });
 }
 
-const updateEmber: IUpdateParticle<IEmberParticle> = (
-    particle,
-    index,
-    positionAttribute,
-    _colorAttribute,
-    elapsedSeconds
-) => {
-    const riseOffset =
-        (particle.initialHeight - LANDING_EMBERS.minHeight + particle.riseSpeed * elapsedSeconds) %
-        EMBER_HEIGHT_SPAN;
-    const height = LANDING_EMBERS.minHeight + riseOffset;
-    const sway =
-        Math.sin(particle.driftPhase + elapsedSeconds * LANDING_EMBERS.driftSpeed) *
-        LANDING_EMBERS.driftAmplitude;
+const updateEmbers: UpdateParticles<IEmberParticle> = (particles, attribute, elapsedSeconds) => {
+    const drift = elapsedSeconds * LANDING_EMBERS.driftSpeed;
+    for (let index = 0; index < particles.length; index += 1) {
+        const particle = particles[index];
+        const riseOffset =
+            (particle.initialRiseOffset + particle.riseSpeed * elapsedSeconds) % EMBER_HEIGHT_SPAN;
+        const height = LANDING_EMBERS.minHeight + riseOffset;
+        const sway = Math.sin(particle.driftPhase + drift) * LANDING_EMBERS.driftAmplitude;
 
-    positionAttribute.setXYZ(index, particle.orbitX + sway, height, particle.orbitZ);
+        attribute.setXYZ(index, particle.orbitX + sway, height, particle.orbitZ);
+    }
 };
 
 function buildFireflies(): IFirefly[] {
@@ -226,24 +212,22 @@ function buildFireflies(): IFirefly[] {
     });
 }
 
-const updateFirefly: IUpdateParticle<IFirefly> = (
-    firefly,
-    index,
-    positionAttribute,
-    _colorAttribute,
-    elapsedSeconds
-) => {
-    const time = elapsedSeconds * firefly.speed * LANDING_FIREFLIES.wanderSpeed;
-    const wanderX = Math.sin(time + firefly.phaseX) * LANDING_FIREFLIES.wanderAmplitude;
-    const wanderY = Math.sin(time * 1.3 + firefly.phaseY) * LANDING_FIREFLIES.wanderAmplitude * 0.4;
-    const wanderZ = Math.cos(time + firefly.phaseZ) * LANDING_FIREFLIES.wanderAmplitude;
+const updateFireflies: UpdateParticles<IFirefly> = (particles, attribute, elapsedSeconds) => {
+    for (let index = 0; index < particles.length; index += 1) {
+        const firefly = particles[index];
+        const time = elapsedSeconds * firefly.speed * LANDING_FIREFLIES.wanderSpeed;
+        const wanderX = Math.sin(time + firefly.phaseX) * LANDING_FIREFLIES.wanderAmplitude;
+        const wanderY =
+            Math.sin(time * 1.3 + firefly.phaseY) * LANDING_FIREFLIES.wanderAmplitude * 0.4;
+        const wanderZ = Math.cos(time + firefly.phaseZ) * LANDING_FIREFLIES.wanderAmplitude;
 
-    positionAttribute.setXYZ(
-        index,
-        firefly.baseX + wanderX,
-        firefly.baseY + wanderY,
-        firefly.baseZ + wanderZ
-    );
+        attribute.setXYZ(
+            index,
+            firefly.baseX + wanderX,
+            firefly.baseY + wanderY,
+            firefly.baseZ + wanderZ
+        );
+    }
 };
 
 function buildStars(): IStar[] {
@@ -272,22 +256,19 @@ function getStarPosition(star: IStar): [number, number, number] {
     return [star.x, star.y, star.z];
 }
 
-const updateStar: IUpdateParticle<IStar> = (
-    star,
-    index,
-    _positionAttribute,
-    colorAttribute,
-    elapsedSeconds
-) => {
-    const twinkle =
-        LANDING_STARS.twinkleFloor +
-        (1 - LANDING_STARS.twinkleFloor) *
-            (0.5 + 0.5 * Math.sin(elapsedSeconds * star.speed + star.phase));
+const updateStars: UpdateParticles<IStar> = (particles, attribute, elapsedSeconds) => {
+    for (let index = 0; index < particles.length; index += 1) {
+        const star = particles[index];
+        const twinkle =
+            LANDING_STARS.twinkleFloor +
+            (1 - LANDING_STARS.twinkleFloor) *
+                (0.5 + 0.5 * Math.sin(elapsedSeconds * star.speed + star.phase));
 
-    colorAttribute!.setXYZ(
-        index,
-        STAR_COLOR.r * twinkle,
-        STAR_COLOR.g * twinkle,
-        STAR_COLOR.b * twinkle
-    );
+        attribute.setXYZ(
+            index,
+            STAR_COLOR.r * twinkle,
+            STAR_COLOR.g * twinkle,
+            STAR_COLOR.b * twinkle
+        );
+    }
 };

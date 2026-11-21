@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
     Camera,
     Group,
@@ -12,6 +12,9 @@ import {
 import { useFrame } from "@react-three/fiber";
 import { createSeededRandom, FULL_TURN, lerp, randomOffset } from "@/lib/helpers";
 import { LANDING_CLOUDS } from "@/constants/ui";
+
+const PUFFS = buildPuffs();
+
 interface ICloudPuff {
     x: number;
     y: number;
@@ -75,8 +78,7 @@ function buildPuffs(): ICloudPuff[] {
 
 const LandingClouds = () => {
     const groupRef = useRef<Group>(null);
-    const [puffs] = useState(() => buildPuffs());
-    const [field] = useState(() => buildCloudField(puffs));
+    const field = useMemo(() => buildCloudField(PUFFS), []);
 
     useEffect(
         () => () => {
@@ -88,9 +90,10 @@ const LandingClouds = () => {
     );
 
     useFrame(({ camera }, deltaSeconds) => {
-        const group = groupRef.current!;
+        const group = groupRef.current;
+        if (!group) return;
         group.rotation.y += LANDING_CLOUDS.driftSpeed * deltaSeconds;
-        reorderPuffs(field, puffs, group.rotation.y, camera);
+        reorderPuffs(field, PUFFS, group.rotation.y, camera);
     });
 
     return (
@@ -109,13 +112,11 @@ function reorderPuffs(
     const cosine = Math.cos(yaw);
     const sine = Math.sin(yaw);
     const forward = field.forward.set(0, 0, -1).applyQuaternion(camera.quaternion);
-    const { position } = camera;
+    const depthPerX = cosine * forward.x - sine * forward.z;
+    const depthPerZ = sine * forward.x + cosine * forward.z;
     for (let index = 0; index < puffs.length; index += 1) {
         const { x, y, z } = puffs[index];
-        field.depths[index] =
-            (x * cosine + z * sine - position.x) * forward.x +
-            (y - position.y) * forward.y +
-            (-x * sine + z * cosine - position.z) * forward.z;
+        field.depths[index] = x * depthPerX + y * forward.y + z * depthPerZ;
     }
     field.order.sort(field.byDepth);
     let changed = false;

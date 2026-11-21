@@ -1,6 +1,8 @@
 "use client";
 import type { IRepoReference } from "@/types/realm";
 import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
+import type { CanvasProps } from "@react-three/fiber";
 import { useRouter } from "next/navigation";
 import {
     LandingEmbers,
@@ -10,11 +12,16 @@ import {
 import type { IOrbitInput } from "@/components/Landing/LandingCameraRig/LandingCameraRig";
 import { RenderCanvas } from "@/components/RenderCanvas/RenderCanvas";
 import { PauseMenu } from "@/components/PauseMenu/PauseMenu";
-import { LANDING_LOOK, resolveTheme, withEnvironmentOverrides } from "@/themes/Themes";
+import {
+    BIOME_ENVIRONMENTS,
+    overrideEnvironment,
+    seasonFor,
+    seasonalEnvironment,
+} from "@/themes/Environment";
 import { isRequestCancellation, useRequest } from "@/hooks/useRequest";
 import { LANDING_TEXT } from "@/constants/strings";
 import { QUICK_PLAY_FALLBACK_REPOS } from "@/constants/realm";
-import { LANDING_CAMERA, LANDING_ENVIRONMENT } from "@/constants/ui";
+import { LANDING_CAMERA, LANDING_ENVIRONMENT, LANDING_LOOK } from "@/constants/ui";
 import type { FeaturedRealmResponse } from "@/responses/realm/RealmResponse";
 import { clamp, pickRandom } from "@/lib/helpers";
 import { InlineLoader } from "generative-loaders";
@@ -34,35 +41,41 @@ const SHORTHAND_PATTERN = /^([^/\s]+)\/([^/\s]+)$/;
 
 const GIT_SUFFIX_PATTERN = /\.git$/i;
 
-const LANDING_MANIFEST = withEnvironmentOverrides(resolveTheme(LANDING_LOOK), LANDING_ENVIRONMENT);
+const LANDING_CANVAS_CAMERA: CanvasProps["camera"] = {
+    fov: LANDING_CAMERA.fov,
+    near: LANDING_CAMERA.near,
+    far: LANDING_CAMERA.far,
+};
+
+const LANDING_BIOME_ENVIRONMENT = BIOME_ENVIRONMENTS[LANDING_LOOK.themeId];
+
+const LANDING_SEASONAL_ENVIRONMENT = overrideEnvironment(
+    seasonalEnvironment(
+        LANDING_BIOME_ENVIRONMENT,
+        seasonFor(LANDING_BIOME_ENVIRONMENT, LANDING_LOOK.seasonId)
+    ),
+    LANDING_ENVIRONMENT
+);
 
 const Landing = () => {
     const router = useRouter();
     const { isPending: isLoadingFeatured, sendRequest } = useRequest();
     const [validationError, setValidationError] = useState<string | null>(null);
-    const [pendingRealm, setPendingRealm] = useState<{ owner: string; name: string } | null>(null);
+    const [pendingRealm, setPendingRealm] = useState<IRepoReference | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const bearingLabelRef = useRef<HTMLSpanElement>(null);
+    const compassRingRef = useRef<HTMLDivElement>(null);
+    const orbitInputRef = useOrbitInput(containerRef);
 
     useHotkey("F10", (e) => {
         e.preventDefault();
         setIsSettingsOpen((prev) => !prev);
     });
-    const hasNavigatedRef = useRef(false);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const bearingLabelRef = useRef<HTMLSpanElement>(null);
-    const compassRingRef = useRef<HTMLDivElement>(null);
-    const orbitInputRef = useRef<IOrbitInput>({
-        angleOffset: 0,
-        velocity: 0,
-        isDragging: false,
-        lastPointerX: 0,
-        lastPointerTime: 0,
-    });
 
     const enterRealm = (owner: string, name: string) => {
-        if (hasNavigatedRef.current) return;
+        if (pendingRealm) return;
 
-        hasNavigatedRef.current = true;
         setPendingRealm({ owner, name });
         router.prefetch(`/realm/${owner}/${name}`);
     };
@@ -85,7 +98,7 @@ const Landing = () => {
     const handleQuickPlay = async () => {
         setValidationError(null);
 
-        let pool: { owner: string; name: string }[] = QUICK_PLAY_FALLBACK_REPOS;
+        let pool: IRepoReference[] = QUICK_PLAY_FALLBACK_REPOS;
         try {
             const featuredRealms = await sendRequest<FeaturedRealmResponse[]>("/realms/featured");
             if (featuredRealms.length > 0) pool = featuredRealms;
@@ -96,6 +109,75 @@ const Landing = () => {
         const { owner, name } = pickRandom(pool);
         enterRealm(owner, name);
     };
+
+    const isInteractionLocked = pendingRealm !== null || isLoadingFeatured;
+
+    return (
+        <div className="landing-container" ref={containerRef}>
+            <RenderCanvas environment={LANDING_SEASONAL_ENVIRONMENT} camera={LANDING_CANVAS_CAMERA}>
+                <LandingStars />
+                <LandingMountains />
+                <LandingClouds />
+                <LandingIsland environment={LANDING_SEASONAL_ENVIRONMENT} />
+                <LandingEmbers />
+                <LandingFireflies />
+                <LandingCameraRig
+                    orbitInputRef={orbitInputRef}
+                    bearingLabelRef={bearingLabelRef}
+                    compassRingRef={compassRingRef}
+                    isDiving={pendingRealm !== null}
+                    onDiveComplete={handleDiveComplete}
+                />
+            </RenderCanvas>
+
+            <div className="landing-overlay">
+                <LandingHero
+                    validationError={validationError}
+                    isInteractionLocked={isInteractionLocked}
+                    isLoadingFeatured={isLoadingFeatured}
+                    onRepoSubmit={handleRepoSubmit}
+                    onQuickPlay={handleQuickPlay}
+                />
+
+                <LandingHud bearingLabelRef={bearingLabelRef} compassRingRef={compassRingRef} />
+            </div>
+
+            {pendingRealm && (
+                <div className="landing-status">
+                    <InlineLoader variant="matrix" size={32} color="#fff" />
+                    <p>{LANDING_TEXT.openingRealm(pendingRealm.owner, pendingRealm.name)}</p>
+                </div>
+            )}
+
+            <button
+                type="button"
+                className="btn-quiet landing-settings-trigger"
+                onClick={() => setIsSettingsOpen(true)}
+            >
+                {LANDING_TEXT.settings}
+            </button>
+
+            {isSettingsOpen && (
+                <PauseMenu
+                    title={LANDING_TEXT.settings}
+                    dismissLabel={LANDING_TEXT.closeSettings}
+                    onResume={() => setIsSettingsOpen(false)}
+                />
+            )}
+        </div>
+    );
+};
+
+export default Landing;
+
+function useOrbitInput(containerRef: RefObject<HTMLDivElement | null>): RefObject<IOrbitInput> {
+    const orbitInputRef = useRef<IOrbitInput>({
+        angleOffset: 0,
+        velocity: 0,
+        isDragging: false,
+        lastPointerX: 0,
+        lastPointerTime: 0,
+    });
 
     useEffect(() => {
         const container = containerRef.current;
@@ -164,76 +246,10 @@ const Landing = () => {
             container.removeEventListener("pointerup", handlePointerUp);
             container.removeEventListener("pointercancel", handlePointerUp);
         };
-    }, []);
+    }, [containerRef]);
 
-    const isInteractionLocked = pendingRealm !== null || isLoadingFeatured;
-
-    return (
-        <div className="landing-container" ref={containerRef}>
-            <RenderCanvas
-                environment={LANDING_MANIFEST.environment}
-                camera={{
-                    fov: LANDING_CAMERA.fov,
-                    near: LANDING_CAMERA.near,
-                    far: LANDING_CAMERA.far,
-                }}
-            >
-                <LandingStars />
-                <LandingMountains />
-                <LandingClouds />
-                <LandingIsland environment={LANDING_MANIFEST.environment} />
-                <LandingEmbers />
-                <LandingFireflies />
-                <LandingCameraRig
-                    orbitInputRef={orbitInputRef}
-                    bearingLabelRef={bearingLabelRef}
-                    compassRingRef={compassRingRef}
-                    isDiving={pendingRealm !== null}
-                    onDiveComplete={handleDiveComplete}
-                />
-            </RenderCanvas>
-
-            <div className="landing-overlay">
-                <LandingHero
-                    validationError={validationError}
-                    isInteractionLocked={isInteractionLocked}
-                    isLoadingFeatured={isLoadingFeatured}
-                    onRepoSubmit={handleRepoSubmit}
-                    onQuickPlay={handleQuickPlay}
-                />
-
-                <LandingHud bearingLabelRef={bearingLabelRef} compassRingRef={compassRingRef} />
-            </div>
-
-            {pendingRealm && (
-                <div className="landing-status">
-                    <InlineLoader variant="matrix" size={32} color="#fff" />
-                    <p>
-                        opening realm/{pendingRealm.owner}/{pendingRealm.name}
-                    </p>
-                </div>
-            )}
-
-            <button
-                type="button"
-                className="btn-quiet landing-settings-trigger"
-                onClick={() => setIsSettingsOpen(true)}
-            >
-                Settings
-            </button>
-
-            {isSettingsOpen && (
-                <PauseMenu
-                    title={LANDING_TEXT.settingsTitle}
-                    dismissLabel={LANDING_TEXT.closeSettings}
-                    onResume={() => setIsSettingsOpen(false)}
-                />
-            )}
-        </div>
-    );
-};
-
-export default Landing;
+    return orbitInputRef;
+}
 
 function parseRepoInput(rawInput: string): IRepoReference | null {
     const trimmed = rawInput.trim().replace(/\/+$/, "");

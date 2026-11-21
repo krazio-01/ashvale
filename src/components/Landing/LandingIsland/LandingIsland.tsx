@@ -10,8 +10,9 @@ import {
     Group,
     LoopOnce,
     LoopRepeat,
+    Vector3,
 } from "three";
-import type { AnimationAction } from "three";
+import type { AnimationAction, Vector3Tuple } from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import {
@@ -30,6 +31,7 @@ import {
     FULL_TURN,
     pickRandom,
     randomPointInDisc,
+    stitchRings,
     valueInRange,
 } from "@/lib/helpers";
 import { LANDING_ISLAND, LANDING_CHARACTER, LANDING_PROPS } from "@/constants/ui";
@@ -38,6 +40,8 @@ import { PLAYER } from "@/constants/player";
 import type { IModelTemplate, ISkinnedModel } from "@/types/world";
 import type { IThemeEnvironment } from "@/types/themes";
 import type { IVector3 } from "@/types/physics";
+
+const HOVERED_CLASS = "landing-character-hovered";
 
 interface IPropSlot {
     modelPath: string;
@@ -52,15 +56,21 @@ interface IIslandScene {
     characterPosition: [number, number, number];
 }
 
-interface ILandingRing {
-    points: readonly IVector3[];
-    color?: Color;
+interface ILandingModels {
+    propTemplates: Map<string, IModelTemplate> | null;
+    character: ISkinnedModel | null;
 }
 
 const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
     const renderer = useThree((state) => state.gl);
+    const scene = useThree((state) => state.scene);
     const islandScene = useMemo(() => buildIslandScene(environment), [environment]);
-    const [materialLibrary] = useState(() => new MaterialLibrary());
+    const materialLibrary = useMemo(() => new MaterialLibrary(), []);
+    const [{ propTemplates, character }, setModels] = useState<ILandingModels>({
+        propTemplates: null,
+        character: null,
+    });
+
     useEffect(
         () =>
             materialLibrary.applyEnvironment(
@@ -69,26 +79,23 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
             ),
         [materialLibrary, environment]
     );
-    const [propTemplates, setPropTemplates] = useState<Map<string, IModelTemplate> | null>(null);
-    const [characterModel, setCharacterModel] = useState<ISkinnedModel | null>(null);
+    useEffect(() => materialLibrary.followRenderCamera(scene), [materialLibrary, scene]);
 
     useEffect(() => {
         const loader = createGltfLoader(renderer);
         let isCancelled = false;
-        let loadedTemplates: Map<string, IModelTemplate> | null = null;
+        const templates = new Map<string, IModelTemplate>();
         let loadedModel: ISkinnedModel | null = null;
 
         const loadProps = async () => {
-            const uniquePaths = [...new Set(LANDING_PROPS.modelPaths)];
-            const loaded = await Promise.all(
-                uniquePaths.map(async (modelPath) => {
+            await Promise.all(
+                [...new Set(LANDING_PROPS.modelPaths)].map(async (modelPath) => {
                     const gltf = await loader.loadAsync(modelPath);
-                    return [modelPath, flattenForInstancing(gltf.scene, materialLibrary)] as const;
+                    if (!isCancelled)
+                        templates.set(modelPath, flattenForInstancing(gltf.scene, materialLibrary));
                 })
             );
-            loadedTemplates = new Map(loaded);
-            if (isCancelled) loadedTemplates.forEach(disposeModelTemplate);
-            else setPropTemplates(loadedTemplates);
+            if (!isCancelled) setModels((current) => ({ ...current, propTemplates: templates }));
         };
 
         const loadCharacter = async () => {
@@ -96,9 +103,9 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
                 loader.loadAsync(PLAYER_ASSETS.modelPath),
                 Promise.all(PLAYER_ASSETS.clipLibraryPaths.map((path) => loader.loadAsync(path))),
             ]);
+            if (isCancelled) return;
             loadedModel = prepareSkinnedModel(gltf, clipLibraries, materialLibrary);
-            if (isCancelled) disposeSkinnedModel(loadedModel);
-            else setCharacterModel(loadedModel);
+            setModels((current) => ({ ...current, character: loadedModel }));
         };
 
         void loadProps();
@@ -106,7 +113,7 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
 
         return () => {
             isCancelled = true;
-            loadedTemplates?.forEach(disposeModelTemplate);
+            templates.forEach(disposeModelTemplate);
             if (loadedModel) disposeSkinnedModel(loadedModel);
         };
     }, [materialLibrary, renderer]);
@@ -125,21 +132,17 @@ const LandingIsland = ({ environment }: { environment: IThemeEnvironment }) => {
 
             {propTemplates && (
                 <group>
-                    {islandScene.propSlots.map((slot, index) => (
-                        <PropInstance
-                            key={index}
-                            slot={slot}
-                            template={propTemplates.get(slot.modelPath)!}
-                        />
-                    ))}
+                    {islandScene.propSlots.map((slot, index) => {
+                        const template = propTemplates.get(slot.modelPath);
+                        return (
+                            template && <PropInstance key={index} slot={slot} template={template} />
+                        );
+                    })}
                 </group>
             )}
 
-            {characterModel && (
-                <LandingCharacterMesh
-                    model={characterModel}
-                    position={islandScene.characterPosition}
-                />
+            {character && (
+                <LandingCharacterMesh model={character} position={islandScene.characterPosition} />
             )}
         </group>
     );
@@ -169,13 +172,20 @@ const LandingCharacterMesh = ({
     const bounceGroupRef = useRef<Group>(null);
     const mixerRef = useRef<AnimationMixer | null>(null);
     const idleActionRef = useRef<AnimationAction | null>(null);
-    const [isHovered, setIsHovered] = useState(false);
+    const isHovered = useRef(false);
     const isReactingRef = useRef(false);
     const scale = model.height > 0 ? PLAYER.height / model.height : 1;
-    const groundOffset = useMemo(
-        () => -new Box3().setFromObject(model.scene).min.y * scale,
-        [model, scale]
-    );
+    const { groundOffset, hitSize, hitCenter } = useMemo(() => {
+        const bounds = new Box3().setFromObject(model.scene);
+        const offset = -bounds.min.y * scale;
+        const center = bounds.getCenter(new Vector3()).multiplyScalar(scale);
+        const size = bounds.getSize(new Vector3()).multiplyScalar(scale);
+        return {
+            groundOffset: offset,
+            hitSize: [size.x, size.y, size.z] satisfies Vector3Tuple,
+            hitCenter: [center.x, center.y + offset, center.z] satisfies Vector3Tuple,
+        };
+    }, [model, scale]);
 
     useEffect(() => {
         const mixer = new AnimationMixer(model.scene);
@@ -197,10 +207,7 @@ const LandingCharacterMesh = ({
         };
     }, [model]);
 
-    useEffect(() => {
-        document.documentElement.classList.toggle("landing-character-hovered", isHovered);
-        return () => document.documentElement.classList.remove("landing-character-hovered");
-    }, [isHovered]);
+    useEffect(() => () => document.documentElement.classList.remove(HOVERED_CLASS), []);
 
     const handleClick = (event: ThreeEvent<MouseEvent>) => {
         event.stopPropagation();
@@ -227,12 +234,17 @@ const LandingCharacterMesh = ({
         mixer.addEventListener("finished", handleFinished);
     };
 
-    const handlePointerOver = (event: ThreeEvent<PointerEvent>) => {
-        event.stopPropagation();
-        setIsHovered(true);
+    const showHover = (hovered: boolean) => {
+        isHovered.current = hovered;
+        document.documentElement.classList.toggle(HOVERED_CLASS, hovered);
     };
 
-    const handlePointerOut = () => setIsHovered(false);
+    const handlePointerOver = (event: ThreeEvent<PointerEvent>) => {
+        event.stopPropagation();
+        showHover(true);
+    };
+
+    const handlePointerOut = () => showHover(false);
 
     useFrame((_, deltaSeconds) => {
         mixerRef.current?.update(deltaSeconds);
@@ -240,7 +252,8 @@ const LandingCharacterMesh = ({
         const bounceGroup = bounceGroupRef.current;
         if (!bounceGroup) return;
 
-        const bounce = isHovered
+        if (!isHovered.current && bounceGroup.scale.x === 1) return;
+        const bounce = isHovered.current
             ? 1 +
               Math.sin(performance.now() * 0.001 * LANDING_CHARACTER.hoverBounceSpeed) *
                   LANDING_CHARACTER.hoverBounceAmplitude
@@ -250,13 +263,17 @@ const LandingCharacterMesh = ({
 
     return (
         <group position={position}>
-            <group
-                ref={bounceGroupRef}
-                onClick={handleClick}
-                onPointerOver={handlePointerOver}
-                onPointerOut={handlePointerOut}
-            >
+            <group ref={bounceGroupRef}>
                 <primitive object={model.scene} scale={scale} position={[0, groundOffset, 0]} />
+                <mesh
+                    visible={false}
+                    position={hitCenter}
+                    onClick={handleClick}
+                    onPointerOver={handlePointerOver}
+                    onPointerOut={handlePointerOut}
+                >
+                    <boxGeometry args={hitSize} />
+                </mesh>
             </group>
         </group>
     );
@@ -308,10 +325,14 @@ function buildIslandGeometry(
 
         const points = Array.from({ length: LANDING_ISLAND.radialSegments }, (_, segment) => {
             const angle = (segment / LANDING_ISLAND.radialSegments) * FULL_TURN;
+            const cosAngle = Math.cos(angle);
+            const sinAngle = Math.sin(angle);
             const radius =
-                ringIndex === 0 ? baseRadius : jitteredRadius(baseRadius, angle, ringIndex, noise);
-            const x = Math.cos(angle) * radius;
-            const z = Math.sin(angle) * radius;
+                ringIndex === 0
+                    ? baseRadius
+                    : jitteredRadius(baseRadius, cosAngle, sinAngle, ringIndex, noise);
+            const x = cosAngle * radius;
+            const z = sinAngle * radius;
             const vertexY = ringIndex === 0 ? topSurfaceHeightAt(x, z) : y;
 
             return { x, y: vertexY, z };
@@ -378,39 +399,15 @@ function buildIslandGeometry(
     return geometry;
 }
 
-export function stitchRings(
-    rings: readonly ILandingRing[],
-    positions: number[],
-    colors: number[]
-): void {
-    const pushCorner = (ring: ILandingRing, segment: number): void => {
-        const point = ring.points[segment % ring.points.length]!;
-        positions.push(point.x, point.y, point.z);
-        if (ring.color) colors.push(ring.color.r, ring.color.g, ring.color.b);
-    };
-
-    for (let ringIndex = 0; ringIndex < rings.length - 1; ringIndex += 1) {
-        const upper = rings[ringIndex]!;
-        const lower = rings[ringIndex + 1]!;
-        for (let segment = 0; segment < upper.points.length; segment += 1) {
-            pushCorner(upper, segment);
-            pushCorner(lower, segment + 1);
-            pushCorner(lower, segment);
-            pushCorner(upper, segment);
-            pushCorner(upper, segment + 1);
-            pushCorner(lower, segment + 1);
-        }
-    }
-}
-
 function jitteredRadius(
     baseRadius: number,
-    angle: number,
+    cosAngle: number,
+    sinAngle: number,
     ringIndex: number,
     noise: FractalNoise
 ): number {
-    const noiseX = Math.cos(angle) * LANDING_ISLAND.edgeNoiseScale + ringIndex * 11.7;
-    const noiseZ = Math.sin(angle) * LANDING_ISLAND.edgeNoiseScale + ringIndex * 5.3;
+    const noiseX = cosAngle * LANDING_ISLAND.edgeNoiseScale + ringIndex * 11.7;
+    const noiseZ = sinAngle * LANDING_ISLAND.edgeNoiseScale + ringIndex * 5.3;
     const noiseValue = noise.sample(noiseX, noiseZ, 2, 0.5);
     const jitterStrength =
         LANDING_ISLAND.edgeJitterRatio + ringIndex * LANDING_ISLAND.craggingGrowthPerRing;

@@ -119,6 +119,10 @@ html.landing-character-hovered .landing-container {
         &:focus {
             outline: none;
         }
+
+        &:placeholder-shown + .landing-repo-kbd {
+            display: none;
+        }
     }
 }
 
