@@ -53,7 +53,8 @@ export interface IRunnableWallProbe {
     entryGraceSeconds: number;
     seekReach: number;
     minimumAlongSpeed: number;
-    turns: readonly number[];
+    turnCosines: readonly number[];
+    turnSines: readonly number[];
 }
 
 export interface ILedgeReach {
@@ -139,6 +140,8 @@ export interface IPhysicsBinding {
         across: Vector3
     ): void;
     writeAnimatedNode(bodyIndex: number, nodeIndex: number): void;
+    pinNodesToAttachments(): void;
+    moveNodesWithAttachments(isPoseCurrent: boolean): void;
 }
 
 export interface IMotorSpec {

@@ -1,6 +1,7 @@
 import { Vector3 } from "three";
-import { keysOf } from "@/lib/helpers";
 import type { ICombatant, Team } from "@/types/combat";
+
+const OPPOSING_TEAM: Record<Team, Team> = { player: "enemy", enemy: "player" };
 
 export class CombatRegistry {
     static collectLivingWithin(
@@ -27,8 +28,6 @@ export class CombatRegistry {
     frameIndex = 0;
     private readonly combatants: ICombatant[] = [];
     private readonly teammates: Record<Team, ICombatant[]> = { player: [], enemy: [] };
-    private readonly opponents: Record<Team, ICombatant[]> = { player: [], enemy: [] };
-    private readonly teams = keysOf(this.teammates);
 
     beginFrame(centre: Vector3): void {
         this.detailCentre.copy(centre);
@@ -39,20 +38,31 @@ export class CombatRegistry {
         if (this.combatants.includes(combatant)) return;
 
         this.combatants.push(combatant);
-        this.rebuildTeamLists();
+        this.teammates[combatant.team].push(combatant);
     }
 
     unregister(combatant: ICombatant): void {
         const index = this.combatants.indexOf(combatant);
         if (index < 0) return;
 
-        const last = this.combatants.pop();
-        if (last && index < this.combatants.length) this.combatants[index] = last;
+        const lastIndex = this.combatants.length - 1;
+        if (index === lastIndex) {
+            this.combatants.pop();
+            this.teammates[combatant.team].pop();
+            return;
+        }
+        this.combatants[index] = this.combatants[lastIndex];
+        this.combatants.pop();
         this.rebuildTeamLists();
     }
 
     collectOpponents(team: Team, center: Vector3, radius: number, out: ICombatant[]): ICombatant[] {
-        return CombatRegistry.collectLivingWithin(this.opponents[team], center, radius, out);
+        return CombatRegistry.collectLivingWithin(
+            this.teammates[OPPOSING_TEAM[team]],
+            center,
+            radius,
+            out
+        );
     }
 
     collectTeammates(team: Team, center: Vector3, radius: number, out: ICombatant[]): ICombatant[] {
@@ -60,20 +70,7 @@ export class CombatRegistry {
     }
 
     private rebuildTeamLists(): void {
-        const combatants = this.combatants;
-        for (let teamIndex = 0; teamIndex < this.teams.length; teamIndex += 1) {
-            const team = this.teams[teamIndex];
-            const teammates = this.teammates[team];
-            const opponents = this.opponents[team];
-            let teammateCount = 0;
-            let opponentCount = 0;
-            for (let index = 0; index < combatants.length; index += 1) {
-                const combatant = combatants[index];
-                if (combatant.team === team) teammates[teammateCount++] = combatant;
-                else opponents[opponentCount++] = combatant;
-            }
-            teammates.length = teammateCount;
-            opponents.length = opponentCount;
-        }
+        for (const teammates of Object.values(this.teammates)) teammates.length = 0;
+        for (const combatant of this.combatants) this.teammates[combatant.team].push(combatant);
     }
 }

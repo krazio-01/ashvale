@@ -8,8 +8,8 @@ import type {
 
 const EIGHTH_TURN = Math.PI / 4;
 
-const PLAYER_RELAXED_FIDGETS = [CLIP.idleFidgetSwordInspect, CLIP.idleFidgetSwordRoll];
-const UNARMED_RELAXED_FIDGETS = [CLIP.idleFidgetScratchArm, CLIP.idleFidgetLookAround];
+const ARMED_IDLE_FIDGETS = [CLIP.idleFidgetSwordInspect, CLIP.idleFidgetSwordRoll];
+const UNARMED_IDLE_FIDGETS = [CLIP.idleFidgetScratchArm, CLIP.idleFidgetLookAround];
 
 const PLAYER_GAITS = [
     { clip: CLIP.walk, speed: PLAYER.walkSpeed },
@@ -28,13 +28,13 @@ const STRAFE_DIRECTIONS: readonly IDirectionalClip[] = [
 ];
 
 export const PLAYER_FREE_LOCOMOTION = freeLocomotion(CLIP.idle, PLAYER_GAITS, {
-    clips: PLAYER_RELAXED_FIDGETS,
+    clips: ARMED_IDLE_FIDGETS,
     afterSeconds: IDLE_VARIATION.relaxedDelaySeconds,
     weaponGazeClips: [CLIP.idleFidgetSwordInspect],
 });
 
 export const PLAYER_SHEATHED_FREE_LOCOMOTION = freeLocomotion(CLIP.idle, PLAYER_GAITS, {
-    clips: UNARMED_RELAXED_FIDGETS,
+    clips: UNARMED_IDLE_FIDGETS,
     afterSeconds: IDLE_VARIATION.relaxedDelaySeconds,
 });
 
@@ -49,7 +49,7 @@ export function enemyRelaxedLocomotion(height: number, idleDelaySeconds: number)
         CLIP.idle,
         [{ clip: CLIP.walk, speed: height * GAIT_SPEED_PER_HEIGHT.walk }],
         {
-            clips: UNARMED_RELAXED_FIDGETS,
+            clips: UNARMED_IDLE_FIDGETS,
             afterSeconds: idleDelaySeconds,
         }
     );

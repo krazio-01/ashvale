@@ -135,7 +135,7 @@ export abstract class Weapon<Spec extends IWeaponSpec = IWeaponSpec> {
 
         const bounds = new Box3().setFromObject(this.model);
         this.axes = measureBladeAxes(bounds);
-        const { size, lengthAxis } = this.axes;
+        const { size, lengthAxis, thicknessAxis } = this.axes;
         const tipAtMaximum = this.axes.tipDirectionSign > 0;
         this.tipCoordinate = tipAtMaximum ? bounds.max[lengthAxis] : bounds.min[lengthAxis];
         this.pommelCoordinate = tipAtMaximum ? bounds.min[lengthAxis] : bounds.max[lengthAxis];
@@ -146,8 +146,8 @@ export abstract class Weapon<Spec extends IWeaponSpec = IWeaponSpec> {
             this.poses.carry = this.buildCarryPose(spec.carry, carryRig.bone);
             this.halfThickness = Weapon.measureBladeHalfThickness(
                 this.model,
-                this.axes.lengthAxis,
-                this.axes.thicknessAxis,
+                lengthAxis,
+                thicknessAxis,
                 this.coordinateAt(spec.guardFraction),
                 this.tipCoordinate
             );
