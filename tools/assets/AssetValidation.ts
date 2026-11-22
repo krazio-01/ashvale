@@ -39,6 +39,7 @@ export const VALIDATION_LIMITS = {
     wallRunCreaseDegrees: 30,
     wallRunAreaQuantile: 0.9,
     supportGapMetres: 0.1,
+    spanClearanceToleranceMetres: 0.001,
 };
 
 interface IGarmentMeasurements {

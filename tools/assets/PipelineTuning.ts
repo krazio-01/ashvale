@@ -1,8 +1,31 @@
 import type { CharacterRole } from "./AssetManifest";
 
-export const REFERENCE_HEIGHT_METRES = 1.78;
+const SHARED_TUNING = {
+    unwrap: { padding: 6, iterations: 2 },
+    material: { roughness: 0.85, normalScale: 0.3 },
+    bake: {
+        samples: 8,
+        cageExtrusion: 0.02,
+        rayDistance: 0.05,
+        marginPixels: 12,
+        roughness: 0.8,
+        minNormalLength: 0.5,
+        normalDonorCount: 8,
+    },
+} as const;
 
-const BASE_TUNING = {
+const KIT_TUNING = {
+    kit: {
+        highBevelSegments: 3,
+        bevelAngleDegrees: 30,
+        tileSplitAngleDegrees: 40,
+        noiseSamplesPerFeature: 4,
+        boxProjectionBlend: 0.25,
+        macroVariationTiles: 4,
+    },
+} as const;
+
+const SKINNING_TUNING = {
     prepare: {
         torsoBand: [0.95, 1.25],
         torsoHalfWidth: 0.14,
@@ -24,17 +47,6 @@ const BASE_TUNING = {
         thicknessRayStart: 0.002,
         thicknessLimit: 0.12,
         clothSeedReach: 0.03,
-    },
-    unwrap: { padding: 6, iterations: 2 },
-    material: { roughness: 0.85, normalScale: 0.3 },
-    bake: {
-        samples: 8,
-        cageExtrusion: 0.02,
-        rayDistance: 0.05,
-        marginPixels: 12,
-        roughness: 0.8,
-        minNormalLength: 0.5,
-        normalDonorCount: 8,
     },
     joints: {
         skinMinSaturation: 0.42,
@@ -154,7 +166,15 @@ const BASE_TUNING = {
     },
 } as const;
 
-const ROLE_TUNING: Record<CharacterRole, DeepPartial<IPipelineTuning>> = {
+const { prepare: SKINNING_PREPARE_TUNING, ...SKINNING_STAGE_TUNING } = SKINNING_TUNING;
+
+const PIPELINE_TUNING = {
+    prepare: SKINNING_PREPARE_TUNING,
+    ...SHARED_TUNING,
+    ...SKINNING_STAGE_TUNING,
+};
+
+export const ROLE_TUNING: Record<CharacterRole, DeepPartial<IPipelineTuning>> = {
     player: {},
     enemy: {},
     boss: {},
@@ -183,9 +203,10 @@ const UNIT_RANGE_TUNING_PATHS = [
     "joints.handEndShare",
     "joints.knuckleAlongHand",
     "physics.colliderShrink",
+    "kit.boxProjectionBlend",
 ] as const;
 
-const SECTOR_PERCENTILE_PATHS = Object.keys(BASE_TUNING.physics.colliderSectorPercentile).map(
+const SECTOR_PERCENTILE_PATHS = Object.keys(SKINNING_TUNING.physics.colliderSectorPercentile).map(
     (group) => `physics.colliderSectorPercentile.${group}`
 );
 
@@ -198,6 +219,8 @@ const TUNING_RULES: readonly ITuningRule[] = [
             "prepare.garmentMinIsland",
             "unwrap.padding",
             "unwrap.iterations",
+            "kit.highBevelSegments",
+            "kit.noiseSamplesPerFeature",
             "weights.smoothingIterations",
             "weights.maxInfluences",
             "detection.minClothFaces",
@@ -231,6 +254,11 @@ const TUNING_RULES: readonly ITuningRule[] = [
             "physics.uncoveredBlend",
             ...SECTOR_PERCENTILE_PATHS,
             "weights.drivenBlend",
+            "kit.highBevelSegments",
+            "kit.bevelAngleDegrees",
+            "kit.tileSplitAngleDegrees",
+            "kit.noiseSamplesPerFeature",
+            "kit.macroVariationTiles",
         ],
         isValid: (value) => value > 0,
         requirement: () => "must be above 0",
@@ -266,12 +294,50 @@ type Widened<T> = T extends number
       ? { readonly [Key in keyof T]: Widened<T[Key]> }
       : { [Key in keyof T]: Widened<T[Key]> };
 
-export type IPipelineTuning = Widened<typeof BASE_TUNING>;
+export type ISharedTuning = Widened<typeof SHARED_TUNING>;
+
+export type IPipelineTuning = ISharedTuning & Widened<typeof SKINNING_TUNING>;
+
+export type IKitTuning = ISharedTuning & Widened<typeof KIT_TUNING>;
 
 interface ITuningRule {
     paths: readonly string[];
     isValid: (value: number) => boolean;
     requirement: (value: number) => string;
+}
+
+export class TuningLayer<TTuning extends object> {
+    private readonly defaults: TTuning;
+    private readonly rules: readonly (Omit<ITuningRule, "paths"> & { path: string })[];
+
+    constructor(defaults: TTuning) {
+        this.defaults = defaults;
+        const sections = Object.keys(defaults);
+        this.rules = TUNING_RULES.flatMap(({ paths, isValid, requirement }) =>
+            paths
+                .filter((rulePath) => sections.includes(rulePath.split(".")[0]))
+                .map((path) => ({ path, isValid, requirement }))
+        );
+    }
+
+    resolve(...overrides: readonly (DeepPartial<TTuning> | undefined)[]): TTuning {
+        return overrides.reduce<TTuning>(
+            (merged, layer) => mergeDeep(merged, layer),
+            this.defaults
+        );
+    }
+
+    assert(name: string, tuning: TTuning): void {
+        const numbers = new Map(numbersIn(tuning, ""));
+        for (const [path, value] of numbers)
+            if (!Number.isFinite(value))
+                throw new Error(`${name}: tuning ${path} is not a finite number`);
+        for (const { path, isValid, requirement } of this.rules) {
+            const value = numbers.get(path);
+            if (value === undefined) throw new Error(`${name}: tuning ${path} is missing`);
+            if (!isValid(value)) throw new Error(`${name}: tuning ${path} ${requirement(value)}`);
+        }
+    }
 }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -301,24 +367,8 @@ const numbersIn = (value: unknown, path: string): [string, number][] => {
     return [];
 };
 
-export const resolveTuning = (
-    role: CharacterRole,
-    overrides: DeepPartial<IPipelineTuning> | undefined
-): IPipelineTuning =>
-    mergeDeep(mergeDeep<IPipelineTuning>(BASE_TUNING, ROLE_TUNING[role]), overrides);
+export const SHARED_TUNING_LAYER = new TuningLayer<ISharedTuning>(SHARED_TUNING);
 
-const valueAt = (tuning: IPipelineTuning, path: string): number =>
-    path
-        .split(".")
-        .reduce<unknown>((node, key) => (node as Record<string, unknown>)[key], tuning) as number;
+export const KIT_TUNING_LAYER = new TuningLayer<IKitTuning>({ ...SHARED_TUNING, ...KIT_TUNING });
 
-export const assertTuning = (name: string, tuning: IPipelineTuning): void => {
-    for (const [path, value] of numbersIn(tuning, ""))
-        if (!Number.isFinite(value))
-            throw new Error(`${name}: tuning ${path} is not a finite number`);
-    for (const { paths, isValid, requirement } of TUNING_RULES)
-        for (const path of paths) {
-            const value = valueAt(tuning, path);
-            if (!isValid(value)) throw new Error(`${name}: tuning ${path} ${requirement(value)}`);
-        }
-};
+export const CHARACTER_TUNING_LAYER = new TuningLayer<IPipelineTuning>(PIPELINE_TUNING);
