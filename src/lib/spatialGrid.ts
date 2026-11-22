@@ -33,12 +33,15 @@ export class UniformGrid {
     }
 
     someCell(box: Readonly<ICellBox>, visit: (cell: number) => boolean | void): boolean {
+        const firstColumn = this.columnOf(box.minX);
         const lastColumn = this.columnOf(box.maxX);
         const lastRow = this.rowOf(box.maxZ);
 
-        for (let row = this.rowOf(box.minZ); row <= lastRow; row += 1)
-            for (let column = this.columnOf(box.minX); column <= lastColumn; column += 1)
-                if (visit(row * this.columns + column) === true) return true;
+        for (let row = this.rowOf(box.minZ); row <= lastRow; row += 1) {
+            const rowStart = row * this.columns;
+            for (let column = firstColumn; column <= lastColumn; column += 1)
+                if (visit(rowStart + column) === true) return true;
+        }
         return false;
     }
 
@@ -87,7 +90,7 @@ export class CellIndex {
             cellStarts[cell + 1] += cellStarts[cell];
 
         const cellItems = new Int32Array(cellStarts[cellStarts.length - 1]);
-        const fillCursor = Int32Array.from(cellStarts.subarray(0, cellStarts.length - 1));
+        const fillCursor = cellStarts.slice(0, -1);
 
         let placedItem = 0;
         const placeItem = (cell: number) => {

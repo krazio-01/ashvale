@@ -32,11 +32,20 @@ export class BoneMath {
     };
 
     static findBones(model: Object3D, names: readonly string[]): Object3D[] {
-        return names.flatMap((name) => model.getObjectByName(name) ?? []);
+        const bones: Object3D[] = [];
+        for (const name of names) {
+            const bone = model.getObjectByName(name);
+            if (bone) bones.push(bone);
+        }
+        return bones;
     }
 
     private static findLimb(model: Object3D, names: LimbNames): ILimb | null {
-        const [upper, lower, end] = BoneMath.findBones(model, names);
+        const upper = model.getObjectByName(names[0]);
+        if (!upper) return null;
+        const lower = model.getObjectByName(names[1]);
+        if (!lower) return null;
+        const end = model.getObjectByName(names[2]);
         return end ? { upper, lower, end, bend: new Vector3() } : null;
     }
 
@@ -45,8 +54,9 @@ export class BoneMath {
         names: Record<Handedness, LimbNames>
     ): Record<Handedness, ILimb> | null {
         const left = BoneMath.findLimb(model, names.left);
+        if (!left) return null;
         const right = BoneMath.findLimb(model, names.right);
-        return left && right ? { left, right } : null;
+        return right ? { left, right } : null;
     }
 
     static hierarchyDepth(bone: Object3D): number {
@@ -106,12 +116,13 @@ export class BoneMath {
         const upperLength = joint.distanceTo(root);
         const lowerLength = tip.distanceTo(joint);
         reach.subVectors(goal, root);
+        const reachLength = reach.length();
         const distance = clamp(
-            reach.length(),
+            reachLength,
             PROCEDURAL_EPSILON.reach,
             (upperLength + lowerLength) * PROCEDURAL_ANIMATION.ik.reachLimit
         );
-        reach.normalize();
+        reach.divideScalar(reachLength || 1);
 
         from.subVectors(joint, root);
         bendAxis.subVectors(tip, root).cross(from);

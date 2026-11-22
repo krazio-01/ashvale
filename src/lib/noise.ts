@@ -21,13 +21,17 @@ interface ITileableNoise {
 
 export class FractalNoise {
     private readonly randomTable: Uint8Array;
+    private readonly levels: Float64Array;
 
     constructor(seed: number) {
         const nextRandom = createSeededRandom(seed);
         this.randomTable = new Uint8Array(RANDOM_TABLE_SIZE);
+        this.levels = new Float64Array(RANDOM_TABLE_SIZE);
 
-        for (let index = 0; index < RANDOM_TABLE_SIZE; index += 1)
+        for (let index = 0; index < RANDOM_TABLE_SIZE; index += 1) {
             this.randomTable[index] = Math.floor(nextRandom() * RANDOM_TABLE_SIZE);
+            this.levels[index] = this.randomTable[index] / 255;
+        }
     }
 
     sample(x: number, z: number, octaves: number, gain: number): number {
@@ -82,23 +86,26 @@ export class FractalNoise {
         const smoothX = fractionX * fractionX * (3 - 2 * fractionX);
         const smoothZ = fractionZ * fractionZ * (3 - 2 * fractionZ);
 
-        const nearX = MathUtils.euclideanModulo(cellX, period);
-        const nearZ = MathUtils.euclideanModulo(cellZ, period);
-        const farX = nearX + 1 === period ? 0 : nearX + 1;
-        const farZ = nearZ + 1 === period ? 0 : nearZ + 1;
+        const wrap = period - 1;
+        const isPowerOfTwo = (period & wrap) === 0;
+        const nearX = isPowerOfTwo ? cellX & wrap : MathUtils.euclideanModulo(cellX, period);
+        const nearZ = isPowerOfTwo ? cellZ & wrap : MathUtils.euclideanModulo(cellZ, period);
+        const farX = nearX === wrap ? 0 : nearX + 1;
+        const farZ = nearZ === wrap ? 0 : nearZ + 1;
         const table = this.randomTable;
+        const levels = this.levels;
         const nearHash = table[nearX & RANDOM_TABLE_MASK];
         const farHash = table[farX & RANDOM_TABLE_MASK];
 
         return lerp(
             lerp(
-                table[(nearHash + nearZ) & RANDOM_TABLE_MASK] / 255,
-                table[(farHash + nearZ) & RANDOM_TABLE_MASK] / 255,
+                levels[(nearHash + nearZ) & RANDOM_TABLE_MASK],
+                levels[(farHash + nearZ) & RANDOM_TABLE_MASK],
                 smoothX
             ),
             lerp(
-                table[(nearHash + farZ) & RANDOM_TABLE_MASK] / 255,
-                table[(farHash + farZ) & RANDOM_TABLE_MASK] / 255,
+                levels[(nearHash + farZ) & RANDOM_TABLE_MASK],
+                levels[(farHash + farZ) & RANDOM_TABLE_MASK],
                 smoothX
             ),
             smoothZ
@@ -121,34 +128,34 @@ export function buildTileableNoiseTexture(
     const channel = new Float32Array(size * size);
     pixels.data.fill(255);
 
-    tileCounts.forEach((tileCount, channelIndex) => {
+    for (let channelIndex = 0; channelIndex < tileCounts.length; channelIndex += 1) {
         const noise = new FractalNoise(seed + channelIndex);
+        const tileCount = tileCounts[channelIndex];
         let smallest = Infinity;
         let largest = -Infinity;
+        let texel = 0;
 
-        for (let texel = 0; texel < channel.length; texel += 1) {
-            const value = noise.sampleTileable(
-                (texel % size) / size,
-                Math.floor(texel / size) / size,
-                tileCount,
-                octaves,
-                gain
-            );
+        for (let row = 0; row < size; row += 1) {
+            const unitZ = row / size;
+            for (let column = 0; column < size; column += 1) {
+                const value = noise.sampleTileable(column / size, unitZ, tileCount, octaves, gain);
+                channel[texel] = value;
+                texel += 1;
 
-            channel[texel] = value;
-
-            if (value < smallest) smallest = value;
-            if (value > largest) largest = value;
+                if (value < smallest) smallest = value;
+                if (value > largest) largest = value;
+            }
         }
 
         const span = largest - smallest;
+        const hasRange = span > 1e-6;
+        const data = pixels.data;
 
-        for (let texel = 0; texel < channel.length; texel += 1) {
-            const stretched = span > 1e-6 ? (channel[texel] - smallest) / span : 0.5;
-
-            pixels.data[texel * 4 + channelIndex] = Math.round(255 * clamp(stretched, 0, 1));
+        for (texel = 0; texel < channel.length; texel += 1) {
+            const stretched = hasRange ? (channel[texel] - smallest) / span : 0.5;
+            data[texel * 4 + channelIndex] = Math.round(255 * clamp(stretched, 0, 1));
         }
-    });
+    }
 
     drawing.putImageData(pixels, 0, 0);
 
