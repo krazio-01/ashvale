@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { FrameCallbacksContext } from "@/context/FrameCallbacksContext";
 import { store } from "@/store/store";
@@ -7,7 +7,7 @@ import type { AnimationFrameCallback } from "@/types/store";
 import { RENDER } from "@/constants/world";
 
 export const AnimationFrameLoop = ({ children }: { children: ReactNode }) => {
-    const [callbacks] = useState<AnimationFrameCallback[]>(() => []);
+    const callbacks = useMemo<AnimationFrameCallback[]>(() => [], []);
 
     useEffect(() => {
         let previousTimestamp: number | null = null;

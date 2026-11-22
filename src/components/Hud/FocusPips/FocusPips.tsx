@@ -3,8 +3,8 @@ import { useRef } from "react";
 import { useAnimationFrame } from "@/hooks/useAnimationFrame";
 import { PLAYER_VITALS } from "@/constants/player";
 import { roundForCss, hudWriter } from "@/lib/hud";
-import "./focusPips.scss";
 import { clamp } from "@/lib/helpers";
+import "./focusPips.scss";
 
 export const FocusPips = () => {
     const fillRefs = useRef<(HTMLSpanElement | null)[]>([]);
