@@ -111,10 +111,10 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 932,
+      "count": 931,
       "max": [
         3.63370943069458,
-        3.789438009262085,
+        4.456572532653809,
         0.21318714320659637
       ],
       "min": [
@@ -128,14 +128,14 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 932,
+      "count": 931,
       "bufferView": 3,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
-      "count": 932,
+      "count": 931,
       "bufferView": 3,
       "byteOffset": 24
     },
@@ -257,27 +257,27 @@
     {
       "buffer": 0,
       "byteOffset": 51088,
-      "byteLength": 29824,
+      "byteLength": 29792,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 80912,
+      "byteOffset": 80880,
       "byteLength": 18528,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 99440,
+      "byteOffset": 99408,
       "byteLength": 1536,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 100976,
+      "byteOffset": 100944,
       "byteLength": 160448,
       "byteStride": 32,
       "target": 34962
@@ -316,7 +316,7 @@
   "buffers": [
     {
       "uri": "SettlementTeaHouse.bin",
-      "byteLength": 261424
+      "byteLength": 261392
     }
   ],
   "materials": [
@@ -461,7 +461,8 @@
       "extras": {
         "role": "prop",
         "wallRunnable": false,
-        "sockets": []
+        "sockets": [],
+        "spanLowestShare": 0.7797471226694569
       },
       "mesh": 2
     },
