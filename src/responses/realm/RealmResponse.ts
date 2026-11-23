@@ -36,11 +36,7 @@ export class ChapterResponse {
         const [floorWidth, floorDepth] = region.floorSize;
 
         return {
-            ...mapFields(
-                mapFields(region, ["wallHeight"], roundWorldUnits),
-                ["sizeRatio", "changeShare"],
-                roundRatio
-            ),
+            ...mapFields(region, ["sizeRatio", "changeShare"], roundRatio),
             mapPosition: [roundWorldUnits(positionX), roundWorldUnits(positionZ)],
             floorSize: [roundWorldUnits(floorWidth), roundWorldUnits(floorDepth)],
         };
