@@ -7,11 +7,7 @@ import type { ITriangleMesh } from "@/types/physics";
 import { BORDER_BARRIER } from "@/constants/world";
 import { JUMP_CLIMB, PLAYER, WADING } from "@/constants/player";
 import { clamp, freezeTransform, lerp } from "@/lib/helpers";
-import {
-    edgeDropDepthAt,
-    edgeDropRunOf,
-    edgeDropWeightAt,
-} from "@/world/terrain/TerrainGeneration";
+import { edgeDropAt, edgeDropRunOf, type IEdgeDrop } from "@/world/terrain/TerrainGeneration";
 
 export class TerrainEdgeBarrier implements IWorldEntity {
     private static readonly SEGMENT_EDGES_BY_CASE: readonly (readonly number[])[] = [
@@ -48,6 +44,7 @@ export class TerrainEdgeBarrier implements IWorldEntity {
         const margins = new Float32Array(pointsPerSide * pointsPerSide);
         const { dropHeight } = landMap.border;
         const dropRun = edgeDropRunOf(landMap.border);
+        const drop: IEdgeDrop = { weight: 0, depth: 0 };
 
         for (let index = 0; index < margins.length; index += 1) {
             const footprintMargin =
@@ -59,13 +56,10 @@ export class TerrainEdgeBarrier implements IWorldEntity {
             let margin = Math.min(footprintMargin, waterMargin);
             const localX = originX + (index % pointsPerSide) * cellSize;
             const localZ = originZ + Math.floor(index / pointsPerSide) * cellSize;
-            for (const strip of guardedStrips)
-                margin = Math.min(
-                    margin,
-                    JUMP_CLIMB.stepRise -
-                        edgeDropWeightAt(strip, localX, localZ) *
-                            edgeDropDepthAt(strip, localX, localZ, dropHeight, dropRun)
-                );
+            for (const strip of guardedStrips) {
+                edgeDropAt(strip, localX, localZ, dropHeight, dropRun, drop);
+                margin = Math.min(margin, JUMP_CLIMB.stepRise - drop.weight * drop.depth);
+            }
             margins[index] = margin;
         }
 
