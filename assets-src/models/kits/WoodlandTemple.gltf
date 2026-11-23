@@ -94,10 +94,10 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 2229,
+      "count": 2230,
       "max": [
         3.5393247604370117,
-        6.500561714172363,
+        6.613202095031738,
         1.15404212474823
       ],
       "min": [
@@ -111,14 +111,14 @@
     {
       "type": "VEC3",
       "componentType": 5126,
-      "count": 2229,
+      "count": 2230,
       "bufferView": 2,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
-      "count": 2229,
+      "count": 2230,
       "bufferView": 2,
       "byteOffset": 24
     },
@@ -326,48 +326,48 @@
     {
       "buffer": 0,
       "byteOffset": 98340,
-      "byteLength": 71328,
+      "byteLength": 71360,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 169668,
+      "byteOffset": 169700,
       "byteLength": 7168,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 176836,
+      "byteOffset": 176868,
       "byteLength": 19168,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 196004,
+      "byteOffset": 196036,
       "byteLength": 65984,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 261988,
+      "byteOffset": 262020,
       "byteLength": 83680,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 345668,
+      "byteOffset": 345700,
       "byteLength": 8064,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 353732,
+      "byteOffset": 353764,
       "byteLength": 2432,
       "byteStride": 32,
       "target": 34962
@@ -406,7 +406,7 @@
   "buffers": [
     {
       "uri": "WoodlandTemple.bin",
-      "byteLength": 356164
+      "byteLength": 356196
     }
   ],
   "materials": [
@@ -563,7 +563,8 @@
       "extras": {
         "role": "prop",
         "wallRunnable": false,
-        "sockets": []
+        "sockets": [],
+        "spanLowestShare": 0.525464044514293
       },
       "mesh": 1
     },
