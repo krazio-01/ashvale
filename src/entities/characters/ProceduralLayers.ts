@@ -9,6 +9,7 @@ import {
 import type { ImpactProfileName } from "@/constants/characters";
 import { WORLD } from "@/constants/world";
 import { BoneMath } from "@/lib/boneMath";
+import { FootContact } from "@/lib/footContact";
 import {
     clamp,
     lerp,
@@ -30,6 +31,7 @@ interface IJointSpring {
     bone: Object3D;
     rotationVector: Vector3;
     velocity: Vector3;
+    active: boolean;
     stiffness: number;
     damping: number;
 }
@@ -57,7 +59,7 @@ interface ILookBone {
 interface IFootState {
     limb: ILimb;
     restHeight: number;
-    lowestAnimatedHeight: number;
+    contact: FootContact;
     animatedPosition: Vector3;
     animatedRotation: Quaternion;
     plantedPosition: Vector3;
@@ -95,6 +97,7 @@ export class ImpactSpringLayer extends ProceduralLayer {
     private readonly springsByBone = new Map<string, IJointSpring>();
     private readonly springsRootFirst: IJointSpring[];
     private readonly delayedImpulses: IDelayedImpulse[] = [];
+    private pendingImpulseCount = 0;
     private areSpringsAtRest = true;
 
     constructor(model: Object3D) {
@@ -107,6 +110,7 @@ export class ImpactSpringLayer extends ProceduralLayer {
         for (const bone of BoneMath.findBones(model, [...boneNames])) {
             this.springsByBone.set(bone.name, {
                 bone,
+                active: false,
                 rotationVector: new Vector3(),
                 velocity: new Vector3(),
                 stiffness: 0,
@@ -120,10 +124,9 @@ export class ImpactSpringLayer extends ProceduralLayer {
     }
 
     reset(): void {
-        this.delayedImpulses.length = 0;
+        this.pendingImpulseCount = 0;
         for (const spring of this.springsRootFirst) {
-            spring.rotationVector.set(0, 0, 0);
-            spring.velocity.set(0, 0, 0);
+            ImpactSpringLayer.putToRest(spring);
         }
         this.areSpringsAtRest = true;
     }
@@ -135,29 +138,42 @@ export class ImpactSpringLayer extends ProceduralLayer {
         if (impulseAxis.lengthSq() < PROCEDURAL_EPSILON.degenerateLengthSquared) return;
         impulseAxis.normalize();
         const chain = profile.chain;
+        const delayedImpulses = this.delayedImpulses;
         for (let index = 0; index < chain.length; index += 1) {
             const link = chain[index];
             const spring = this.springsByBone.get(link.bone);
             if (!spring) continue;
-            this.delayedImpulses.push({
-                spring,
-                delaySeconds: index * PROCEDURAL_ANIMATION.springs.linkDelaySeconds,
-                impulse: impulseAxis.clone().multiplyScalar(profile.strength * link.weight * scale),
-                stiffness: profile.stiffness,
-                damping: profile.damping,
-            });
+            if (this.pendingImpulseCount === delayedImpulses.length)
+                delayedImpulses.push({
+                    spring,
+                    delaySeconds: 0,
+                    impulse: new Vector3(),
+                    stiffness: 0,
+                    damping: 0,
+                });
+            const delayed = delayedImpulses[this.pendingImpulseCount];
+            this.pendingImpulseCount += 1;
+            delayed.spring = spring;
+            delayed.delaySeconds = index * PROCEDURAL_ANIMATION.springs.linkDelaySeconds;
+            delayed.impulse
+                .copy(impulseAxis)
+                .multiplyScalar(profile.strength * link.weight * scale);
+            delayed.stiffness = profile.stiffness;
+            delayed.damping = profile.damping;
         }
     }
 
     apply(frame: IProceduralFrame): void {
         const { acceleration } = ImpactSpringLayer.scratch;
-        this.releaseDelayedImpulses(frame.deltaSeconds);
+        if (this.pendingImpulseCount > 0) this.releaseDelayedImpulses(frame.deltaSeconds);
         if (this.areSpringsAtRest) return;
 
         const { maxStepSeconds, maxSubsteps, maxRadians } = PROCEDURAL_ANIMATION.springs;
+        const elapsed = Math.min(frame.deltaSeconds, maxStepSeconds * maxSubsteps);
         let areAllAtRest = true;
         for (const spring of this.springsRootFirst) {
-            let remaining = Math.min(frame.deltaSeconds, maxStepSeconds * maxSubsteps);
+            if (!spring.active) continue;
+            let remaining = elapsed;
             while (remaining > 0) {
                 const step = Math.min(remaining, maxStepSeconds);
                 acceleration
@@ -173,8 +189,7 @@ export class ImpactSpringLayer extends ProceduralLayer {
                 spring.rotationVector.lengthSq() < PROCEDURAL_EPSILON.springRestSquared &&
                 spring.velocity.lengthSq() < PROCEDURAL_EPSILON.springRestSquared;
             if (isAtRest) {
-                spring.rotationVector.set(0, 0, 0);
-                spring.velocity.set(0, 0, 0);
+                ImpactSpringLayer.putToRest(spring);
                 continue;
             }
             areAllAtRest = false;
@@ -183,18 +198,35 @@ export class ImpactSpringLayer extends ProceduralLayer {
         this.areSpringsAtRest = areAllAtRest;
     }
 
+    private static putToRest(spring: IJointSpring): void {
+        spring.active = false;
+        spring.rotationVector.set(0, 0, 0);
+        spring.velocity.set(0, 0, 0);
+    }
+
     private releaseDelayedImpulses(deltaSeconds: number): void {
         const delayedImpulses = this.delayedImpulses;
-        for (let index = delayedImpulses.length - 1; index >= 0; index--) {
+        const pendingCount = this.pendingImpulseCount;
+        for (let index = pendingCount - 1; index >= 0; index--) {
             const delayed = delayedImpulses[index];
             delayed.delaySeconds -= deltaSeconds;
             if (delayed.delaySeconds > 0) continue;
+            delayed.spring.active = true;
             delayed.spring.velocity.add(delayed.impulse);
             delayed.spring.stiffness = delayed.stiffness;
             delayed.spring.damping = delayed.damping;
             this.areSpringsAtRest = false;
-            delayedImpulses.splice(index, 1);
         }
+        let keptCount = 0;
+        for (let index = 0; index < pendingCount; index += 1) {
+            const delayed = delayedImpulses[index];
+            if (delayed.delaySeconds > 0) {
+                delayedImpulses[index] = delayedImpulses[keptCount];
+                delayedImpulses[keptCount] = delayed;
+                keptCount += 1;
+            }
+        }
+        this.pendingImpulseCount = keptCount;
     }
 }
 
@@ -248,16 +280,11 @@ export class BreathingAndLookLayer extends ProceduralLayer {
             const bone = model.getObjectByName(name);
             return bone ? [{ bone, ...shares }] : [];
         });
-        this.lookBones = (
-            [
-                [SKELETON_BONES.neck, settings.neckShare],
-                [SKELETON_BONES.head, settings.headShare],
-            ] as const
-        ).flatMap(([name, share]) => {
-            const bone = model.getObjectByName(name);
-            return bone ? [{ bone, share }] : [];
-        });
+        const neck = model.getObjectByName(SKELETON_BONES.neck);
         this.head = model.getObjectByName(SKELETON_BONES.head) ?? null;
+        this.lookBones = [];
+        if (neck) this.lookBones.push({ bone: neck, share: settings.neckShare });
+        if (this.head) this.lookBones.push({ bone: this.head, share: settings.headShare });
         this.pelvis = model.getObjectByName(SKELETON_BONES.pelvis) ?? null;
     }
 
@@ -271,25 +298,37 @@ export class BreathingAndLookLayer extends ProceduralLayer {
     }
 
     apply(frame: IProceduralFrame): void {
-        const { forward, right, boneTurn } = BreathingAndLookLayer.scratch;
-        const settings = PROCEDURAL_ANIMATION.breathingAndLook;
-        const step = frame.deltaSeconds;
-        const yaw = this.body.rotation.y;
-        forwardFromYaw(yaw, forward);
+        const { forward, right } = BreathingAndLookLayer.scratch;
+        forwardFromYaw(this.body.rotation.y, forward);
         right.crossVectors(forward, BoneMath.UP);
 
-        if (step > 0) {
-            this.trackLean(step);
-            this.tilt.lerp(
-                frame.surfaceTilt,
-                smoothingFactor(PROCEDURAL_ANIMATION.surfaceTilt.response, step)
-            );
-            this.breathPhase =
-                (this.breathPhase + step * settings.breathHz * FULL_TURN) % FULL_TURN;
-        }
+        this.trackBodyMotion(frame);
+        this.applyTorsoPose();
+        if (!frame.lookTarget && this.lookYaw === 0 && this.lookPitch === 0) return;
+        this.trackLook(frame.lookTarget, frame.deltaSeconds);
+        this.applyLookPose();
+    }
+
+    private trackBodyMotion(frame: IProceduralFrame): void {
+        const step = frame.deltaSeconds;
+        if (!(step > 0)) return;
+
+        const settings = PROCEDURAL_ANIMATION.breathingAndLook;
+        this.trackLean(step);
+        this.tilt.lerp(
+            frame.surfaceTilt,
+            smoothingFactor(PROCEDURAL_ANIMATION.surfaceTilt.response, step)
+        );
+        this.breathPhase = (this.breathPhase + step * settings.breathHz * FULL_TURN) % FULL_TURN;
+    }
+
+    private applyTorsoPose(): void {
+        const { forward, right, boneTurn } = BreathingAndLookLayer.scratch;
         if (this.pelvis && this.tilt.lengthSq() > 0)
             BoneMath.rotateByRotationVector(this.pelvis, this.tilt);
-        const breath = Math.sin(this.breathPhase) * settings.breathRadians;
+
+        const breath =
+            Math.sin(this.breathPhase) * PROCEDURAL_ANIMATION.breathingAndLook.breathRadians;
         for (const { bone, leanShare, breathPitchShare, breathRollShare } of this.torso) {
             boneTurn
                 .copy(this.lean)
@@ -298,8 +337,10 @@ export class BreathingAndLookLayer extends ProceduralLayer {
                 .addScaledVector(forward, breath * breathRollShare);
             BoneMath.rotateByRotationVector(bone, boneTurn);
         }
+    }
 
-        this.trackLook(frame.lookTarget, step);
+    private applyLookPose(): void {
+        const { right, boneTurn } = BreathingAndLookLayer.scratch;
         for (const { bone, share } of this.lookBones) {
             boneTurn
                 .copy(BoneMath.UP)
@@ -362,6 +403,14 @@ export class BreathingAndLookLayer extends ProceduralLayer {
         const follow = smoothingFactor(settings.lookResponse, step);
         this.lookYaw = lerp(this.lookYaw, targetYaw, follow);
         this.lookPitch = lerp(this.lookPitch, targetPitch, follow);
+        if (
+            !lookTarget &&
+            Math.abs(this.lookYaw) < PROCEDURAL_EPSILON.turnRadians &&
+            Math.abs(this.lookPitch) < PROCEDURAL_EPSILON.turnRadians
+        ) {
+            this.lookYaw = 0;
+            this.lookPitch = 0;
+        }
     }
 }
 
@@ -379,6 +428,8 @@ export class FootPlantingLayer extends ProceduralLayer {
     private readonly pelvis: Object3D;
     private readonly feet: IFootState[];
 
+    readonly lowFeet: (Vector3 | null)[];
+
     private constructor(model: Object3D, probe: ISurfaceProbe, pelvis: Object3D, legs: ILimb[]) {
         super();
         const { modelOrigin, footTarget } = FootPlantingLayer.scratch;
@@ -392,7 +443,7 @@ export class FootPlantingLayer extends ProceduralLayer {
             return {
                 limb,
                 restHeight,
-                lowestAnimatedHeight: restHeight,
+                contact: new FootContact(restHeight),
                 animatedPosition: new Vector3(),
                 animatedRotation: new Quaternion(),
                 plantedPosition: new Vector3(),
@@ -401,6 +452,7 @@ export class FootPlantingLayer extends ProceduralLayer {
                 heightCorrection: 0,
             };
         });
+        this.lowFeet = this.feet.map(() => null);
     }
 
     static create(model: Object3D, probe: ISurfaceProbe): FootPlantingLayer | null {
@@ -412,11 +464,12 @@ export class FootPlantingLayer extends ProceduralLayer {
     }
 
     reset(): void {
+        this.lowFeet.fill(null);
         for (const foot of this.feet) {
             foot.isPlanted = false;
             foot.plantWeight = 0;
             foot.heightCorrection = 0;
-            foot.lowestAnimatedHeight = foot.restHeight;
+            foot.contact.reset(foot.restHeight);
         }
     }
 
@@ -425,63 +478,76 @@ export class FootPlantingLayer extends ProceduralLayer {
             this.reset();
             return;
         }
-        const { modelOrigin, footTarget, drift } = FootPlantingLayer.scratch;
+        const { modelOrigin } = FootPlantingLayer.scratch;
         const settings = PROCEDURAL_ANIMATION.feet;
         const step = frame.deltaSeconds;
         const modelHeight = BoneMath.worldPosition(this.model, modelOrigin).y;
         const unplantBlend = smoothingFactor(step / settings.blendSeconds);
         const correctionBlend = smoothingFactor(step / settings.correctionSeconds);
         let pelvisDrop = 0;
-        for (const foot of this.feet) {
+
+        for (let index = 0; index < this.feet.length; index += 1) {
+            const foot = this.feet[index];
             BoneMath.worldPosition(foot.limb.end, foot.animatedPosition);
             BoneMath.worldRotation(foot.limb.end, foot.animatedRotation);
             const height = foot.animatedPosition.y - modelHeight;
-            foot.lowestAnimatedHeight = Math.min(
-                foot.lowestAnimatedHeight + settings.floorRise * step,
-                height
-            );
-            const probeOrigin = FootPlantingLayer.scratch.probeOrigin.set(
-                foot.animatedPosition.x,
-                modelHeight + settings.probeAbove,
-                foot.animatedPosition.z
-            );
-            const ground = this.probe.surfaceAlong(probeOrigin, WORLD.down)?.point.y ?? null;
+            const isLow = foot.contact.track(height, step);
+            this.lowFeet[index] = isLow ? foot.animatedPosition : null;
+
             const targetCorrection = frame.plantFeet
-                ? clamp(
-                      (ground ?? modelHeight) -
-                          modelHeight -
-                          (foot.lowestAnimatedHeight - foot.restHeight),
-                      -settings.maxPelvisDrop,
-                      settings.maxRaise
-                  )
+                ? this.groundCorrectionFor(foot, modelHeight)
                 : 0;
             foot.heightCorrection = lerp(foot.heightCorrection, targetCorrection, correctionBlend);
             pelvisDrop = Math.min(pelvisDrop, foot.heightCorrection);
-
-            const shouldPlant =
-                frame.plantFeet && height - foot.lowestAnimatedHeight < settings.liftHeight;
-            if (!shouldPlant) {
-                foot.isPlanted = false;
-            } else if (!foot.isPlanted) {
-                foot.plantedPosition.copy(foot.animatedPosition);
-                foot.isPlanted = true;
-                foot.plantWeight = 1;
-            }
-            if (foot.isPlanted) {
-                drift
-                    .set(
-                        foot.plantedPosition.x - foot.animatedPosition.x,
-                        0,
-                        foot.plantedPosition.z - foot.animatedPosition.z
-                    )
-                    .clampLength(0, settings.maxDrift);
-                foot.plantedPosition.x = foot.animatedPosition.x + drift.x;
-                foot.plantedPosition.z = foot.animatedPosition.z + drift.z;
-            } else {
-                foot.plantWeight -= foot.plantWeight * unplantBlend;
-            }
+            this.trackPlant(foot, frame.plantFeet && isLow, unplantBlend);
         }
+
         this.lowerPelvis(pelvisDrop);
+        this.applyFootTargets();
+    }
+
+    private groundCorrectionFor(foot: IFootState, modelHeight: number): number {
+        const settings = PROCEDURAL_ANIMATION.feet;
+        const origin = FootPlantingLayer.scratch.probeOrigin.set(
+            foot.animatedPosition.x,
+            modelHeight + settings.probeAbove,
+            foot.animatedPosition.z
+        );
+        const ground = this.probe.surfaceAlong(origin, WORLD.down)?.point.y ?? modelHeight;
+        return clamp(
+            ground - modelHeight - (foot.contact.lowestHeight - foot.restHeight),
+            -settings.maxPelvisDrop,
+            settings.maxRaise
+        );
+    }
+
+    private trackPlant(foot: IFootState, shouldPlant: boolean, unplantBlend: number): void {
+        if (!shouldPlant) {
+            foot.isPlanted = false;
+        } else if (!foot.isPlanted) {
+            foot.plantedPosition.copy(foot.animatedPosition);
+            foot.isPlanted = true;
+            foot.plantWeight = 1;
+        }
+        if (!foot.isPlanted) {
+            foot.plantWeight -= foot.plantWeight * unplantBlend;
+            return;
+        }
+
+        const { drift } = FootPlantingLayer.scratch;
+        drift
+            .set(
+                foot.plantedPosition.x - foot.animatedPosition.x,
+                0,
+                foot.plantedPosition.z - foot.animatedPosition.z
+            )
+            .clampLength(0, PROCEDURAL_ANIMATION.feet.maxDrift);
+        foot.plantedPosition.x = foot.animatedPosition.x + drift.x;
+        foot.plantedPosition.z = foot.animatedPosition.z + drift.z;
+    }
+
+    private applyFootTargets(): void {
+        const { footTarget } = FootPlantingLayer.scratch;
         for (const foot of this.feet) {
             const { animatedPosition, plantedPosition, plantWeight } = foot;
             footTarget
@@ -504,10 +570,6 @@ export class FootPlantingLayer extends ProceduralLayer {
 export class BladeContactLayer extends ArmIkLayer {
     readonly minimumDetail = "full";
     private static readonly scratch = {
-        ownHilt: new Vector3(),
-        ownTip: new Vector3(),
-        otherHilt: new Vector3(),
-        otherTip: new Vector3(),
         ownPoint: new Vector3(),
         otherPoint: new Vector3(),
         bladeLine: new Line3(),
@@ -528,18 +590,8 @@ export class BladeContactLayer extends ArmIkLayer {
     apply(frame: IProceduralFrame): void {
         const contact = this.contact;
         if (!contact) return;
-        const {
-            ownHilt,
-            ownTip,
-            otherHilt,
-            otherTip,
-            ownPoint,
-            otherPoint,
-            bladeLine,
-            otherBladeLine,
-            contactTarget,
-            contactRotation,
-        } = BladeContactLayer.scratch;
+        const { ownPoint, otherPoint, bladeLine, otherBladeLine, contactTarget, contactRotation } =
+            BladeContactLayer.scratch;
         const duration = PROCEDURAL_ANIMATION.bladeContact.seconds;
         contact.elapsedSeconds += frame.deltaSeconds;
         if (contact.elapsedSeconds >= duration) {
@@ -547,12 +599,10 @@ export class BladeContactLayer extends ArmIkLayer {
             return;
         }
         const hasBothBlades =
-            contact.own.getBladeSegment(ownHilt, ownTip) &&
-            contact.other.getBladeSegment(otherHilt, otherTip);
+            contact.own.getBladeSegment(bladeLine.start, bladeLine.end) &&
+            contact.other.getBladeSegment(otherBladeLine.start, otherBladeLine.end);
         if (!hasBothBlades) return;
-        bladeLine
-            .set(ownHilt, ownTip)
-            .distanceSqToLine3(otherBladeLine.set(otherHilt, otherTip), ownPoint, otherPoint);
+        bladeLine.distanceSqToLine3(otherBladeLine, ownPoint, otherPoint);
         const correction = otherPoint.sub(ownPoint).clampLength(0, contact.maxCorrection);
         const progress = contact.elapsedSeconds / duration;
         const fade = 1 - progress * progress;
