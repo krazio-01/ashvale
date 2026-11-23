@@ -14,16 +14,22 @@ const LEAF_SHAPE = {
     edgeShade: 0.85,
 };
 
-type ShapeTexel = (across: number, along: number) => [shade: number, alpha: number];
+interface IShapeTexel {
+    shade: number;
+    alpha: number;
+}
+
+type ShapeTexel = (across: number, along: number, texel: IShapeTexel) => void;
 
 export function createShapeTexture(size: number, texelAt: ShapeTexel): DataTexture {
     const pixels = new Uint8Array(size * size * 4);
+    const texel: IShapeTexel = { shade: 0, alpha: 0 };
     for (let y = 0; y < size; y += 1)
         for (let x = 0; x < size; x += 1) {
-            const [shade, alpha] = texelAt(Math.abs((x + 0.5) / size - 0.5), (y + 0.5) / size);
+            texelAt(Math.abs((x + 0.5) / size - 0.5), (y + 0.5) / size, texel);
             const offset = (y * size + x) * 4;
-            pixels.fill(Math.round(shade * 255), offset, offset + 3);
-            pixels[offset + 3] = Math.round(alpha * 255);
+            pixels.fill(Math.round(texel.shade * 255), offset, offset + 3);
+            pixels[offset + 3] = Math.round(texel.alpha * 255);
         }
     const texture = new DataTexture(pixels, size, size, RGBAFormat);
     texture.colorSpace = SRGBColorSpace;
@@ -35,11 +41,14 @@ export function createShapeTexture(size: number, texelAt: ShapeTexel): DataTextu
 }
 
 export const SHAPE_TEXELS = {
-    glow: (across, along) => [1, (1 - Math.min(1, Math.hypot(across, along - 0.5) * 2)) ** 2],
-    leaf: (across, along) => {
+    glow: (across, along, texel) => {
+        texel.shade = 1;
+        texel.alpha = (1 - Math.min(1, Math.hypot(across, along - 0.5) * 2)) ** 2;
+    },
+    leaf: (across, along, texel) => {
         const { halfWidth, taper, midribWidth, midribShade, edgeShade } = LEAF_SHAPE;
-        const shade =
+        texel.shade =
             across < midribWidth ? midribShade : 1 - (1 - edgeShade) * (across / halfWidth);
-        return [shade, across < halfWidth * Math.sin(Math.PI * along) ** taper ? 1 : 0];
+        texel.alpha = across < halfWidth * Math.sin(Math.PI * along) ** taper ? 1 : 0;
     },
 } satisfies Record<string, ShapeTexel>;
