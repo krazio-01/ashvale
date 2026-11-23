@@ -1899,7 +1899,8 @@
       "extras": {
         "role": "prop",
         "wallRunnable": false,
-        "sockets": []
+        "sockets": [],
+        "spanLowestShare": 0.8024691358024693
       },
       "mesh": 0
     },

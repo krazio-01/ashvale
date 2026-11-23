@@ -3327,7 +3327,8 @@
       "extras": {
         "role": "prop",
         "wallRunnable": false,
-        "sockets": []
+        "sockets": [],
+        "spanLowestShare": 0.8024691358024693
       },
       "translation": [
         -9.5367431640625e-7,
