@@ -50,7 +50,6 @@ export class HitReception {
     };
     private pendingReactionClip = "";
     private pendingStaggerClip: string | null = null;
-    private pendingStaggerIsParried = false;
 
     constructor(spec: IHitReceptionSpec, machine: MoveStateMachine, animator: CharacterAnimator) {
         const reactions = spec.moveSet.reactions;
@@ -72,16 +71,17 @@ export class HitReception {
     snapshot(isDead: boolean): IDefenderSnapshot {
         const machine = this.machine;
         const output = machine.output;
-        const inMove = machine.state === "move";
+        const state = machine.state;
+        const inMove = state === "move";
         const defender = this.defender;
         defender.isDead = isDead;
-        defender.isUntouchable = machine.state === "finisher";
+        defender.isUntouchable = state === "finisher";
         defender.isInvulnerable = inMove && output.isInvulnerable;
         defender.isDodging = inMove && output.move !== null && output.move.tags.includes("dodge");
         defender.invulnerableSeconds = output.invulnerableSeconds;
         defender.isParrying = inMove && output.isParrying;
         defender.isArmored = inMove && output.isArmored;
-        defender.isStaggered = machine.state === "staggered";
+        defender.isStaggered = state === "staggered";
         return defender;
     }
 
@@ -103,7 +103,6 @@ export class HitReception {
 
     queueParriedStagger(clip: string, staggerSeconds: number): void {
         this.pendingStaggerClip = clip;
-        this.pendingStaggerIsParried = true;
         this.machine.stagger(staggerSeconds);
     }
 
@@ -114,11 +113,10 @@ export class HitReception {
         if (!output.staggerStarted) return;
         this.animator.playOneShot(
             this.pendingStaggerClip ?? this.staggerClip,
-            this.pendingStaggerIsParried
+            this.pendingStaggerClip !== null
                 ? HitReception.PARRIED_PLAYBACK
                 : HitReception.STAGGER_PLAYBACK
         );
         this.pendingStaggerClip = null;
-        this.pendingStaggerIsParried = false;
     }
 }
