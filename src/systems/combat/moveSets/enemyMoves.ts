@@ -6,8 +6,24 @@ import {
     strikeWithRecovery,
     projectileMove,
 } from "@/systems/combat/moveSets/enemyMoveBuilders";
+import type { IMoveDefinition, ProjectileKind } from "@/types/combat";
 
 const WRAITH_LAUNCH_AT = 0.3;
+
+interface IWraithHurlSpec {
+    id: string;
+    kind: ProjectileKind;
+    playbackRate: number;
+    chainAt?: number;
+}
+
+function wraithHurl({ kind, ...spec }: IWraithHurlSpec): IMoveDefinition {
+    return projectileMove({
+        ...spec,
+        clip: CLIP.enemyHurl,
+        projectile: { at: WRAITH_LAUNCH_AT, kind, socket: SKELETON_BONES.hands.right },
+    });
+}
 
 export const GOLEM_MOVE_IDS = {
     greatCleave: "golem_great_cleave",
@@ -250,25 +266,9 @@ export const WRAITH_MOVE_IDS = {
 };
 
 export const WRAITH_MOVES = enemyMoveSet([
-    projectileMove({
-        id: WRAITH_MOVE_IDS.bolt,
-        clip: CLIP.enemyHurl,
-        playbackRate: 1.2,
-        projectile: { at: WRAITH_LAUNCH_AT, kind: "bolt", socket: SKELETON_BONES.hands.right },
-        chainAt: 0.5,
-    }),
-    projectileMove({
-        id: WRAITH_MOVE_IDS.followUpBolt,
-        clip: CLIP.enemyHurl,
-        playbackRate: 1.2,
-        projectile: { at: WRAITH_LAUNCH_AT, kind: "bolt", socket: SKELETON_BONES.hands.right },
-    }),
-    projectileMove({
-        id: WRAITH_MOVE_IDS.blast,
-        clip: CLIP.enemyHurl,
-        playbackRate: 0.75,
-        projectile: { at: WRAITH_LAUNCH_AT, kind: "blast", socket: SKELETON_BONES.hands.right },
-    }),
+    wraithHurl({ id: WRAITH_MOVE_IDS.bolt, kind: "bolt", playbackRate: 1.2, chainAt: 0.5 }),
+    wraithHurl({ id: WRAITH_MOVE_IDS.followUpBolt, kind: "bolt", playbackRate: 1.2 }),
+    wraithHurl({ id: WRAITH_MOVE_IDS.blast, kind: "blast", playbackRate: 0.75 }),
     strike({
         id: WRAITH_MOVE_IDS.scratch,
         clip: CLIP.enemyScratch,

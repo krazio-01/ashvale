@@ -20,6 +20,11 @@ export const SHARED_REACTIONS: Pick<IReactionClips, "knockdown" | "finisherDeath
 
 export type MoveSpec = Pick<IMoveDefinition, "id" | "clip" | "tags"> & Partial<IMoveDefinition>;
 
+export type MoveDefaults = Pick<
+    IMoveDefinition,
+    "fadeSeconds" | "requires" | "minimumWindupSeconds"
+>;
+
 function marksOf(clip: string): IClipMarks {
     const marks = CLIP_MARKS[clip];
     if (!marks) throw new Error(ERRORS.missingClipMarks(clip));
@@ -32,7 +37,7 @@ export function clipMark(clip: string, name: string): number {
     return time;
 }
 
-export function clipGripWindow(clip: string): { from: number; to: number } {
+export function clipGripWindow(clip: string): IMoveWindow {
     const grip = marksOf(clip).grip;
     if (!grip) throw new Error(ERRORS.missingGripWindow(clip));
     return grip;
@@ -42,11 +47,7 @@ export function progressAtClipShare(window: IMoveWindow, share: number): number 
     return (share - window.from) / (window.to - window.from);
 }
 
-export function hitWindow(
-    from: number,
-    to: number,
-    overrides: Partial<IHitWindow> = {}
-): IHitWindow {
+export function hitWindow(from: number, to: number, overrides?: Partial<IHitWindow>): IHitWindow {
     return {
         from,
         to,
@@ -64,10 +65,7 @@ export function hitWindow(
     };
 }
 
-export function defineMove(
-    defaults: Pick<IMoveDefinition, "fadeSeconds" | "requires" | "minimumWindupSeconds">,
-    spec: MoveSpec
-): IMoveDefinition {
+export function defineMove(defaults: MoveDefaults, spec: MoveSpec): IMoveDefinition {
     return {
         playbackRate: 1,
         staminaCost: 0,
