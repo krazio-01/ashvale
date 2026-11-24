@@ -1,7 +1,8 @@
-import { metresToUnits } from "@/lib/helpers";
+import { WORLD, metresToUnits } from "@/constants/world";
 import { PHYSICS } from "@/constants/physics";
 import type { ProceduralDetail, ColliderGroup, ISkeletonDescriptor } from "@/types/characters";
 import type { Handedness } from "@/types/combat";
+import type { PhysicsDetail } from "@/types/physics";
 
 const suffixed = (baseNames: readonly string[], side: string): string[] =>
     baseNames.map((baseName) => `${baseName}_${side}`);
@@ -26,12 +27,15 @@ export const GAIT_SPEED_PER_HEIGHT = {
     strafe: 1.45,
 };
 
+const CLIP_LIBRARIES = {
+    base: "/models/characters/UAL1_Standard.glb",
+    combat: "/models/characters/CombatClips.glb",
+};
+
 export const PLAYER_ASSETS = {
     modelPath: "/models/characters/Player.gltf",
-    clipLibraryPaths: [
-        "/models/characters/UAL1_Standard.glb",
-        "/models/characters/CombatClips.glb",
-    ],
+    clipLibraries: CLIP_LIBRARIES,
+    clipLibraryPaths: Object.values(CLIP_LIBRARIES),
     modelYawOffset: 0,
 };
 
@@ -55,6 +59,8 @@ const TORSO_CHAIN_UP = ["spine_03", "spine_02", "spine_01", "pelvis"] as const;
 
 export const HAND_BONES = { right: handBones("r"), left: handBones("l") };
 
+const UAL_HANDS = { left: "hand_l", right: "hand_r" };
+
 export const SKELETONS = {
     ual: {
         sides: SIDE_SUFFIXES,
@@ -68,9 +74,10 @@ export const SKELETONS = {
             root: "root",
             spine: ["spine_01", "spine_02", "spine_03"],
             clavicles: { left: "clavicle_l", right: "clavicle_r" },
+            hands: UAL_HANDS,
             arms: {
-                left: ["upperarm_l", "lowerarm_l", "hand_l"],
-                right: ["upperarm_r", "lowerarm_r", "hand_r"],
+                left: ["upperarm_l", "lowerarm_l", UAL_HANDS.left],
+                right: ["upperarm_r", "lowerarm_r", UAL_HANDS.right],
             },
             legs: {
                 left: ["thigh_l", "calf_l", "foot_l"],
@@ -240,6 +247,9 @@ export const CLIP = {
     slideStart: "Slide_Start",
     slideHold: "Slide_Hold",
     slideExit: "Slide_Exit",
+    wallRunStart: "Wall_Run_Start",
+    mantle: "Mantle",
+    landingRollForward: "Landing_Roll_Forward",
     parry: "Parry",
     parryGuard: "Parry_Guard",
     parryReguard: "Parry_Reguard",
@@ -294,7 +304,7 @@ export const CLIP = {
 } as const;
 
 const SWORD_ARM_INWARD: readonly IImpactLink[] = [
-    { bone: "hand_r", weight: 0.3 },
+    { bone: SKELETON_BONES.hands.right, weight: 0.3 },
     { bone: "lowerarm_r", weight: 0.3 },
     { bone: "upperarm_r", weight: 0.25 },
     { bone: "clavicle_r", weight: 0.2 },
@@ -306,7 +316,7 @@ const SWORD_ARM_INWARD: readonly IImpactLink[] = [
 ];
 
 const WEAPON_ARM_THROWN: readonly IImpactLink[] = [
-    { bone: "hand_r", weight: 0.6 },
+    { bone: SKELETON_BONES.hands.right, weight: 0.6 },
     { bone: "lowerarm_r", weight: 0.5 },
     { bone: "upperarm_r", weight: 0.55 },
     { bone: "clavicle_r", weight: 0.3 },
@@ -328,9 +338,13 @@ const TORSO_STRUCK: readonly IImpactLink[] = [
 ];
 
 export const PROCEDURAL_ANIMATION = {
-    lod: { fullMetres: metresToUnits(15), impactMetres: metresToUnits(40) },
     ik: { reachLimit: 0.999 },
-    springs: { maxRadians: 0.6, maxStepSeconds: 1 / 30, maxSubsteps: 4, linkDelaySeconds: 1 / 60 },
+    springs: {
+        maxRadians: 0.6,
+        maxStepSeconds: 1 / 30,
+        maxSubsteps: 4,
+        linkDelaySeconds: WORLD.fixedTimestep,
+    },
     impacts: {
         parry: {
             strength: 6,
@@ -368,6 +382,12 @@ export const PROCEDURAL_ANIMATION = {
             damping: 16,
             chain: TORSO_STRUCK,
         },
+        landing: {
+            strength: 7,
+            stiffness: 200,
+            damping: 15,
+            chain: TORSO_STRUCK,
+        },
     } satisfies Record<ImpactProfileName, IImpactProfile>,
     breathingAndLook: {
         leanGain: 0.02,
@@ -403,6 +423,7 @@ export const PROCEDURAL_ANIMATION = {
         attackerMaxCorrection: metresToUnits(0.2),
     },
     grip: { rampSeconds: 0.08 },
+    surfaceTilt: { maxRadians: 0.42, rampSeconds: 0.12, response: 10 },
 };
 
 export const PROCEDURAL_DETAIL_RANK: Record<ProceduralDetail, number> = {
@@ -411,7 +432,35 @@ export const PROCEDURAL_DETAIL_RANK: Record<ProceduralDetail, number> = {
     full: 2,
 };
 
+export const DETAIL_BANDS = {
+    reach: [metresToUnits(15), metresToUnits(40)],
+    animation: ["full", "impact", "none"],
+    physics: ["full", "reduced", "frozen"],
+    poseStride: [1, 1, 3],
+} as const satisfies {
+    reach: readonly number[];
+    animation: readonly ProceduralDetail[];
+    physics: readonly PhysicsDetail[];
+    poseStride: readonly number[];
+};
+
 export const OTHER_HAND: Record<Handedness, Handedness> = { left: "right", right: "left" };
+
+export const ANIMATOR_TUNING = {
+    minPlaybackRate: 0.6,
+    maxPlaybackRate: 1.8,
+    strafeFullWeightSpeedFraction: 0.35,
+    movingEpsilon: 0.05,
+    weightEpsilon: 1e-4,
+    locomotionSwapSeconds: 0.2,
+    idleVariantFadeSeconds: 0.5,
+};
+
+export const COMBAT_CHARACTER_TUNING = {
+    movingSpeed: 0.15,
+    weaponLookPointBladeFraction: 0.6,
+    finisherReturnFade: 0.25,
+};
 
 export const PROCEDURAL_EPSILON = {
     turnRadians: 1e-5,
@@ -429,7 +478,7 @@ export type SkeletonName = keyof typeof SKELETONS;
 export type ClipName = (typeof CLIP)[keyof typeof CLIP];
 
 export type ImpactProfileName =
-    "parry" | "parryPerfect" | "recoil" | "guardBroken" | "hitLight" | "hitHeavy";
+    "parry" | "parryPerfect" | "recoil" | "guardBroken" | "hitLight" | "hitHeavy" | "landing";
 
 interface IImpactLink {
     bone: string;
