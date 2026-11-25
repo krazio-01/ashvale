@@ -1,14 +1,24 @@
 "use client";
-import { useEffect } from "react";
-import { useStore } from "@react-three/fiber";
+import { useEffect, useRef } from "react";
+import { useStore, useThree } from "@react-three/fiber";
 import { store as gameStore } from "@/store/store";
-import { advanceBy, clamp } from "@/lib/helpers";
+import { useGameStore } from "@/hooks/useGameStore";
+import { advanceBy, clamp, isFrameHeld } from "@/lib/helpers";
 import { RENDER } from "@/constants/world";
 
 const VSYNC_TOLERANCE_MS = 2;
 
-export const FrameLimiter = () => {
+export const FrameLimiter = ({ rendersOnlyWhilePlaying }: { rendersOnlyWhilePlaying: boolean }) => {
     const store = useStore();
+    const sessionSnapshot = useGameStore((state) => state.session);
+    const settingsSnapshot = useGameStore((state) => state.settings.values);
+    const canvasSize = useThree((state) => state.size);
+    const pixelRatio = useThree((state) => state.viewport.dpr);
+    const isStillFrameDue = useRef(true);
+
+    useEffect(() => {
+        isStillFrameDue.current = true;
+    }, [sessionSnapshot, settingsSnapshot, canvasSize, pixelRatio]);
 
     useEffect(() => {
         let rafId = 0;
@@ -37,6 +47,14 @@ export const FrameLimiter = () => {
                     ? nowMs
                     : lastScheduleMs + targetIntervalMs;
 
+            if (isFrameHeld(session, rendersOnlyWhilePlaying)) {
+                if (!isStillFrameDue.current) {
+                    lastRenderMs = nowMs;
+                    return;
+                }
+                isStillFrameDue.current = false;
+            }
+
             const deltaMs = nowMs - lastRenderMs;
             lastRenderMs = nowMs;
             hud.frame.renderedFrames += 1;
@@ -56,7 +74,7 @@ export const FrameLimiter = () => {
             document.removeEventListener("visibilitychange", resetTimers);
             window.removeEventListener("focus", resetTimers);
         };
-    }, [store]);
+    }, [store, rendersOnlyWhilePlaying]);
 
     return null;
 };

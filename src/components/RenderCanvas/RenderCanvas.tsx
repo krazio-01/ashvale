@@ -13,13 +13,25 @@ import SceneLighting from "@/components/SceneLighting/SceneLighting";
 import PostProcessing from "@/components/PostProcessing/PostProcessing";
 import PerformanceOverlay from "@/components/PerformanceOverlay/PerformanceOverlay";
 
+const RENDERER_OPTIONS: CanvasProps["gl"] = {
+    antialias: false,
+    toneMapping: NoToneMapping,
+    toneMappingExposure: STYLE.toneMappingExposure,
+};
+
 interface IRenderCanvasProps {
     environment: IThemeEnvironment;
     camera: CanvasProps["camera"];
+    rendersOnlyWhilePlaying?: boolean;
     children: ReactNode;
 }
 
-export function RenderCanvas({ environment, camera, children }: IRenderCanvasProps) {
+export function RenderCanvas({
+    environment,
+    camera,
+    rendersOnlyWhilePlaying = false,
+    children,
+}: IRenderCanvasProps) {
     const pixelRatio = useRenderPixelRatio();
 
     return (
@@ -29,20 +41,16 @@ export function RenderCanvas({ environment, camera, children }: IRenderCanvasPro
                 frameloop="never"
                 dpr={pixelRatio}
                 camera={camera}
-                gl={{
-                    antialias: false,
-                    toneMapping: NoToneMapping,
-                    toneMappingExposure: STYLE.exposure,
-                }}
+                gl={RENDERER_OPTIONS}
             >
-                <FrameLimiter />
+                <FrameLimiter rendersOnlyWhilePlaying={rendersOnlyWhilePlaying} />
                 <SkyDome environment={environment} />
                 <SceneLighting environment={environment} />
                 {children}
                 <PostProcessing />
                 <PerformanceOverlay />
             </Canvas>
-            <FrameRateMeter />
+            <FrameRateMeter rendersOnlyWhilePlaying={rendersOnlyWhilePlaying} />
         </>
     );
 }
