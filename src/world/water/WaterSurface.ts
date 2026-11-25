@@ -265,7 +265,10 @@ export class WaterSurface implements IWorldEntity {
                 const surfaceElevation = landMap.surfaceElevationAt(localX, localZ);
                 const dropBelowWater = point.waterlineElevation - surfaceElevation;
 
-                if (dropBelowWater > WATER_CHANNEL.bedDepth + WATER_CHANNEL.cutoffBelowBed) {
+                if (
+                    dropBelowWater > WATER_CHANNEL.bedDepth + WATER_CHANNEL.cutoffBelowBed ||
+                    landMap.pitDepthAt(localX, localZ) > 0
+                ) {
                     waterDepths[vertex] = WATER_SURFACE.outsideDepth;
                 } else {
                     waterDepths[vertex] = Math.min(

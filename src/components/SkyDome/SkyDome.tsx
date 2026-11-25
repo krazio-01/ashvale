@@ -1,101 +1,113 @@
 "use client";
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { BackSide, Color, Mesh, ShaderMaterial } from "three";
-import { sunDirectionFromSky } from "@/themes/Themes";
-import type { IThemeEnvironment } from "@/types/world";
+import { BackSide, Color, Mesh, ShaderMaterial, Vector2, Vector3 } from "three";
+import type { CanvasTexture } from "three";
+import { sunDirectionFromSky } from "@/themes/Environment";
+import type { ISkyGradient, IThemeEnvironment } from "@/types/themes";
 import { ATMOSPHERE } from "@/constants/world";
+import { SkyColors, WorldEnvironment } from "@/world/assets/MaterialLibrary";
+import { buildTileableNoiseTexture } from "@/lib/noise";
+import { SKY_FRAGMENT_SHADER, SKY_VERTEX_SHADER } from "@/shaders/sky";
 
-const VERTEX_SHADER = `
-    varying vec3 vWorldPosition;
+let sharedCloudNoise: CanvasTexture | null = null;
 
-    void main() {
-        vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-`;
+function cloudNoiseTexture(): CanvasTexture {
+    sharedCloudNoise ??= buildTileableNoiseTexture(
+        ATMOSPHERE.clouds.noise,
+        ATMOSPHERE.clouds.noiseSeed
+    );
+    return sharedCloudNoise;
+}
 
-const FRAGMENT_SHADER = `
-    uniform vec3 zenithColor;
-    uniform vec3 middleColor;
-    uniform vec3 horizonColor;
-    uniform vec3 abyssColor;
-    uniform vec3 glowColor;
-    uniform vec3 sunColor;
-    uniform vec3 sunDirection;
-    uniform float middleAltitude;
-    uniform float sunSize;
-    uniform float glowFalloff;
-    uniform float hazeStrength;
-    uniform float ditherStrength;
+class SkyMaterial extends ShaderMaterial {
+    private readonly skyColors: SkyColors;
+    private readonly cloudDrift = WorldEnvironment.WIND_DIRECTION.clone().multiplyScalar(
+        ATMOSPHERE.clouds.driftSpeed
+    );
 
-    varying vec3 vWorldPosition;
-
-    void main() {
-        vec3 viewDirection = normalize(vWorldPosition - cameraPosition);
-        float altitude = viewDirection.y;
-
-        vec3 skyColor;
-
-        if (altitude >= 0.0) {
-            float toMiddle = smoothstep(0.0, middleAltitude, altitude);
-            float toZenith = smoothstep(middleAltitude, 1.0, altitude);
-            skyColor = mix(mix(horizonColor, middleColor, toMiddle), zenithColor, toZenith);
-        } else {
-            skyColor = mix(horizonColor, abyssColor, smoothstep(0.0, -0.35, altitude));
-        }
-
-        float sunAlignment = dot(viewDirection, sunDirection);
-        float glow = pow(max(sunAlignment, 0.0), glowFalloff);
-        float lowAltitudeFalloff = exp(-abs(altitude) * hazeStrength);
-
-        skyColor += glowColor * glow * lowAltitudeFalloff;
-        skyColor += sunColor * smoothstep(cos(sunSize * 2.0), cos(sunSize), sunAlignment);
-
-        float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
-        skyColor += (dither - 0.5) * ditherStrength / 255.0;
-
-        gl_FragColor = vec4(skyColor, 1.0);
-    }
-`;
-
-const SkyDome = ({ environment }: { environment: IThemeEnvironment }) => {
-    const domeRef = useRef<Mesh>(null);
-
-    const material = useMemo(() => {
-        const { sky } = environment;
-
-        return new ShaderMaterial({
-            vertexShader: VERTEX_SHADER,
-            fragmentShader: FRAGMENT_SHADER,
+    constructor() {
+        const skyColors = new SkyColors();
+        super({
+            vertexShader: SKY_VERTEX_SHADER,
+            fragmentShader: SKY_FRAGMENT_SHADER,
             uniforms: {
-                zenithColor: { value: new Color(sky.zenith) },
-                middleColor: { value: new Color(sky.middle) },
-                horizonColor: { value: new Color(sky.horizon) },
-                abyssColor: { value: new Color(sky.belowHorizonColor) },
-                glowColor: { value: new Color(sky.glow) },
-                sunColor: { value: new Color(sky.sun) },
-                sunDirection: { value: sunDirectionFromSky(sky) },
-                middleAltitude: { value: ATMOSPHERE.middleAltitude },
-                sunSize: { value: sky.sunSize },
-                glowFalloff: { value: sky.glowFalloff },
-                hazeStrength: { value: sky.hazeStrength },
+                ...skyColors.uniforms,
+                abyssColor: { value: new Color() },
+                glowColor: { value: new Color() },
+                sunColor: { value: new Color() },
+                sunDirection: { value: new Vector3() },
+                sunDiscEdges: { value: new Vector2() },
+                rangeShade: { value: new Color() },
+                glowFalloff: { value: 0 },
+                hazeStrength: { value: 0 },
                 ditherStrength: { value: ATMOSPHERE.skyDitherStrength },
+                cloudNoise: { value: cloudNoiseTexture() },
+                cloudLitColor: { value: new Color() },
+                cloudShadeColor: { value: new Color() },
+                cloudCover: { value: 0 },
+                cloudSoftness: { value: 0 },
+                cloudOffset: { value: new Vector2() },
             },
             side: BackSide,
             depthWrite: false,
             fog: false,
         });
-    }, [environment]);
+        this.skyColors = skyColors;
+    }
 
-    useEffect(() => () => material.dispose(), [material]);
+    drift(deltaSeconds: number): void {
+        this.uniforms.cloudOffset.value.addScaledVector(this.cloudDrift, deltaSeconds);
+    }
 
-    useFrame(({ camera }) => {
+    applySky(sky: ISkyGradient): void {
+        const { uniforms } = this;
+        const { silhouettes } = ATMOSPHERE;
+        this.skyColors.apply(sky);
+        uniforms.abyssColor.value.set(sky.belowHorizonColor);
+        uniforms.glowColor.value.set(sky.glow);
+        uniforms.sunColor.value.set(sky.sun);
+        uniforms.sunDirection.value.copy(sunDirectionFromSky(sky));
+        uniforms.sunDiscEdges.value.set(Math.cos(sky.sunSize * 2), Math.cos(sky.sunSize));
+        uniforms.rangeShade.value
+            .copy(this.skyColors.uniforms.skyHorizonColor.value)
+            .lerp(this.skyColors.uniforms.skyMiddleColor.value, silhouettes.middleShare)
+            .multiplyScalar(silhouettes.shadeOfSky);
+        uniforms.glowFalloff.value = sky.glowFalloff;
+        uniforms.hazeStrength.value = sky.hazeStrength;
+        uniforms.cloudLitColor.value.set(sky.cloudLit);
+        uniforms.cloudShadeColor.value.set(sky.cloudShade);
+        uniforms.cloudCover.value = sky.cloudCover;
+        uniforms.cloudSoftness.value = sky.cloudSoftness;
+    }
+}
+
+const SkyDome = ({ environment }: { environment: IThemeEnvironment }) => {
+    const domeRef = useRef<Mesh>(null);
+    const material = useMemo(() => new SkyMaterial(), []);
+
+    useEffect(() => material.applySky(environment.sky), [environment, material]);
+
+    useEffect(
+        () => () => {
+            material.dispose();
+            sharedCloudNoise?.dispose();
+        },
+        [material]
+    );
+
+    useFrame(({ camera }, deltaSeconds) => {
         domeRef.current?.position.copy(camera.position);
+        material.drift(deltaSeconds);
     });
 
     return (
-        <mesh ref={domeRef} material={material} frustumCulled={false} renderOrder={-1}>
+        <mesh
+            ref={domeRef}
+            material={material}
+            frustumCulled={false}
+            renderOrder={Number.MAX_SAFE_INTEGER}
+        >
             <sphereGeometry args={[ATMOSPHERE.skyRadius, 32, 16]} />
         </mesh>
     );
