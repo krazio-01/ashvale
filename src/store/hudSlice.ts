@@ -1,7 +1,23 @@
 import { HUD } from "@/constants/ui";
 import { keysOf } from "@/lib/helpers";
-import type { IActionPrompt, IHudAlertMarker, IHudSlice, PromptAction } from "@/types/ui";
+import type { IHudAlertMarker, IHudSlice, PromptAction } from "@/types/ui";
 import type { GetState, IStoreState, SetState } from "@/types/store";
+
+const PROMPT_ACTIONS_BY_PRIORITY = keysOf(HUD.promptPriority).sort(
+    (first, second) => HUD.promptPriority[second] - HUD.promptPriority[first]
+);
+
+function ageDamageNumber(
+    number: IHudSlice["frame"]["damageNumbers"][number],
+    frame: IHudSlice["frame"],
+    deltaSeconds: number
+): void {
+    number.age += deltaSeconds;
+    if (number.age < HUD.damageNumberSeconds) return;
+    number.active = false;
+    number.onScreen = false;
+    frame.activeDamageNumbers--;
+}
 
 export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreState>): IHudSlice {
     let damageCursor = 0;
@@ -50,23 +66,22 @@ export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreS
         },
 
         offerPrompt(action, label) {
-            if (promptOffers[action] === (label ?? undefined)) return;
-            if (label === null) delete promptOffers[action];
-            else promptOffers[action] = label;
-
-            let prompt: IActionPrompt | null = null;
-            for (const candidate of keysOf(promptOffers)) {
-                const candidateLabel = promptOffers[candidate];
-                if (
-                    candidateLabel !== undefined &&
-                    (!prompt || HUD.promptPriority[candidate] > HUD.promptPriority[prompt.action])
-                )
-                    prompt = { action: candidate, label: candidateLabel };
-            }
+            const offer = label ?? undefined;
+            if (promptOffers[action] === offer) return;
+            promptOffers[action] = offer;
 
             const current = get().hud.prompt;
-            if (current?.action !== prompt?.action || current?.label !== prompt?.label)
-                set((state) => ({ hud: { ...state.hud, prompt } }));
+            for (let index = 0; index < PROMPT_ACTIONS_BY_PRIORITY.length; index += 1) {
+                const candidate = PROMPT_ACTIONS_BY_PRIORITY[index];
+                const candidateLabel = promptOffers[candidate];
+                if (candidateLabel === undefined) continue;
+                if (current?.action !== candidate || current.label !== candidateLabel)
+                    set((state) => ({
+                        hud: { ...state.hud, prompt: { action: candidate, label: candidateLabel } },
+                    }));
+                return;
+            }
+            if (current !== null) set((state) => ({ hud: { ...state.hud, prompt: null } }));
         },
 
         setMeter(id, current, maximum) {
@@ -105,15 +120,17 @@ export function createHudSlice(set: SetState<IStoreState>, get: GetState<IStoreS
             const frame = get().hud.frame;
             if (frame.activeDamageNumbers === 0) return;
 
-            for (const number of frame.damageNumbers) {
-                if (!number.active) continue;
+            const slots = frame.damageNumbers;
+            if (frame.activeDamageNumbers === 1) {
+                const latest = slots[(damageCursor || slots.length) - 1];
+                if (latest.active) {
+                    ageDamageNumber(latest, frame, deltaSeconds);
+                    return;
+                }
+            }
 
-                number.age += deltaSeconds;
-                if (number.age < HUD.damageNumberSeconds) continue;
-
-                number.active = false;
-                number.onScreen = false;
-                frame.activeDamageNumbers -= 1;
+            for (const number of slots) {
+                if (number.active) ageDamageNumber(number, frame, deltaSeconds);
             }
         },
 
