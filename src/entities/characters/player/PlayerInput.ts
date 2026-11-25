@@ -1,7 +1,7 @@
 import { INPUT_BINDINGS, MOUSE_BINDINGS } from "@/constants/player";
 import { keysOf } from "@/lib/helpers";
 
-const ACTION_BY_KEY_CODE = new Map<string, KeyAction>();
+const ACTIONS_BY_KEY_CODE = new Map<string, KeyAction[]>();
 
 const ACTION_BY_MOUSE_BUTTON = new Map<number, PointerAction>();
 
@@ -23,6 +23,7 @@ export interface IPlayerCommands {
     dodge: boolean;
     parry: boolean;
     finisher: boolean;
+    interact: boolean;
     drawOrSheathe: boolean;
     toggleLock: boolean;
     cycleLock: number;
@@ -47,6 +48,7 @@ export class PlayerInput {
         dodge: false,
         parry: false,
         finisher: false,
+        interact: false,
         drawOrSheathe: false,
         toggleLock: false,
         cycleLock: 0,
@@ -54,13 +56,13 @@ export class PlayerInput {
 
     private readonly handleKeyDown = (event: KeyboardEvent): void => {
         if (event.repeat) return;
-        const action = ACTION_BY_KEY_CODE.get(event.code);
-        if (action) this.press(action);
+        const actions = ACTIONS_BY_KEY_CODE.get(event.code);
+        if (actions) for (const action of actions) this.press(action);
     };
 
     private readonly handleKeyUp = (event: KeyboardEvent): void => {
-        const action = ACTION_BY_KEY_CODE.get(event.code);
-        if (action) this.release(action);
+        const actions = ACTIONS_BY_KEY_CODE.get(event.code);
+        if (actions) for (const action of actions) this.release(action);
     };
 
     private readonly handleMouseDown = (event: MouseEvent): void => {
@@ -113,17 +115,20 @@ export class PlayerInput {
 
         commands.moveForward = this.axis("backward", "forward");
         commands.moveRight = this.axis("left", "right");
-        commands.dodge = this.consumePress("dodge");
+        const presses = this.pendingPresses;
+        commands.dodge = presses.has("dodge");
         commands.wantsSprint = this.isHeld("sprint");
-        commands.crouchPressed = this.consumePress("crouch");
-        commands.jump = this.consumePress("jump");
-        commands.lightAttack = this.consumePress("light");
-        commands.heavyAttack = this.consumePress("heavy");
+        commands.crouchPressed = presses.has("crouch");
+        commands.jump = presses.has("jump");
+        commands.lightAttack = presses.has("light");
+        commands.heavyAttack = presses.has("heavy");
         commands.heavyAttackHeld = this.isHeld("heavy");
-        commands.parry = this.consumePress("parry");
-        commands.finisher = this.consumePress("finisher");
-        commands.drawOrSheathe = this.consumePress("draw");
-        commands.toggleLock = this.consumePress("lock");
+        commands.parry = presses.has("parry");
+        commands.finisher = presses.has("finisher");
+        commands.interact = presses.has("interact");
+        commands.drawOrSheathe = presses.has("draw");
+        commands.toggleLock = presses.has("lock");
+        if (presses.size > 0) presses.clear();
         commands.cycleLock = this.consumeWheel();
 
         return commands;
@@ -135,10 +140,6 @@ export class PlayerInput {
 
     private axis(negative: KeyAction, positive: KeyAction): number {
         return Number(this.isHeld(positive)) - Number(this.isHeld(negative));
-    }
-
-    private consumePress(action: InputAction): boolean {
-        return this.pendingPresses.delete(action);
     }
 
     discardPresses(): void {
@@ -180,7 +181,8 @@ export class PlayerInput {
 }
 
 for (const action of keysOf(INPUT_BINDINGS))
-    for (const code of INPUT_BINDINGS[action]) ACTION_BY_KEY_CODE.set(code, action);
+    for (const code of INPUT_BINDINGS[action])
+        ACTIONS_BY_KEY_CODE.set(code, [...(ACTIONS_BY_KEY_CODE.get(code) ?? []), action]);
 
 for (const action of keysOf(MOUSE_BINDINGS))
     ACTION_BY_MOUSE_BUTTON.set(MOUSE_BINDINGS[action], action);
