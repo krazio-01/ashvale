@@ -1,42 +1,42 @@
-import {
-    AssetCooker,
-    AssetVerifier,
-    SourceImporter,
-    TranscoderInstaller,
-} from "./assets/AssetCommands";
-import { ClipAudition, ClipComparer, ClipCooker } from "./clips/ClipCommands";
-import { describeError, type PipelineCommand } from "./pipeline";
+import { TranscoderInstaller, describeError, type PipelineCommand } from "./pipeline";
 
-const COMMANDS: readonly PipelineCommand[] = [
-    new AssetCooker(),
-    new AssetVerifier(),
-    new SourceImporter(),
-    new TranscoderInstaller(),
-    new ClipCooker(),
-    new ClipAudition(),
-    new ClipComparer(),
-];
+const assetCommands = () => import("./assets/AssetCommands");
+const clipCommands = () => import("./clips/ClipCommands");
 
-function printUsage(): void {
+const COMMANDS = new Map<string, () => Promise<PipelineCommand>>([
+    ["cook", async () => new (await assetCommands()).AssetCooker()],
+    ["verify", async () => new (await assetCommands()).AssetVerifier()],
+    ["ground", async () => new (await assetCommands()).GroundSurfaceCooker()],
+    ["model-list", async () => new (await assetCommands()).ModelListWriter()],
+    ["check-pairs", async () => new (await assetCommands()).PairChecker()],
+    ["import", async () => new (await assetCommands()).SourceImporter()],
+    ["sync-transcoder", async () => new TranscoderInstaller()],
+    ["cook-clips", async () => new (await clipCommands()).ClipCooker()],
+    ["audition", async () => new (await clipCommands()).ClipAudition()],
+    ["compare-clips", async () => new (await clipCommands()).ClipComparer()],
+]);
+
+async function printUsage(): Promise<void> {
     console.log("usage: npm run tools -- <command> [arguments]\n");
-    const nameWidth = Math.max(...COMMANDS.map((command) => command.name.length));
-    for (const command of COMMANDS) {
-        console.log(`  ${command.name.padEnd(nameWidth)}  ${command.summary}`);
+    const nameWidth = Math.max(...[...COMMANDS.keys()].map((name) => name.length));
+    for (const [name, load] of COMMANDS) {
+        const command = await load();
+        console.log(`  ${name.padEnd(nameWidth)}  ${command.summary}`);
         if (command.usage) console.log(`  ${" ".repeat(nameWidth)}  ${command.usage}`);
     }
 }
 
 async function main(): Promise<void> {
     const [commandName, ...args] = process.argv.slice(2);
-    const command = COMMANDS.find((candidate) => candidate.name === commandName);
+    const load = COMMANDS.get(commandName);
 
-    if (!command) {
-        printUsage();
+    if (!load) {
+        await printUsage();
         if (commandName) throw new Error(`unknown command "${commandName}"`);
         return;
     }
 
-    await command.run(args);
+    await (await load()).run(args);
 }
 
 main().catch((error: unknown) => {
