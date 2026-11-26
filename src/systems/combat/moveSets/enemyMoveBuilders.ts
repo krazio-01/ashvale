@@ -6,6 +6,7 @@ import {
     SHARED_REACTIONS,
     WEAPON_HIT_SHAPE,
 } from "@/systems/combat/moveSets/moveDefinition";
+import type { MoveDefaults } from "@/systems/combat/moveSets/moveDefinition";
 import type {
     HitShape,
     ICancelWindow,
@@ -13,6 +14,7 @@ import type {
     IMoveSet,
     IMoveWindow,
     ImpactTier,
+    MoveTag,
     IProjectileLaunch,
     IWarpWindow,
     SwingDirection,
@@ -25,8 +27,13 @@ export const ENEMY_DEFENSE_MOVE_IDS = {
 
 const RECOVERY_CANCEL_AFTER = 0.25;
 const LATEST_MOVEMENT_CANCEL = 0.95;
-const CHAIN_INTO = ["light", "heavy"] as const;
+const CHAIN_INTO: readonly MoveTag[] = ["light", "heavy"];
 const TRACKING_TURN_RATE = 6;
+const ENEMY_MOVE_DEFAULTS: MoveDefaults = {
+    fadeSeconds: 0.08,
+    requires: "any",
+    minimumWindupSeconds: ATTACK_WARNING.minimumWindupSeconds,
+};
 
 interface IStrikeSpec {
     id: string;
@@ -54,15 +61,8 @@ interface IProjectileMoveSpec {
     chainAt?: number;
 }
 
-function baseMove(id: string, clip: string, playbackRate: number): IMoveDefinition {
-    return defineMove(
-        {
-            fadeSeconds: 0.08,
-            requires: "any",
-            minimumWindupSeconds: ATTACK_WARNING.minimumWindupSeconds,
-        },
-        { id, clip, tags: ["light"], playbackRate }
-    );
+function baseMove(id: string, clip: string, playbackRate = 1): IMoveDefinition {
+    return defineMove(ENEMY_MOVE_DEFAULTS, { id, clip, tags: ["light"], playbackRate });
 }
 
 function attackCancels(committedUntil: number, chainAt: number | undefined): ICancelWindow[] {
@@ -80,7 +80,7 @@ export function strike(spec: IStrikeSpec): IMoveDefinition {
     const [from, to] = spec.window;
     const { shape = WEAPON_HIT_SHAPE, dodgeOnly = false } = spec;
     return {
-        ...baseMove(spec.id, spec.clip, spec.playbackRate ?? 1),
+        ...baseMove(spec.id, spec.clip, spec.playbackRate),
         armor: spec.armor,
         warp: spec.warp,
         followedBy: spec.followedBy,
@@ -111,7 +111,7 @@ export function strikeWithRecovery(
 
 export function projectileMove(spec: IProjectileMoveSpec): IMoveDefinition {
     return {
-        ...baseMove(spec.id, spec.clip, spec.playbackRate ?? 1),
+        ...baseMove(spec.id, spec.clip, spec.playbackRate),
         tracking: { from: 0, to: spec.projectile.at, turnRate: TRACKING_TURN_RATE },
         projectile: spec.projectile,
         cancels: attackCancels(spec.projectile.at, spec.chainAt),
@@ -120,7 +120,7 @@ export function projectileMove(spec: IProjectileMoveSpec): IMoveDefinition {
 
 function recovery(id: string, clip: string): IMoveDefinition {
     return {
-        ...baseMove(id, clip, 1),
+        ...baseMove(id, clip),
         tags: [],
         cancels: [{ from: 0.5, to: 1, into: ["movement", "dodge", "parry"] }],
     };
@@ -132,14 +132,14 @@ export function enemyMoveSet(
 ): IMoveSet {
     const byId: Record<string, IMoveDefinition> = {
         [ENEMY_DEFENSE_MOVE_IDS.parry]: {
-            ...baseMove(ENEMY_DEFENSE_MOVE_IDS.parry, CLIP.parry, 1),
+            ...baseMove(ENEMY_DEFENSE_MOVE_IDS.parry, CLIP.parry),
             tags: ["parry"],
             fadeSeconds: 0.03,
             parrySeconds: PARRY.windowSeconds,
             cancels: [{ from: 0.55, to: 1, into: ["movement"] }],
         },
         [ENEMY_DEFENSE_MOVE_IDS.dodge]: {
-            ...baseMove(ENEMY_DEFENSE_MOVE_IDS.dodge, dodgeClip, 1),
+            ...baseMove(ENEMY_DEFENSE_MOVE_IDS.dodge, dodgeClip),
             tags: ["dodge"],
             fadeSeconds: 0.04,
             rootMotionScale: 0.5,
