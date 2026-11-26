@@ -95,6 +95,14 @@ export const BOULDER_FACE = {
     shadeJitter: 0.1,
 };
 
+export const BLOCKER_BAND = {
+    groupLengths: [metresToUnits(8), metresToUnits(13), metresToUnits(19)],
+    crestShare: range(1, 1.6),
+    groundFits: 3,
+    depthPerThickness: 2,
+    walkableReachCells: 3,
+};
+
 export const SURFACE_KINDS: Record<SurfaceKind, ISurfaceKindRule> = {
     rock: {
         material: "rock",
