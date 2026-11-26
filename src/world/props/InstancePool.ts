@@ -51,7 +51,7 @@ interface IPoolBatch {
     lastChanged: number;
 }
 
-export class PooledInstancedMesh extends InstancedMesh {
+class PooledInstancedMesh extends InstancedMesh {
     constructor(
         part: IModelPart,
         instanceMatrix: InstancedBufferAttribute,
@@ -66,14 +66,6 @@ export class PooledInstancedMesh extends InstancedMesh {
         this.frustumCulled = false;
         this.matrixAutoUpdate = false;
         this.matrixWorldAutoUpdate = false;
-    }
-
-    forEachRegisteredInstance(visit: (matrix: Float32Array) => void): void {
-        for (const { matrices } of this.entry.ranges) {
-            for (let offset = 0; offset < matrices.length; offset += MATRIX_SIZE) {
-                visit(matrices.subarray(offset, offset + MATRIX_SIZE));
-            }
-        }
     }
 }
 
