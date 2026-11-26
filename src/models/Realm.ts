@@ -2,7 +2,7 @@ import "server-only";
 import { Model, Schema, model, models } from "mongoose";
 import type { IFeaturedRealm, IResolvedRealm } from "@/types/realm";
 
-export const CACHE_BUST_COUNTER = 9;
+export const CACHE_BUST_COUNTER = 10;
 
 export const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 
