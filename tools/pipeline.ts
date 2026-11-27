@@ -251,7 +251,7 @@ export const runWithConcurrency = async <Item>(
 export const sourcePathOf = (publicUrl: string): string =>
     path.join(path.dirname(PIPELINE_CONFIG.sourceRoot), publicUrl);
 
-const listFilesRecursively = (directory: string): string[] =>
+export const listFilesRecursively = (directory: string): string[] =>
     fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
         const entryPath = path.join(directory, entry.name);
         return entry.isDirectory() ? listFilesRecursively(entryPath) : [entryPath];

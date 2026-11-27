@@ -2,6 +2,7 @@ import { TranscoderInstaller, describeError, type PipelineCommand } from "./pipe
 
 const assetCommands = () => import("./assets/AssetCommands");
 const clipCommands = () => import("./clips/ClipCommands");
+const codeCommands = () => import("./code/SourceOrder");
 
 const COMMANDS = new Map<string, () => Promise<PipelineCommand>>([
     ["cook", async () => new (await assetCommands()).AssetCooker()],
@@ -11,6 +12,7 @@ const COMMANDS = new Map<string, () => Promise<PipelineCommand>>([
     ["check-pairs", async () => new (await assetCommands()).PairChecker()],
     ["import", async () => new (await assetCommands()).SourceImporter()],
     ["sync-transcoder", async () => new TranscoderInstaller()],
+    ["check-order", async () => new (await codeCommands()).SourceOrderChecker()],
     ["cook-clips", async () => new (await clipCommands()).ClipCooker()],
     ["audition", async () => new (await clipCommands()).ClipAudition()],
     ["compare-clips", async () => new (await clipCommands()).ClipComparer()],
