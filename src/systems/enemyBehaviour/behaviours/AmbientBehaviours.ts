@@ -9,8 +9,8 @@ import {
     pointAtYaw,
     horizontalDistanceSquared,
     yawTowards,
+    type RandomSource,
 } from "@/lib/helpers";
-import type { RandomSource } from "@/lib/helpers";
 import type { IWanderTuning } from "@/types/combat";
 
 const LOST_LEAD_DISTANCE_SQUARED = (INVESTIGATE.arriveDistance * 2) ** 2;

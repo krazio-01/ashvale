@@ -1,8 +1,7 @@
 import type { Vector3 } from "three";
 import type { AwarenessMeter } from "@/systems/enemyBehaviour/perception/AwarenessMeter";
 import type { IEnemyArchetype, AlertPhase } from "@/types/combat";
-import { valueInRange, randomOffset } from "@/lib/helpers";
-import type { RandomSource } from "@/lib/helpers";
+import { valueInRange, randomOffset, type RandomSource } from "@/lib/helpers";
 
 export interface IEnemyBody {
     readonly position: Vector3;
