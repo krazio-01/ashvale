@@ -13,7 +13,9 @@ export type StaticColliderShape =
     | { kind: "cylinder"; halfHeight: number; radius: number; at: Vector3Tuple }
     | { kind: "hull"; points: Float32Array };
 
-export type StaticCollider = StaticColliderShape & { wallRunnable: boolean };
+export type StaticCollider = StaticColliderShape & {
+    wallRunnable: boolean;
+};
 
 export type PhysicsDetail = "full" | "reduced" | "frozen";
 
