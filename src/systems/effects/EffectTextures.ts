@@ -14,6 +14,19 @@ const LEAF_SHAPE = {
     edgeShade: 0.85,
 };
 
+export const SHAPE_TEXELS = {
+    glow: (across, along, texel) => {
+        texel.shade = 1;
+        texel.alpha = (1 - Math.min(1, Math.hypot(across, along - 0.5) * 2)) ** 2;
+    },
+    leaf: (across, along, texel) => {
+        const { halfWidth, taper, midribWidth, midribShade, edgeShade } = LEAF_SHAPE;
+        texel.shade =
+            across < midribWidth ? midribShade : 1 - (1 - edgeShade) * (across / halfWidth);
+        texel.alpha = across < halfWidth * Math.sin(Math.PI * along) ** taper ? 1 : 0;
+    },
+} satisfies Record<string, ShapeTexel>;
+
 interface IShapeTexel {
     shade: number;
     alpha: number;
@@ -39,16 +52,3 @@ export function createShapeTexture(size: number, texelAt: ShapeTexel): DataTextu
     texture.needsUpdate = true;
     return texture;
 }
-
-export const SHAPE_TEXELS = {
-    glow: (across, along, texel) => {
-        texel.shade = 1;
-        texel.alpha = (1 - Math.min(1, Math.hypot(across, along - 0.5) * 2)) ** 2;
-    },
-    leaf: (across, along, texel) => {
-        const { halfWidth, taper, midribWidth, midribShade, edgeShade } = LEAF_SHAPE;
-        texel.shade =
-            across < midribWidth ? midribShade : 1 - (1 - edgeShade) * (across / halfWidth);
-        texel.alpha = across < halfWidth * Math.sin(Math.PI * along) ** taper ? 1 : 0;
-    },
-} satisfies Record<string, ShapeTexel>;
