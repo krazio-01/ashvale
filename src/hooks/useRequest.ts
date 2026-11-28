@@ -10,7 +10,7 @@ export function isRequestCancellation(caughtError: unknown): boolean {
     return axios.isCancel(caughtError);
 }
 
-function convertToErrorWrapper(caughtError: unknown): HttpError {
+function toHttpError(caughtError: unknown): HttpError {
     if (axios.isAxiosError<IErrorResponse>(caughtError)) {
         const errorResponse = caughtError.response;
         return new HttpError(
@@ -52,7 +52,7 @@ export function useRequest() {
         } catch (caughtError) {
             if (isRequestCancellation(caughtError)) throw caughtError;
 
-            const requestError = convertToErrorWrapper(caughtError);
+            const requestError = toHttpError(caughtError);
             setError(requestError);
             throw requestError;
         } finally {
