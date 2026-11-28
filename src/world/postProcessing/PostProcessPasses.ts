@@ -21,9 +21,7 @@ export function createColourEffects() {
         .set("vignette", new Uniform(vignette));
 
     const punchUniforms = new Map<string, Uniform<unknown>>();
-    punchUniforms
-        .set("contrast", new Uniform(1 + punch.amount * punch.contrast))
-        .set("saturation", new Uniform(1 + punch.amount * punch.saturation));
+    punchUniforms.set("saturation", new Uniform(1 + punch.amount * punch.saturation));
 
     return {
         grade: new ColourEffect("GradeEffect", GRADE_FRAGMENT_SHADER, gradeUniforms),
